@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>系统状态</title>
+    <link href="../css/application.min.css" rel="stylesheet">
+    <style type="text/css">
+        #addGroupDialog th, td {max-width: 30px; color:#000;}
+        #addGroupDialog input {max-width: 80px;}
+    </style>
+    <link rel="shortcut icon" href="img/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <meta charset="utf-8">
+    <script src="../js/cookie.js"></script>
+    <script>
+        var user = getCookie("user");
+        if (user) {
+            addCookie("user", user);
+        } else {
+            window.location = "../login.html";
+        }
+    </script>
+</head>
+<body class="background-dark">
+<div class="logo">
+    <h2 class="page-title">
+        <img src="../img/telecom.png" style="width: 150px;position: relative;top: -7px;">
+        SDN <small>配置管理</small></h2>
+</div>
+<nav id="sidebar" class="sidebar nav-collapse collapse">
+    <ul id="side-nav" class="side-nav">
+        <li class='accordion-group'>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+        </li>
+        <li class="accordion-group">
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+        </li>
+        <li class='accordion-group active'>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
+        </li>
+</nav>
+<div class="wrap">
+    <header class="page-header">
+        <div class="navbar">
+            <div class="navbar-inner">
+                <ul class="nav pull-right">
+                    <li class="hidden-phone" id="user_login"><span></span><a href="javascript:void(0);" onclick="logout();"><i class="icon-signout"></i></a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+    <div class="content container-fluid">
+        <div class="row-fluid">
+            <div class="span12">
+                <h4 class="page-title">group表配置 <small></small></h4>
+            </div>
+        </div>
+        <div class="row-fluid">
+            <div class="span12">
+                <section class="widget">
+                    <header style="padding-bottom: 20px;">
+                        <h4 style="display: block;float: left;">
+                            <i class="icon-file-alt"></i>
+                            添加group表配置
+                        </h4>
+                    </header>
+                      <div id="myModal2" class="" style="margin-top: 1.5%;">
+                          <div id="user-form" class="form-horizontal " novalidate="novalidate" method="post" data-validate="parsley">
+                               <fieldset class="getgroup_val" level="l1">
+                                    <div class="span6">
+                                         <div class="control-group">
+                                            <label class="control-label " for="controlip">控制器</label>
+                                            <div class="controls">
+                                                <select id="controlip" name="controlip" data-style="btn-success" class="selectpicker span12 "><!--<option value="192.168.1.181|8859">192.168.1.181:8859</option>-->
+                                                </select>
+                                            </div>
+                                        </div>
+                                        <div class="control-group">
+                                            <label class="control-label" for="DPID">DPID</label>
+                                            <div class="controls">
+                                                <select id="DPID" name="DPID" level="l1" data-style="btn-success" class="selectpicker span12 "><!--<option value="192.168.1.181|8859">192.168.1.181:8859</option>-->
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="span6">
+                                        <div class="control-group  controls-row">
+                                            <label class="control-label" for="type">type</label>
+                                            <div class="controls">
+                                                <input type="text" level="l1" id="type" name="type" class="span12">
+                                            </div>
+                                        </div>
+                                        <div class="control-group  controls-row">
+                                            <label class="control-label" for="groupId">groupId</label>
+                                            <div class="controls">
+                                                <input type="text" level="l1" id="groupId" name="groupId" class="span12">
+                                            </div>
+                                        </div>
+                                        
+                                    </div>
+                                   <div class="span12" style="margin-left: 0;margin-bottom: 10px;">
+                                        <button type="button" class="addBucket btn btn-success pull-right">添加buckets</button>
+                                    </div>
+                                    <!--buckets-->
+                                    <div id="buckets" class="control-group span12 child" level="l1" style="margin-left: 0;">
+                                        <div id="bukcets_node_op" class="accordion-group">
+                                            <div class="accordion-heading">
+                                                <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseOne" >
+                                                    buckets
+                                                </a>
+                                                <button class="pull-right btn btn-danger btn-mini delBucket" style="position: relative;top: -28px ;right: 8px;">删除</button>
+                                            </div>
+                                            <div id="collapseOne" class="accordion-body  collapse">
+                                                <div class="accordion-inner">   
+                                                    <div class="span6">
+                                                        <div class="control-group controls-row">
+                                                            <label class="control-label" for="weight">weight</label>
+                                                            <div class="controls">
+                                                                <input type="text" level="l11" id="weight" name="weight" class="span12">
+                                                            </div>
+                                                        </div>
+                                                        <div class="control-group  controls-row">
+                                                            <label class="control-label" for="watchPort">watchPort</label>
+                                                            <div class="controls">
+                                                                <input type="text" level="l11" id="watchPort" name="watchPort" class="span12">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="span6">
+                                                        <div class="control-group  controls-row">
+                                                            <label class="control-label" for="watchGroup">watchGroup</label>
+                                                            <div class="controls">
+                                                                <input type="text" level="l11" id="watchGroup" name="watchGroup" class="span12">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <!--action-->
+                                                    <div id="action" class="accordion-group span12 child" level="l11" style="margin-left: 0;">
+                                                        <div class="accordion-heading">
+                                                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseactions"><i class="icon-arrow-down pull-right"></i>
+                                                                Actions
+                                                            </a>
+                                                        </div>
+                                                        <div id="collapseactions" class="accordion-body collapse">
+                                                            <div class="accordion-inner">
+                                                                <div class="span6">
+                                                                    <div class="control-group">
+                                                                        <label class="control-label"  for="output">output</label>
+                                                                        <div class="controls controls-row">
+                                                                            <input type="text"  level="l111" id="output" name="output" class="span12">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="control-group">
+                                                                        <label class="control-label" for="pushVlan">pushVlan</label>
+                                                                        <div class="controls controls-row">
+                                                                            <input type="text" level="l111" id="pushVlan" name="pushVlan" class="span12">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="control-group">
+                                                                        <label class="control-label" for="popVlan">popVlan</label>
+                                                                        <div class="controls controls-row">
+                                                                            <input type="text" level="l111" id="popVlan" name="popVlan" class="span12">
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="span6">
+                                                                    <div class="control-group">
+                                                                        <label class="control-label" for="pushMpls">pushMpls</label>
+                                                                        <div class="controls controls-row">
+                                                                            <input type="text" level="l111" id="pushMpls" name="pushMpls" class="span12">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="control-group">
+                                                                        <label class="control-label" for="popMpls">popMpls</label>
+                                                                        <div class="controls controls-row">
+                                                                            <input type="text" level="l111" id="popMpls" name="popMpls" class="span12">
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="control-group">
+                                                                        <label class="control-label" for="group">group</label>
+                                                                        <div class="controls controls-row">
+                                                                            <input type="text" level="l111" id="group" name="group" class="span12">
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <!--setField-->
+                                                                <div id="setField" class="accordion-group span12 child" level="l111" style="margin-left: 0;">
+                                                                    <div class="accordion-heading">
+                                                                        <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapsetgroup">
+                                                                         setField<i class="icon-arrow-down pull-right"></i>
+                                                                        </a>
+                                                                    </div>
+                                                                    <div id="collapsetgroup" class="accordion-body collapse">
+                                                                        <div class="accordion-inner">
+                                                                            <div class="span4">
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="inport">inport</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="inport" name="inport" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ethDst">ethDst</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ethDst" name="ethDst" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ethSrc">ethSrc</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ethSrc" name="ethSrc" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ethType">ethType</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ethType" name="ethType" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="vlanId">vlanId</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="vlanId" name="vlanId" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="vlanPcp">vlanPcp</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="vlanPcp" name="vlanPcp" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ipDscp">ipDscp</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ipDscp" name="ipDscp" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                
+                                                                            </div>
+                                                                            <div class="span4">
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ipEcn">ipEcn</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ipEcn" name="ipEcn" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ipProto">ipProto</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ipProto" name="ipProto" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ipv4Src">ipv4Src</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ipv4Src" name="ipv4Src" class="span12">
+                                                                                    </div>
+                                                                                </div> 
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="ipv4Dst">ipv4Dst</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="ipv4Dst" name="ipv4Dst" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="tcpSrc">tcpSrc</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="tcpSrc" name="tcpSrc" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="tcpDst">tcpDst</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="tcpDst" name="tcpDst" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="udpSrc">udpSrc</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="udpSrc" name="udpSrc" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                            <div class="span4">
+                                                                                 <div class="control-group">
+                                                                                    <label class="control-label" for="udpDst">udpDst</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="udpDst" name="udpDst" class="span12">
+                                                                                    </div>
+                                                                                </div> 
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="arpOp">arpOp</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="arpOp" name="arpOp" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="arpSpa">arpSpa</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="arpSpa" name="arpSpa" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="arpTpa">arpTpa</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="arpTpa" name="arpTpa" class="span12">
+                                                                                    </div>
+                                                                                </div>  
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="arpSha">arpSha</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="arpSha" name="arpSha" class="span12">
+                                                                                    </div>
+                                                                                </div>  
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="arpTha">arpTha</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="arpTha" name="arpTha" class="span12">
+                                                                                    </div>
+                                                                                </div> 
+                                                                                <div class="control-group">
+                                                                                    <label class="control-label" for="mplsLabel">mplsLabel</label>
+                                                                                    <div class="controls controls-row">
+                                                                                        <input type="text" level="l1111" id="mplsLabel" name="mplsLabel" class="span12">
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </fieldset>
+                        </div>
+                        <div class="form-actions">
+                            <div class="pull-right">
+                               <button type="button" class="btn btn-success" id="group_preserve" >保存</button>
+                                <a  class="btn" href="group_table_config.html">返回</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="body hidden">
+                        <table id="datatable-table" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Id</th>
+                                    <th>Name</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- jquery and friends -->
+<script src="../js/jquery/jquery.1.9.0.min.js"> </script>
+<script src="../js/jquery/jquery-migrate-1.1.0.min.js"> </script>
+<!-- jquery plugins -->
+<script src="../js/jquery/jquery.maskedinput.js"></script>
+<script src="../js/parsley.js"> </script>
+<script src="../js/jquery/jquery.uniform.js"></script>
+<script src="../js/select2.js"></script>
+<script src="../js/jquery/jquery.dataTables.min.js"></script>
+
+<!-- bootstrap default plugins -->
+<script src="../js/bootstrap/bootstrap-transition.js"></script>
+<script src="../js/bootstrap/bootstrap-collapse.js"></script>
+<script src="../js/bootstrap/bootstrap-alert.js"></script>
+<script src="../js/bootstrap/bootstrap-tooltip.js"></script>
+<script src="../js/bootstrap/bootstrap-popover.js"></script>
+<script src="../js/bootstrap/bootstrap-button.js"></script>
+<script src="../js/bootstrap/bootstrap-dropdown.js"></script>
+<script src="../js/bootstrap/bootstrap-modal.js"></script>
+<script src="../js/bootstrap/bootstrap-tab.js"> </script>
+
+<!--backbone and friends -->
+<script src="../js/underscore-min.js"></script>
+<script src="../js/backbone-min.js"></script>
+<script src="../js/backbone-pageable.js"></script>
+<script src="../js/backgrid.js"></script>
+<script src="../js/backgrid-paginator.js"></script>
+
+<!-- page-specific js -->
+<script src="../js/tables-dynamic.js"></script>
+<script type="text/javascript">
+    
+    
+    function getControl(obj){
+        $.post("../control/list",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                var aaData = [];
+                for(var i in data){
+                    obj.append("<option value='"+data[i].ip+"|"+data[i].port+"'>"+data[i].ip+"</option>")
+                }
+                $("#controlip").trigger('change');
+            }
+        },"json");
+    }
+    function search(){
+        $.post("../control/list",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                var aaData = [];
+                for(var i in data){
+                    var obj = {
+                        ip:data[i].ip,
+                        port:data[i].port
+                    }
+                    aaData.push(obj);
+                }
+                showTable(aaData);
+            }
+        },"json");
+    }
+    function add(){
+        var ip = $("#controlip").val().split("|")[0];
+        var port = $("#controlip").val().split("|")[1];
+        var content = {
+            DPID:$("#switchid").val(),
+            groupId:$("#group-id").val(),
+            type:$("#type").val(),
+            buckets: []
+        };
+        $("#addGroupDialog tbody tr").each(function(){
+            var obj = {
+                weight : $(this).find(".weight").val(),
+                watchPort : $(this).find(".watch_port").val(),
+                watchGroup : $(this).find(".watch_group").val(),
+                outport : $(this).find(".output").val()
+            }
+            for (var i in obj) {
+                if (obj[i] == "") delete obj[i];
+            }
+            content.buckets.push(obj);
+        })
+        $.post("../group/add",{ip:ip,port:port,content:JSON.stringify(content)},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("添加成功！");
+                    $("#myModal2").hide();
+                    //search();
+                }else{
+                    alert("添加失败！");
+                }
+            }
+        },'json')
+    }
+    function del(obj){
+        $.post("../control/del",{ip:obj.ip,port:obj.port},function(data){
+            if(data=="0"){
+                if(data.data=="true"){
+                    alert("删除成功！")
+                    search();
+                }else{
+                    alert("删除失败！")
+                }
+            }
+        })
+    }
+     function loop_for_value_by_id(obj,level){
+        var tmp = {};
+        var lvl=obj.attr("level");
+        obj.find("[level='"+lvl+level+"']").each(function(){
+            if($(this).hasClass("child")){
+                tmp[$(this).attr("id")] = loop_for_value_by_id($(this),"1");
+            }else{
+                if($(this).val()){
+                    tmp[$(this).attr("id")] = $(this).val();
+                }
+            }
+        });
+        if (!$.isEmptyObject(tmp)) {
+            return tmp;
+        }
+    }
+    //保存列表 
+    function add_group(){
+        var content = {};
+        content = loop_for_value_by_id($(".getgroup_val"),"");
+        console.log(content);
+        var ip = $("#controlip").val().split("|")[0];
+        var port = $("#controlip").val().split("|")[1];
+        
+
+       $.post("../group/add",{ip:ip,port:port,content:JSON.stringify(content)},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("添加成功！")
+                    /*$("#myModal2").hide();
+                    search();*/
+                }else{
+                    alert("添加失败！");
+                }
+            }
+        },'json');
+    }
+    
+    var bucket_index = 0;
+    $(function(){
+       
+        $("#user_login span").html(user);
+        $("#datatable-table").hide();
+        //保存
+        $("#group_preserve").click(function(){
+            add_group();
+        });
+        
+        // 注册事件监听
+        $(".delBucket").on('click',function(){
+            $(this).closest(".accordion-group").remove();
+        });
+        $(".addBucket").on("click", function(){
+            var dom = '';
+                dom += "<div class='accordion-group'>";
+                dom += "     <div class='accordion-heading'>";
+                dom += "          <a class='accordion-toggle' data-toggle='collapse' data-parent='#accordion"+bucket_index+"' href='#collapse"+bucket_index+"' >";
+                dom += "             buckets";
+                dom += "          </a>";
+                dom += "          <button class='pull-right btn btn-danger btn-mini delBucket' style='position: relative;top: -28px ;right: 8px;'>删除</button>";
+                dom += "       </div>";
+                dom += "       <div id='collapse"+bucket_index+"' class='accordion-body  collapse'>";
+                dom += "            <div class='accordion-inner'>   ";
+                dom += "                 <div class='span6'>";
+                dom += "                      <div class='control-group controls-row'>";
+                dom += "                           <label class='control-label' for='weight'>weight</label>";
+                dom += "                           <div class='controls'>";
+                dom += "                                 <input type='text' level='l11' id='weight' name='weight' class='span12'>";
+                dom += "                           </div>";
+                dom += "                      </div>";
+                dom += "                     <div class='control-group  controls-row'>";
+                dom += "                          <label class='control-label' for='watchPort'>watchPort</label>";
+                dom += "                          <div class='controls'>";
+                dom += "                               <input type='text' level='l11' id='watchPort' name='watchPort' class='span12'>";
+                dom += "                           </div>";
+                dom += "                     </div>";
+                dom += "                 </div>";
+                dom += "                 <div class='span6'>";
+                dom += "                      <div class='control-group  controls-row'>";
+                dom += "                           <label class='control-label' for='watchGroup'>watchGroup</label>";
+                dom += "                           <div class='controls'>";
+                dom += "                                <input type='text' level='l11' id='watchGroup' name='watchGroup' class='span12'>";
+                dom += "                           </div>";
+                dom += "                      </div>";
+                dom += "                </div>";
+                dom += "                <!--action-->";
+                dom += "                 <div id='action' class='accordion-group span12 child' level='l11' style='margin-left: 0;'>";
+                dom += "                      <div class='accordion-heading'>";
+                dom += "                           <a class='accordion-toggle' data-toggle='collapse' data-parent='#aciton_accordion"+bucket_index+"' href='#action_collapseactions"+bucket_index+"'><i class='icon-arrow-down pull-right'></i>";
+                dom += "                               Actions";
+                dom += "                           </a>";
+                dom += "                      </div>";
+                dom += "                     <div id='action_collapseactions"+bucket_index+"' class='accordion-body collapse'>";
+                dom += "                          <div class='accordion-inner'>";
+                dom += "                               <div class='span6'>";
+                dom += "                                    <div class='domrol-group'>";
+                dom += "                                         <label class='control-label'  for='output'>output</label>";
+                dom += "                                         <div class='controls controls-row'>";
+                dom += "                                              <input type='text'  level='l111' id='output' name='output' class='span12'>";
+                dom += "                                          </div>";
+                dom += "                                    </div>";
+                dom += "                                    <div class='control-group'>";
+                dom += "                                         <label class='control-label' for='pushVlan'>pushVlan</label>";
+                dom += "                                         <div class='controls controls-row'>";
+                dom += "                                              <input type='text' level='l111' id='pushVlan' name='pushVlan' class='span12'>";
+                dom += "                                               </div>";
+                dom += "                                         </div>";
+                dom += "                                   <div class='control-group'>";
+                dom += "                                        <label class='control-label' for='popVlan'>popVlan</label>";
+                dom += "                                        <div class='controls controls-row'>";
+                dom += "                                             <input type='text' level='l111' id='popVlan' name='popVlan' class='span12'>";
+                dom += "                                        </div>";
+                dom += "                                   </div>";
+                dom += "                               </div>";
+                dom += "                               <div class='span6'>";
+                dom += "                                    <div class='control-group'>";
+                dom += "                                          <label class='control-label' for='pushMpls'>pushMpls</label>";
+                dom += "                                           <div class='controls controls-row'>";
+                dom += "                                                <input type='text' level='l111' id='pushMpls' name='pushMpls' class='span12'>";
+                dom += "                                           </div>";
+                dom += "                                    </div>";
+                dom += "                                    <div class='control-group'>";
+                dom += "                                          <label class='control-label' for='popMpls'>popMpls</label>";
+                dom += "                                          <div class='controls controls-row'>";
+                dom += "                                               <input type='text' level='l111' id='popMpls' name='popMpls' class='span12'>";
+                dom += "                                           </div>";
+                dom += "                                    </div>";
+                dom += "                                    <div class='control-group'>";
+                dom += "                                         <label class='control-label' for='group'>group</label>";
+                dom += "                                                <div class='controls controls-row'>";
+                dom += "                                                     <input type='text' level='l111' id='group' name='group' class='span12'>";
+                dom += "                                                </div>";
+                dom += "                                    </div>";
+                dom += "                                </div>";
+                dom += "                                <!--setField-->";
+                dom += "                                <div id='setField' class='accordion-group span12 child' level='l111' style='margin-left: 0;'>";
+                dom += "                                     <div class='accordion-heading'>";
+                dom += "                                          <a class='accordion-toggle' data-toggle='collapse' data-parent='#setFieldaccordion2"+bucket_index+"' href='#setField_collapsetgroup"+bucket_index+"'>";
+                dom += "                                             setField<i class='icon-arrow-down pull-right'></i>";
+                dom += "                                          </a>";
+                dom += "                                     </div>";
+                dom += "                                     <div id='setField_collapsetgroup"+bucket_index+"' class='accordion-body collapse'>";
+                dom += "                                          <div class='accordion-inner'>";
+                dom += "                                               <div class='span4'>";
+                dom += "                                                    <div class='control-group'>";
+                dom += "                                                         <label class='control-label' for='inport'>inport</label>";
+                dom += "                                                         <div class='controls controls-row'>";
+                dom += "                                                              <input type='text' level='l1111' id='inport' name='inport' class='span12'>";
+                dom += "                                                         </div>";
+                dom += "                                                    </div>";
+                dom += "                                                    <div class='control-group'>";
+                dom += "                                                         <label class='control-label' for='ethDst'>ethDst</label>";
+                dom += "                                                                <div class='controls controls-row'>";
+                dom += "                                                                     <input type='text' level='l1111' id='ethDst' name='ethDst' class='span12'>";
+                dom += "                                                                </div>";
+                dom += "                                                    </div>";
+                dom += "                                                    <div class='control-group'>";
+                dom += "                                                         <label class='control-label' for='ethSrc'>ethSrc</label>";
+                dom += "                                                         <div class='controls controls-row'>";
+                dom += "                                                              <input type='text' level='l1111' id='ethSrc' name='ethSrc' class='span12'>";
+                dom += "                                                         </div>";
+                dom += "                                                    </div>";
+                dom += "                                                    <div class='control-group'>";
+                dom += "                                                         <label class='control-label' for='ethType'>ethType</label>";
+                dom += "                                                          <div class='controls controls-row'>";
+                dom += "                                                               <input type='text' level='l1111' id='ethType' name='ethType' class='span12'>";
+                dom += "                                                         </div>";
+                dom += "                                                     </div>";
+                dom += "                                                     <div class='control-group'>";
+                dom += "                                                          <label class='control-label' for='vlanId'>vlanId</label>";
+                dom += "                                                          <div class='controls controls-row'>";
+                dom += "                                                               <input type='text' level='l1111' id='vlanId' name='vlanId' class='span12'>";
+                dom += "                                                          </div>";
+                dom += "                                                     </div>";
+                dom += "                                                     <div class='control-group'>";
+                dom += "                                                          <label class='control-label' for='vlanPcp'>vlanPcp</label>";
+                dom += "                                                          <div class='controls controls-row'>";
+                dom += "                                                               <input type='text' level='l1111' id='vlanPcp' name='vlanPcp' class='span12'>";
+                dom += "                                                          </div>";
+                dom += "                                                      </div>";
+                dom += "                                                      <div class='control-group'>";
+                dom += "                                                           <label class='control-label' for='ipDscp'>ipDscp</label>";
+                dom += "                                                           <div class='controls controls-row'>";
+                dom += "                                                                <input type='text' level='l1111' id='ipDscp' name='ipDscp' class='span12'>";
+                dom += "                                                           </div>";
+                dom += "                                                      </div>";
+                dom += "                                                </div>";
+                dom += "                                              <div class='span4'>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='ipEcn'>ipEcn</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='ipEcn' name='ipEcn' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='ipProto'>ipProto</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='ipProto' name='ipProto' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='ipv4Src'>ipv4Src</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='ipv4Src' name='ipv4Src' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div> ";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='ipv4Dst'>ipv4Dst</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='ipv4Dst' name='ipv4Dst' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='tcpSrc'>tcpSrc</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='tcpSrc' name='tcpSrc' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='tcpDst'>tcpDst</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='tcpDst' name='tcpDst' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='udpSrc'>udpSrc</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='udpSrc' name='udpSrc' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                            </div>";
+                dom += "                                                                            <div class='span4'>";
+                dom += "                                                                                 <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='udpDst'>udpDst</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='udpDst' name='udpDst' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div> ";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='arpOp'>arpOp</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='arpOp' name='arpOp' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='arpSpa'>arpSpa</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='arpSpa' name='arpSpa' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='arpTpa'>arpTpa</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='arpTpa' name='arpTpa' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>  ";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='arpSha'>arpSha</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='arpSha' name='arpSha' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>  ";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='arpTha'>arpTha</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='arpTha' name='arpTha' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div> ";
+                dom += "                                                                                <div class='control-group'>";
+                dom += "                                                                                    <label class='control-label' for='mplsLabel'>mplsLabel</label>";
+                dom += "                                                                                    <div class='controls controls-row'>";
+                dom += "                                                                                        <input type='text' level='l1111' id='mplsLabel' name='mplsLabel' class='span12'>";
+                dom += "                                                                                    </div>";
+                dom += "                                                                                </div>";
+                dom += "                                                                            </div>";
+                dom += "                                                                        </div>";
+                dom += "                                                                    </div>";
+                dom += "                                                                </div>";
+                dom += "                                                            </div>";
+                dom += "                                                        </div>";
+                dom += "                                                    </div>";
+                dom += "                                                </div>";
+                dom += "                                            </div>";
+                dom += "                                        </div>";
+                var jqDom = $(dom);
+            $("#buckets").append(jqDom);
+            $(".delBucket", jqDom).on('click', function(){
+                $(this).closest(".accordion-group").remove();
+            });
+            bucket_index++;
+        });
+        
+        getControl($("#controlip"));
+        $("#controlip").change(function(){
+            var controller = $("#controlip").val();
+            if (controller && controller != "") {
+                var ip = $("#controlip").val().split("|")[0];
+                var port = $("#controlip").val().split("|")[1];
+                $.post("../switchinfo",{ip:ip,port:port},function(data){
+                    if(data.status=="0"||data.status==0){
+                        data = data.data;
+                        $("#DPID").html("");
+                        for(var i in data){
+                            $("#DPID").append("<option value='"+data[i].dpid+"'>"+data[i].dpid+"</option>")
+                        }
+                    }
+                },"json");
+            } else {
+                $("#DPID option").remove();
+            }
+        });
+    })
+    
+    
+</script>
+</body>
+</html>
