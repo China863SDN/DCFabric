@@ -1,10 +1,33 @@
 /*
+ * DCFabric GPL Source Code
+ * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
+ *
+ * This file is part of the DCFabric SDN Controller. DCFabric SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
+/*
  * fabric_flows.c
  *
  *  Created on: Mar 27, 2015
- *      Author: joe
+ *  Author: BNC administrator
+ *  E-mail: DCFabric-admin@bnc.org.cn
+ *
+ *  Modified on: May 19, 2015
  */
 #include "fabric_flows.h"
+#include "fabric_path.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "timer.h"
 #include "../conn-svr/conn-svr.h"
@@ -22,7 +45,7 @@ gn_flow_t * install_add_fabric_impl_first_flow(gn_switch_t * sw,UINT4 port,UINT4
 gn_flow_t * install_add_fabric_impl_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 
 void install_delete_fabric_flow(gn_switch_t* sw);
-
+void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id);
 
 // new ids for mem alloc
 //extern void *g_gnflow_mempool_id;
@@ -53,7 +76,12 @@ void delete_fabric_flow_by_sw(gn_switch_t *sw){
 	install_delete_fabric_flow(sw);
 	return;
 };
-
+void delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id){
+	if(sw->state != 0){
+		install_delete_fabric_impl_flow(sw,port_no,tag,table_id);
+	}
+	return;
+};
 
 /*
  * install fabric base flows
@@ -222,6 +250,16 @@ void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag){
 
 	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 	return;
+};
+
+UINT1 get_fabric_last_flow_table(){
+	return (UINT1)FABRIC_INPUT_TABLE;
+};
+UINT1 get_fabric_first_flow_table(){
+	return (UINT1)FABRIC_SWAPTAG_TABLE;
+};
+UINT1 get_fabric_middle_flow_table(){
+	return (UINT1)FABRIC_INPUT_TABLE;
 };
 /**************************************
  * Intern flow functions
@@ -431,6 +469,41 @@ void install_delete_fabric_flow(gn_switch_t* sw){
 	    flow_mod_req.flow = &flow;
 	    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 	}
+	return;
+};
+
+void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id){
+	flow_mod_req_info_t flow_mod_req;
+	gn_flow_t flow;
+	gn_instruction_actions_t instruction_act;
+	gn_action_output_t act_output;
+
+	memset(&flow, 0, sizeof(gn_flow_t));
+	flow.table_id = table_id;
+	flow.match.type = OFPMT_OXM;
+	flow.match.oxm_fields.vlan_vid = (UINT2)tag;
+	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
+
+	memset(&act_output, 0, sizeof(gn_action_output_t));
+	act_output.next = NULL;
+	act_output.type = OFPAT13_OUTPUT;
+	act_output.port = port_no;
+
+	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
+    instruction_act.actions = (gn_action_t*)&act_output;
+    instruction_act.type = OFPIT_APPLY_ACTIONS;
+    instruction_act.next = flow.instructions;
+    flow.instructions = (gn_instruction_t *)&instruction_act;
+
+	flow_mod_req.xid = 0;
+	flow_mod_req.buffer_id = 0xffffffff;
+	flow_mod_req.out_port = 0xffffffff;
+	flow_mod_req.out_group = 0xffffffff;
+	flow_mod_req.command = OFPFC_DELETE;
+	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
+	flow_mod_req.flow = &flow;
+
+	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 	return;
 };
 

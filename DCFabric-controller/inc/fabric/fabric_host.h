@@ -1,8 +1,30 @@
 /*
+ * DCFabric GPL Source Code
+ * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
+ *
+ * This file is part of the DCFabric SDN Controller. DCFabric SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
+/*
  * fabric_host.h
  *
  *  Created on: Apr 4, 2015
- *      Author: joe
+ *  Author: BNC administrator
+ *  E-mail: DCFabric-admin@bnc.org.cn
+ *
+ *  Modified on: May 19, 2015
  */
 
 #ifndef INC_FABRIC_FABRIC_HOST_H_
@@ -65,6 +87,7 @@ void insert_fabric_host_into_list(p_fabric_host_node node);
 void insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip);
 p_fabric_host_node remove_fabric_host_from_list_by_ip(UINT4 ip);
 p_fabric_host_node remove_fabric_host_from_list_by_mac(UINT1* mac);
+void delete_fabric_host_from_list_by_sw(gn_switch_t* sw);
 void destroy_fabric_host_list();
 UINT4 is_fabric_host_list_empty();
 ////////////////////////////////////////////////////////////////////////

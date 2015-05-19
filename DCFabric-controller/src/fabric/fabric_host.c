@@ -1,8 +1,30 @@
 /*
+ * DCFabric GPL Source Code
+ * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
+ *
+ * This file is part of the DCFabric SDN Controller. DCFabric SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
+/*
  * fabric_host.c
  *
  *  Created on: Apr 4, 2015
- *      Author: joe
+ *  Author: BNC administrator
+ *  E-mail: DCFabric-admin@bnc.org.cn
+ *
+ *  Modified on: May 19, 2015
  */
 #include "fabric_host.h"
 #include "mem_pool.h"
@@ -176,6 +198,7 @@ p_fabric_host_node remove_fabric_host_from_list_by_ip(UINT4 ip){
 		}
 		p_sentinel = p_sentinel->next;
 	}
+	g_fabric_host_list.list = sentinel.next;
 	pthread_mutex_unlock(&g_fabric_host_thread_mutex);
 	return ret;
 };
@@ -190,7 +213,7 @@ p_fabric_host_node remove_fabric_host_from_list_by_mac(UINT1* mac){
 	pthread_mutex_lock(&g_fabric_host_thread_mutex);
 	p_sentinel->next = g_fabric_host_list.list;
 	while(p_sentinel->next != NULL){
-		if(0 == memcmp(ret->next->mac, mac, 6)){
+		if(0 == memcmp(p_sentinel->next->mac, mac, 6)){
 			ret = p_sentinel->next;
 			p_sentinel->next = ret->next;
 			ret->next = NULL;
@@ -200,10 +223,34 @@ p_fabric_host_node remove_fabric_host_from_list_by_mac(UINT1* mac){
 		}
 		p_sentinel = p_sentinel->next;
 	}
+	g_fabric_host_list.list = sentinel.next;
 	pthread_mutex_unlock(&g_fabric_host_thread_mutex);
 	return ret;
 };
+/*
+ * delete the host object by sw
+ */
+void delete_fabric_host_from_list_by_sw(gn_switch_t* sw){
+	t_fabric_host_node sentinel;
+	p_fabric_host_node p_sentinel = &sentinel,temp_host=NULL;
 
+	pthread_mutex_lock(&g_fabric_host_thread_mutex);
+	p_sentinel->next = g_fabric_host_list.list;
+	while(p_sentinel->next != NULL){
+		if(p_sentinel->next->sw == sw){
+
+			temp_host = p_sentinel->next;
+			p_sentinel->next = temp_host->next;
+			temp_host->next = NULL;
+			delete_fabric_host_list_node(temp_host);
+		}else{
+			p_sentinel = p_sentinel->next;
+		}
+	}
+	g_fabric_host_list.list = sentinel.next;
+	pthread_mutex_unlock(&g_fabric_host_thread_mutex);
+	return;
+};
 void destroy_fabric_host_list(){
 	if(g_fabric_host_list_mem_id != NULL){
 		mem_destroy(g_fabric_host_list_mem_id);
