@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : ovsdb.h           *
@@ -66,7 +85,7 @@ typedef struct ovs_bridge
 
 typedef struct ovsdb_server
 {
-    UINT4 node_type;  //¿ØÖÆ½Úµã»¹ÊÇ¼ÆËã½Úµã
+    UINT4 node_type;  //æ§åˆ¶èŠ‚ç‚¹è¿˜æ˜¯è®¡ç®—èŠ‚ç‚¹
     UINT4 resv;
     UINT4 node_ip;
     int node_fd;
@@ -77,9 +96,9 @@ typedef struct ovsdb_server
 
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_tunnel_type;        //openstackÍøÂçÀàĞÍ gre/vxlan
-UINT1 g_ovsdb_of_version;   //openstack ovsµÄopenflow°æ±¾
-UINT4 g_ovsdb_port;         //ovsdb½Ó¿Ú£¬Ä¬ÈÏ¶Ë¿Ú6640
+UINT1 g_tunnel_type;        //openstackç½‘ç»œç±»å‹ gre/vxlan
+UINT1 g_ovsdb_of_version;   //openstack ovsçš„openflowç‰ˆæœ¬
+UINT4 g_ovsdb_port;         //ovsdbæ¥å£ï¼Œé»˜è®¤ç«¯å£6640
 
 
 INT4 init_ovsdb();

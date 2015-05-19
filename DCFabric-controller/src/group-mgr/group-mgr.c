@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : group-mgr.c           *
@@ -10,6 +29,8 @@
 
 #include "group-mgr.h"
 #include "../conn-svr/conn-svr.h"
+#include "../flow-mgr/flow-mgr.h"
+#include "mem_pool.h"
 #include "openflow-common.h"
 #include "openflow-10.h"
 #include "openflow-13.h"
@@ -47,6 +68,10 @@ INT4 add_group_entry(gn_switch_t *sw, gn_group_t *group)
     if(NULL == group_mod_req_info.group)
     {
         group->next = sw->group_entries;
+        if(sw->group_entries)
+        {
+            sw->group_entries->pre = group;
+        }
         sw->group_entries = group;
         group_mod_req_info.group = group;
     }
@@ -122,21 +147,30 @@ INT4 delete_group_entry(gn_switch_t *sw, gn_group_t *group)
     }
     else
     {
+        gn_group_free(group);
         if(p_group->pre)
         {
             p_group->pre->next = p_group->next;
+            if(p_group->next)
+            {
+                p_group->next->pre = p_group->pre;
+            }
         }
         else
         {
             sw->group_entries = p_group->next;
+            if(p_group->next)
+            {
+                p_group->next->pre = NULL;
+            }
         }
     }
 
     group_mod_req_info.group = p_group;
-    group_mod_req_info.command = OFPMC_DELETE;
+    group_mod_req_info.command = OFPGC_DELETE;
     ret = sw->msg_driver.msg_handler[OFPT13_GROUP_MOD](sw, (UINT1 *)&group_mod_req_info);
 
-    free(p_group);
+    gn_group_free(p_group);
     pthread_mutex_unlock(&sw->group_entry_mutex);
 
     return ret;
@@ -145,6 +179,8 @@ INT4 delete_group_entry(gn_switch_t *sw, gn_group_t *group)
 
 void clear_group_entries(gn_switch_t *sw)
 {
+    group_mod_req_info_t group_mod_req_info;
+    gn_group_t group;
     gn_group_t *p_group = sw->group_entries;
     pthread_mutex_lock(&sw->group_entry_mutex);
     while(sw->group_entries)
@@ -159,18 +195,44 @@ void clear_group_entries(gn_switch_t *sw)
 
         }
     }
+
+    sw->group_entries = NULL;
     pthread_mutex_unlock(&sw->group_entry_mutex);
+
+    memset(&group_mod_req_info, 0, sizeof(group_mod_req_info_t));
+    memset(&group, 0, sizeof(gn_group_t));
+    group.group_id = OFPG_ALL;
+    group.type = OFPGT_ALL;
+    group_mod_req_info.group = &group;
+    group_mod_req_info.command = OFPGC_DELETE;
+    sw->msg_driver.msg_handler[OFPT13_GROUP_MOD](sw, (UINT1 *)&group_mod_req_info);
 }
 
 static void group_bucket_free(group_bucket_t *bucket)
 {
-    LIST_FREE(bucket->actions, gn_action_t, free);
+//    LIST_FREE(bucket->actions, gn_action_t, free);
+    gn_action_t *p_action = bucket->actions;
+    while(p_action)
+    {
+        bucket->actions = p_action->next;
+        mem_free(g_gnaction_mempool_id, (void *)p_action);
+        p_action = bucket->actions;
+    }
+
     free(bucket);
 }
 
 void gn_group_free(gn_group_t *group)
 {
-    LIST_FREE(group->buckets, group_bucket_t, group_bucket_free);
+//    LIST_FREE(group->buckets, group_bucket_t, group_bucket_free);
+    group_bucket_t *p_bucket = group->buckets;
+    while(p_bucket)
+    {
+        group->buckets = p_bucket->next;
+        group_bucket_free(p_bucket);
+        p_bucket = group->buckets;
+    }
+
     free(group);
 }
 

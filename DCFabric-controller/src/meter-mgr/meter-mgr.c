@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : meter-mgr.c           *
@@ -47,6 +66,10 @@ INT4 add_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
     if(NULL == meter_mod_req_info.meter)
     {
         meter->next = sw->meter_entries;
+        if(sw->meter_entries)
+        {
+            sw->meter_entries->pre = meter;
+        }
         sw->meter_entries = meter;
         meter_mod_req_info.meter = meter;
     }
@@ -119,21 +142,30 @@ INT4 delete_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 
     if(NULL == p_meter)
     {
-        p_meter = meter;
+        meter_mod_req_info.meter = meter;
     }
     else
     {
         if(p_meter->pre)
         {
             p_meter->pre->next = p_meter->next;
+            if(p_meter->next)
+            {
+                p_meter->next->pre = p_meter->pre;
+            }
         }
         else
         {
             sw->meter_entries = p_meter->next;
+            if(p_meter->next)
+            {
+                p_meter->next->pre = NULL;
         }
     }
 
     meter_mod_req_info.meter = p_meter;
+    }
+
     meter_mod_req_info.command = OFPMC_DELETE;
     ret = sw->msg_driver.msg_handler[OFPT13_METER_MOD](sw, (UINT1 *)&meter_mod_req_info);
 
@@ -145,6 +177,8 @@ INT4 delete_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 
 void clear_meter_entries(gn_switch_t *sw)
 {
+    meter_mod_req_info_t meter_mod_req_info;
+    gn_meter_t meter;
     gn_meter_t *p_meter = sw->meter_entries;
     pthread_mutex_lock(&sw->meter_entry_mutex);
     while(sw->meter_entries)
@@ -153,7 +187,14 @@ void clear_meter_entries(gn_switch_t *sw)
         sw->meter_entries = p_meter->next;
         free(p_meter);
     }
+
+    sw->meter_entries = NULL;
     pthread_mutex_unlock(&sw->meter_entry_mutex);
+
+    meter_mod_req_info.meter = &meter;
+    meter.meter_id = OFPM_ALL;
+    meter_mod_req_info.command = OFPMC_DELETE;
+    sw->msg_driver.msg_handler[OFPT13_METER_MOD](sw, (UINT1 *)&meter_mod_req_info);
 }
 
 

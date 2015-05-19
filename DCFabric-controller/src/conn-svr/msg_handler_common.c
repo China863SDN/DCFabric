@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : msg_handler_common.c           *
@@ -15,7 +34,7 @@
 msg_handler_t of_message_handler[1];
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
 
-//appÏûÏ¢´¦Àí×¢²áº¯Êı
+//appæ¶ˆæ¯å¤„ç†æ³¨å†Œå‡½æ•°
 INT4 register_of_msg_hander(gn_switch_t *sw, UINT1 type, msg_handler_t msg_handler)
 {
     msg_handler_t *new_msg_handers = NULL;
@@ -41,7 +60,7 @@ INT4 register_of_msg_hander(gn_switch_t *sw, UINT1 type, msg_handler_t msg_handl
     return GN_OK;
 }
 
-//appÏûÏ¢´¦Àí·´×¢²áº¯Êı
+//appæ¶ˆæ¯å¤„ç†åæ³¨å†Œå‡½æ•°
 INT4 unregister_of_msg_hander(gn_switch_t *sw, UINT1 type)
 {
     if(sw->ofp_version == OFP10_VERSION)
@@ -61,10 +80,10 @@ INT4 unregister_of_msg_hander(gn_switch_t *sw, UINT1 type)
     return GN_OK;
 }
 
-//µ÷ÓÃ__start_appproc_secºÍ__stop_appproc_secÖ®¼ä½ÚÄÚµÄº¯ÊıÖ¸Õëapp_proc(x)
+//è°ƒç”¨__start_appproc_secå’Œ__stop_appproc_secä¹‹é—´èŠ‚å†…çš„å‡½æ•°æŒ‡é’ˆapp_proc(x)
 static void mod_proccalls(gn_switch_t *sw)
 {
-    proccall_t *p_proc;   //º¯ÊıÖ¸Õë±äÁ¿
+    proccall_t *p_proc;   //å‡½æ•°æŒ‡é’ˆå˜é‡
 
     p_proc = &__start_appproc_sec;
     do
@@ -101,7 +120,7 @@ INT4 of_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
     return sw->msg_driver.msg_handler[0](sw, of_msg);
 }
 
-//³õÊ¼»¯Ä¬ÈÏÏûÏ¢´¦Àí
+//åˆå§‹åŒ–é»˜è®¤æ¶ˆæ¯å¤„ç†
 msg_handler_t of_message_handler[1] =
 {
     of_msg_hello,       /* OFPT_HELLO */

@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : conn-svr.c           *
@@ -43,7 +62,7 @@ gn_switch_t *find_sw_by_dpid(UINT8 dpid)
     return NULL;
 }
 
-//锟斤拷锟斤拷TCP socket锟斤拷锟斤拷锟�
+//创建TCP server
 static INT4 create_tcp_server(UINT4 ip, UINT2 port)
 {
     INT4 sockfd;
@@ -51,13 +70,12 @@ static INT4 create_tcp_server(UINT4 ip, UINT2 port)
     INT4 sockopt = 1;
     struct sockaddr_in my_addr;
 
-    LOG_PROC("INFO", "Controller service starting...");
     sockfd = socket(AF_INET , SOCK_STREAM , 0);
-    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&sockopt, sizeof(sockopt));    //锟斤拷锟斤拷udp锟斤拷锟皆帮拷同一锟斤拷锟剿匡拷
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&sockopt, sizeof(sockopt));
 //    setsockopt(sockfd, SOL_SOCKET, SO_RCVTIMEO, (char *)&sockopt, sizeof(sockopt));
 //    setsockopt(sockfd, SOL_SOCKET, SO_SNDTIMEO, (char *)&sockopt, sizeof(sockopt));
 //    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR,(char *)&wait, sizeof(wait));
-//    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *)&sockopt, sizeof(sockopt));  //锟斤拷止Nagle锟姐法锟斤拷锟斤拷止锟斤拷锟秸筹拷
+//    setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, (char *)&sockopt, sizeof(sockopt));
 
     if(sockfd < 0 )
     {
@@ -86,7 +104,6 @@ static INT4 create_tcp_server(UINT4 ip, UINT2 port)
         return GN_ERR;
     }
 
-    //锟斤拷锟斤拷锟斤拷锟斤拷锟接碉拷址
     LOG_PROC("INFO", "Controller service started successfully, listening at [tcp:%s:%d]", inet_htoa(g_server.ip), g_server.port);
 
     g_server.state = TRUE;
@@ -107,7 +124,7 @@ void msg_recv(gn_switch_t *sw)
     {
         FD_ZERO(&rfds);
         FD_SET(sw->sock_fd, &rfds);
-        tv.tv_sec = 2;
+        tv.tv_sec = 6;
         tv.tv_usec = 0;
         ret = select(sw->sock_fd + 1, &rfds, NULL, NULL, &tv);
         if(ret <= 0)
@@ -138,10 +155,10 @@ void msg_recv(gn_switch_t *sw)
 //                            printf("-- RECV head[%d], tail[%d], len[%d]\n", sw->recv_buffer.head, sw->recv_buffer.tail, sw->recv_buffer.buff_arr[tail].len);
                     }
                 }
-                else
-                {
-                    printf("#### Buffer is full %d.\n", g_cur_sys_time.tv_sec);
-                }
+//                else
+//                {
+//                    printf("#### Buffer is full %llu.\n", g_cur_sys_time.tv_sec);
+//                }
             }
         }
     }
@@ -179,10 +196,10 @@ void msg_process(gn_switch_t *sw)
     unsigned char *of_msg = NULL;
     struct ofp_header *header = NULL;
 
-    INT4 offset = 0;        //锟斤拷前锟斤拷锟斤拷偏锟斤拷
-    INT4 left_len = 0;      //锟斤拷前剩锟斤拷未锟斤拷锟�?锟斤拷
-    INT4 pkt_len = 0;       //锟斤拷前锟斤拷某锟斤拷锟�
-    INT4 next_head = 0;     //锟斤拷一锟斤拷buffer锟铰憋拷
+    INT4 offset = 0;        //偏移量
+    INT4 left_len = 0;      //剩余处理长度
+    INT4 pkt_len = 0;       //包总长度
+    INT4 next_head = 0;     //下一个buffer
     INT4 curr_head = sw->recv_buffer.head;
     buffer_cache_t *buff_arr = sw->recv_buffer.buff_arr;
     unsigned char *buffer = buff_arr[curr_head].buff - buff_arr[curr_head].bak_len;
@@ -204,7 +221,6 @@ void msg_process(gn_switch_t *sw)
             buff_arr[next_head].bak_len = left_len;
             if((buff_arr[curr_head].len != g_server.buff_len) || (next_head == 0))
             {
-                //memcpy(buff_arr[next_head].buff - left_len, of_msg, left_len);
             	memmove(buff_arr[next_head].buff - left_len, of_msg, left_len);
                 break;
             }
@@ -219,7 +235,7 @@ void msg_process(gn_switch_t *sw)
         offset += pkt_len;
         left_len -= pkt_len;
 
-        //锟斤拷锟竭硷拷锟斤拷锟斤拷
+        //处理openflow消息
         message_process(sw, of_msg);
     }
 }
@@ -332,7 +348,7 @@ UINT1 *init_sendbuff(gn_switch_t *sw, UINT1 of_version, UINT1 type, UINT2 buf_le
     return b;
 }
 
-//锟斤拷锟斤拷锟斤拷锟斤拷锟斤拷莅锟�
+//发送openflow消息
 INT4 send_of_msg(gn_switch_t *sw, UINT4 total_len)
 {
 //    INT4 ret = 0;
@@ -538,7 +554,7 @@ INT4 init_conn_svr()
         return GN_ERR;
     }
 
-    //锟斤拷始锟斤拷预锟借交锟斤拷锟斤拷
+    //初始化交换机
     for(; i < g_server.max_switch; i++)
     {
         pthread_mutex_init(&g_server.switches[i].send_buffer_mutex, NULL);

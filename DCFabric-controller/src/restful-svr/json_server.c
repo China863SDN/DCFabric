@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
  *                                                                             *
  *   File Name   : json_server.c           *
@@ -27,7 +46,7 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "fabric_impl.h"
-//锟斤拷锟斤拷url锟斤拷锟斤拷锟侥诧拷锟斤拷
+//从url中解析附带的参数
 static void get_url_argument(const char *url, key_value_t *arg)
 {
     char *tmp = NULL;
@@ -58,7 +77,7 @@ static void get_url_argument(const char *url, key_value_t *arg)
     }
 }
 
-//锟斤拷json锟斤拷锟斤拷转锟斤拷为锟街凤拷锟斤拷锟酵凤拷json锟斤拷锟襟，凤拷锟斤拷锟街凤拷锟斤拷锟斤拷锟斤拷锟揭拷头锟�
+//根据错误码，返回对应的json信息
 INT1 *json_to_reply(json_t *obj, INT4 code)
 {
     INT1 *reply = NULL;
@@ -84,7 +103,7 @@ INT1 *json_to_reply(json_t *obj, INT4 code)
     json_tree_to_string(obj, &reply);
     json_free_value(&obj);
 
-//    LOG_PROC("INFO", "Reply: %s", reply);
+    LOG_PROC("INFO", "Reply: %s", reply);
     return reply;
 }
 
@@ -639,9 +658,17 @@ static void json_add_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
         {
             value = json_new_string("IPV6");
         }
+        else if (oxm_fields->eth_type == ETHER_MPLS)
+        {
+            value = json_new_string("MPLS");
+        }
+        else if (oxm_fields->eth_type == ETHER_VLAN)
+        {
+            value = json_new_string("VLAN");
+        }
         else
         {
-            //
+            value = json_new_string("UNKNOW");
         }
 
         json_insert_child(key, value);
@@ -812,11 +839,11 @@ static void json_add_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
         key = json_new_string("icmpv4Code");
         if (oxm_fields->arp_op == 1)
         {
-            value = json_new_string("REQ");
+            value = json_new_string("Request");
         }
         else
         {
-            value = json_new_string("REP");
+            value = json_new_string("Reply");
         }
 
         json_insert_child(key, value);
@@ -872,7 +899,7 @@ static void json_add_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
             sprintf(json_temp, "%s/%d", sipv6, oxm_fields->ipv6_src_prefix);
             value = json_new_string(json_temp);
         }
-        else    //锟斤拷锟斤拷锟斤拷
+        else
         {
             value = json_new_string(sipv6);
         }
@@ -891,7 +918,7 @@ static void json_add_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
             sprintf(json_temp, "%s/%d", sipv6, oxm_fields->ipv6_dst_prefix);
             value = json_new_string(json_temp);
         }
-        else    //锟斤拷锟斤拷锟斤拷
+        else
         {
             value = json_new_string(sipv6);
         }
@@ -1311,7 +1338,7 @@ static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
             item = json_find_first_label(obj, "arpOp");
             if (item)
             {
-                if (0 == strncmp(item->child->text, "REQ", 3))
+                if (0 == strncmp(item->child->text, "Request", 3))
                 {
                     oxm_fields->arp_op = 1;
                 }
@@ -1589,6 +1616,10 @@ static INT4 json_parse_actions(json_t *obj, gn_action_t **actions)
         p_action->type = OFPAT13_OUTPUT;
         p_action->port = atoi(item->child->text);
 
+        if(p_action->port == OFPP13_CONTROLLER)
+        {
+            p_action->max_len = 0xffff;
+        }
         json_free_value(&item);
     }
 
@@ -1846,10 +1877,14 @@ static INT1 *post_flow_entry(const INT1 *url, json_t *root)
     item = json_find_first_label(root, "match");
     if (item)
     {
-        flow->match.type = OFPMT_OXM;
         json_parse_oxm_fields(item->child, &(flow->match.oxm_fields));
         json_free_value(&item);
     }
+    else
+    {
+        memset(&flow->match, 0, sizeof(gn_match_t));
+    }
+    flow->match.type = OFPMT_OXM;
 
     item = json_find_first_label(root, "instruction");
     if (item)
@@ -1861,6 +1896,12 @@ static INT1 *post_flow_entry(const INT1 *url, json_t *root)
     strncpy(flow->creater, "Restful", strlen("Restful"));
     flow->create_time = g_cur_sys_time.tv_sec;
     ret = add_flow_entry(sw, flow);
+    if(ret != GN_OK)
+    {
+        gn_flow_free(flow);
+        return json_to_reply(NULL, ret);
+    }
+
     ret = enable_flow_entry(sw, flow);
 
     return json_to_reply(NULL, ret);
@@ -1960,15 +2001,15 @@ static INT1 *del_flow_entry(const INT1 *url, json_t *root)
         json_free_value(&item);
     }
 
-    item = json_find_first_label(root, "instruction");
-    if (item)
-    {
-        json_parse_instructions(item->child, &(flow->instructions));
-        json_free_value(&item);
-    }
-
-    strncpy(flow->creater, "Restful", strlen("Restful"));
-    flow->create_time = g_cur_sys_time.tv_sec;
+//    item = json_find_first_label(root, "instruction");
+//    if (item)
+//    {
+//        json_parse_instructions(item->child, &(flow->instructions));
+//        json_free_value(&item);
+//    }
+//
+//    strncpy(flow->creater, "Restful", strlen("Restful"));
+//    flow->create_time = g_cur_sys_time.tv_sec;
     ret = delete_flow_entry(sw, flow);
 
     return json_to_reply(NULL, ret);
@@ -2133,6 +2174,10 @@ static INT1 *post_meter_entry(const INT1 *url, json_t *root)
         mac_str_to_bin(item->child->text, dpid);
         json_free_value(&item);
     }
+    else
+    {
+    	return json_to_reply(NULL, EC_RESTFUL_INVALID_ARGUMENTS);
+    }
 
     sw = find_sw_by_dpid(uc8_to_ulli64(dpid, &_dpid));
     if (NULL == sw)
@@ -2146,6 +2191,10 @@ static INT1 *post_meter_entry(const INT1 *url, json_t *root)
     {
         meter->meter_id = atoi(item->child->text);
         json_free_value(&item);
+    }
+    else
+    {
+    	return json_to_reply(NULL, EC_RESTFUL_INVALID_ARGUMENTS);
     }
 
     item = json_find_first_label(root, "flags");
@@ -2183,11 +2232,11 @@ static INT1 *post_meter_entry(const INT1 *url, json_t *root)
     {
         if(0 == strcmp(item->child->text, "Drop"))
         {
-            meter->flags = OFPMBT_DROP;
+            meter->type = OFPMBT_DROP;
         }
         else if(0 == strcmp(item->child->text, "Dscp"))
         {
-            meter->flags = OFPMBT_DSCP_REMARK;
+            meter->type = OFPMBT_DSCP_REMARK;
         }
         else
         {
@@ -2297,11 +2346,11 @@ static INT1 *put_meter_entry(const INT1 *url, json_t *root)
     {
         if(0 == strcmp(item->child->text, "Drop"))
         {
-            meter->flags = OFPMBT_DROP;
+            meter->type = OFPMBT_DROP;
         }
         else if(0 == strcmp(item->child->text, "Dscp"))
         {
-            meter->flags = OFPMBT_DSCP_REMARK;
+            meter->type = OFPMBT_DSCP_REMARK;
         }
         else
         {
@@ -2429,7 +2478,22 @@ static INT1 *get_group_entries(const INT1 *url, json_t *root)
                 json_insert_child(group_array, group_obj);
 
                 key = json_new_string("type");
-                sprintf(json_temp, "%d", p_group->type);
+                if(p_group->type == OFPGT_ALL)
+                {
+                    sprintf(json_temp, "%s", "All");
+                }
+                else if(p_group->type == OFPGT_SELECT)
+                {
+                    sprintf(json_temp, "%s", "Select");
+                }
+                else if(p_group->type == OFPGT_INDIRECT)
+                {
+                    sprintf(json_temp, "%s", "Indirect");
+                }
+                else  //if(p_group->type == OFPGT_FF)
+                {
+                    sprintf(json_temp, "%s", "FF");
+                }
                 value = json_new_string(json_temp);
                 json_insert_child(key, value);
                 json_insert_child(group_obj, key);
@@ -2474,7 +2538,11 @@ static INT1 *get_group_entries(const INT1 *url, json_t *root)
                     json_insert_child(key, value);
                     json_insert_child(bucket_obj, key);
                     json_add_actions(value, p_bucket->actions);
+
+                    p_bucket = p_bucket->next;
                 }
+
+                p_group = p_group->next;
             }
         }
     }
@@ -2532,6 +2600,10 @@ static INT1 *post_group_entry(const INT1 *url, json_t *root)
         mac_str_to_bin(item->child->text, dpid);
         json_free_value(&item);
     }
+    else
+    {
+    	return json_to_reply(NULL, EC_RESTFUL_INVALID_ARGUMENTS);
+    }
 
     sw = find_sw_by_dpid(uc8_to_ulli64(dpid, &_dpid));
     if (NULL == sw)
@@ -2545,6 +2617,10 @@ static INT1 *post_group_entry(const INT1 *url, json_t *root)
     {
         group->group_id = atoi(item->child->text);
         json_free_value(&item);
+    }
+    else
+    {
+    	return json_to_reply(NULL, EC_RESTFUL_INVALID_ARGUMENTS);
     }
 
     item = json_find_first_label(root, "type");
@@ -2596,18 +2672,26 @@ static INT1 *post_group_entry(const INT1 *url, json_t *root)
                 json_free_value(&bucket_item);
             }
 
-            bucket_item = json_find_first_label(buckets, "watch_port");
+            if(group->type == OFPGT_FF)
+            {
+                bucket_item = json_find_first_label(buckets, "watchPort");
             if(bucket_item)
             {
                 bucket->watch_port = atoi(bucket_item->child->text);
                 json_free_value(&bucket_item);
             }
 
-            bucket_item = json_find_first_label(buckets, "watch_group");
+                bucket_item = json_find_first_label(buckets, "watchGroup");
             if(bucket_item)
             {
                 bucket->watch_group = atoi(bucket_item->child->text);
                 json_free_value(&bucket_item);
+            }
+            }
+            else
+            {
+                bucket->watch_port = OFPP13_ANY;
+                bucket->watch_group = OFPG_ANY;
             }
 
             bucket_item = json_find_first_label(buckets, "actions");
@@ -2626,6 +2710,7 @@ static INT1 *post_group_entry(const INT1 *url, json_t *root)
 
             buckets = buckets->next;
         }
+        json_free_value(&item);
     }
 
     ret = add_group_entry(sw, group);
@@ -2718,18 +2803,26 @@ static INT1 *put_group_entry(const INT1 *url, json_t *root)
                 json_free_value(&bucket_item);
             }
 
-            bucket_item = json_find_first_label(buckets, "watch_port");
+            if(group->type == OFPGT_FF)
+            {
+                bucket_item = json_find_first_label(buckets, "watchPort");
             if(bucket_item)
             {
                 bucket->watch_port = atoi(bucket_item->child->text);
                 json_free_value(&bucket_item);
             }
 
-            bucket_item = json_find_first_label(buckets, "watch_group");
+                bucket_item = json_find_first_label(buckets, "watchGroup");
             if(bucket_item)
             {
                 bucket->watch_group = atoi(bucket_item->child->text);
                 json_free_value(&bucket_item);
+            }
+            }
+            else
+            {
+                bucket->watch_port = OFPP13_ANY;
+                bucket->watch_group = OFPG_ANY;
             }
 
             bucket_item = json_find_first_label(buckets, "actions");
@@ -2750,7 +2843,7 @@ static INT1 *put_group_entry(const INT1 *url, json_t *root)
         }
     }
 
-    ret = add_group_entry(sw, group);
+    ret = modify_group_entry(sw, group);
 EXIT:
     return json_to_reply(NULL, ret);
 }
@@ -2791,7 +2884,6 @@ static INT1 *del_group_entry(const INT1 *url, json_t *root)
     }
 
     ret = delete_group_entry(sw, group);
-    free(group);
     return json_to_reply(NULL, ret);
 }
 
@@ -3762,13 +3854,13 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_GET, "/gn/meters/json", get_meter_entries);
     ret += register_restful_handler(HTTP_DELETE, "/gn/meters/json", del_meter_entries);
     ret += register_restful_handler(HTTP_POST, "/gn/meter/json", post_meter_entry);
-    ret += register_restful_handler(HTTP_POST, "/gn/meter/json", put_meter_entry);
+    ret += register_restful_handler(HTTP_PUT, "/gn/meter/json", put_meter_entry);
     ret += register_restful_handler(HTTP_DELETE, "/gn/meter/json", del_meter_entry);
 
     ret += register_restful_handler(HTTP_GET, "/gn/groups/json", get_group_entries);
     ret += register_restful_handler(HTTP_DELETE, "/gn/groups/json", del_group_entries);
     ret += register_restful_handler(HTTP_POST, "/gn/group/json", post_group_entry);
-    ret += register_restful_handler(HTTP_POST, "/gn/group/json", put_group_entry);
+    ret += register_restful_handler(HTTP_PUT, "/gn/group/json", put_group_entry);
     ret += register_restful_handler(HTTP_DELETE, "/gn/group/json", del_group_entry);
 
     ret += register_restful_handler(HTTP_GET, "/gn/path/json", get_path);

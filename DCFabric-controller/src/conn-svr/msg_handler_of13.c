@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : msg_handler_of13.c           *
@@ -62,6 +81,11 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_METADATA);
             gn_oxm->metadata = gn_ntohll(*(UINT8 *)(of_oxm->data));
+            if(of_oxm->length > 8)
+            {
+                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_METADATA_MASK);
+                gn_oxm->metadata_mask = gn_ntohll(*(UINT8 *)(of_oxm->data + 8));
+            }
             break;
         }
         case (OFPXMT_OFB_ETH_DST):
@@ -245,14 +269,14 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
 
             if(of_oxm->length > OFPXMT_OFB_IPV6_SZ)
             {
-                UINT4 mask[4] = {0};
-                mask[0] = ntohl(*(UINT4 *)(of_oxm->data + 4));
-                mask[1] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4));
-                mask[2] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4));
-                mask[3] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4 + 4));
-                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX);
-
-                //todo
+//                UINT4 mask[4] = {0};
+//                mask[0] = ntohl(*(UINT4 *)(of_oxm->data + 4));
+//                mask[1] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4));
+//                mask[2] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4));
+//                mask[3] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4 + 4));
+//                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX);
+//
+//                //todo
             }
             break;
         }
@@ -263,14 +287,14 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
 
             if(of_oxm->length > OFPXMT_OFB_IPV6_SZ)
             {
-                UINT4 mask[4] = {0};
-                mask[0] = ntohl(*(UINT4 *)(of_oxm->data + 4));
-                mask[1] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4));
-                mask[2] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4));
-                mask[3] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4 + 4));
-                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX);
-
-                //todo
+//                UINT4 mask[4] = {0};
+//                mask[0] = ntohl(*(UINT4 *)(of_oxm->data + 4));
+//                mask[1] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4));
+//                mask[2] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4));
+//                mask[3] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4 + 4));
+//                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX);
+//
+//                //todo
             }
             break;
         }
@@ -318,6 +342,8 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
         }
         case (OFPXMT_OFB_TUNNEL_ID):
         {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_TUNNEL_ID);
+            gn_oxm->tunnel_id = ntohl(*(UINT4 *)of_oxm->data);
             break;
         }
         case (OFPXMT_OFB_IPV6_EXTHDR):
@@ -496,7 +522,7 @@ INT4 of13_remove_all_flow(gn_switch_t *sw, UINT1 *ofmsg)
     struct ofp13_flow_mod *ofm = (struct ofp13_flow_mod *) data;
     ofm->cookie = 0x0;
     ofm->cookie_mask = 0x0;
-    ofm->table_id = 0x0;
+    ofm->table_id = OFPTT_ALL;
     ofm->command = OFPFC_DELETE;
     ofm->idle_timeout = htons(0x0);
     ofm->hard_timeout = htons(0x0);
@@ -554,6 +580,16 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New Openflow13 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d]", dpid[0],
                 dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port));
     }
+
+    if(OFPCR_ROLE_EQUAL != g_controller_role)
+    {
+        role_req_info_t role_req_info;
+        role_req_info.generation_id = g_election_generation_id;
+        role_req_info.role = g_controller_role;
+
+        sw->msg_driver.msg_handler[OFPT13_ROLE_REQUEST](sw, (UINT1 *)&role_req_info);
+    }
+
     return GN_OK;
 }
 
@@ -685,7 +721,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        //Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1000Mbps
+        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
@@ -701,10 +737,10 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
     }
 
-    //É¾ï¿½ï¿½Ä¿ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½downï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    //É¾³ýÄ¿µÄ×ª·¢¿ÚdownµôµÄÁ÷±í
 //    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
 
-    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    //¸üÐÂÍØÆË
     for (port = 0; port < sw->n_ports; port++)
     {
         if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
@@ -738,7 +774,7 @@ static INT4 of13_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
     struct ofp13_action_output *ofp13_act = (struct ofp13_action_output *)of13_out->actions;
     ofp13_act->type = htons(OFPAT13_OUTPUT);
     ofp13_act->len = htons(sizeof(struct ofp13_action_output));
-    ofp13_act->port = htonl(packout_req_info->outport);    //ï¿½Ó¸ï¿½ï¿½ï¿½ï¿½Ë¿Ú·ï¿½ï¿½ï¿½È¥
+    ofp13_act->port = htonl(packout_req_info->outport);    //´Ó¸÷¸ö¶Ë¿Ú·¢³öÈ¥
     ofp13_act->max_len = htons(packout_req_info->max_len);
     memset(ofp13_act->pad, 0x0, 6);
 
@@ -787,11 +823,19 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
         oxm->oxm_field_hm = OFPXMT_OFB_METADATA << 1;
         oxm->length = 8;
-        *(UINT8 *)(oxm->data) = htonl(oxm_fields->metadata);
+        *(UINT8 *)(oxm->data) = gn_htonll(oxm_fields->metadata);
+
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_METADATA_MASK))
+        {
+            oxm->length = 16;
+            *(UINT8 *)(oxm->data + 8) = gn_htonll(oxm_fields->metadata_mask);
+        }
+
 
         oxm_field_sz += sizeof(*oxm) + oxm->length;
+        oxm_len += sizeof(struct ofp_oxm_header) + oxm->length;
         oxm = (struct ofp_oxm_header *)(buf + oxm_field_sz);
-        oxm_len += sizeof(struct ofp_oxm_header) + 8;
+
     }
 
     if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_DST))
@@ -895,7 +939,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
     {
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ÓÐÑÚÂë
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -923,7 +967,8 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
-        else    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        else    //ÎÞÑÚÂë
+
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV4_SZ;
@@ -939,7 +984,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
     {
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ÓÐÑÚÂë
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -967,7 +1012,8 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
-        else  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        else  //ÎÞÑÚÂë
+
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_DST << 1;
             oxm->length = OFPXMT_OFB_IPV4_SZ;
@@ -1267,7 +1313,8 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
             oxm_len += OFPXMT_OFB_IPV6_SZ;
         }
-        else   //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        else   //ÎÞÑÚÂë
+
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -1423,7 +1470,8 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
             oxm_len += OFPXMT_OFB_IPV6_SZ;
         }
-        else  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+        else  //ÎÞÑÚÂë
+
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_DST << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -1434,22 +1482,22 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm = (struct ofp_oxm_header *)(buf + oxm_field_sz);
         oxm_len += sizeof(struct ofp_oxm_header) + OFPXMT_OFB_IPV6_SZ;
     }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_FLABEL))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_FLABEL))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_ICMPV6_TYPE))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV6_TYPE))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_ICMPV6_CODE))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV6_CODE))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_ND_TARGET))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_ND_TARGET))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_ND_SLL))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_ND_SLL))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_ND_TLL))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_ND_TLL))
 //    {
 //    }
     if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_MPLS_LABEL))
@@ -1463,24 +1511,891 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm = (struct ofp_oxm_header *)(buf + oxm_field_sz);
         oxm_len += sizeof(struct ofp_oxm_header) + 4;
     }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_MPLS_TC))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_MPLS_TC))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFP_MPLS_BOS))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFP_MPLS_BOS))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_PBB_ISID))
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_PBB_ISID))
 //    {
 //    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_TUNNEL_ID))
-//    {
-//    }
-//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_EXTHDR))
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TUNNEL_ID))
+    {
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_TUNNEL_ID << 1;
+        oxm->length = 4;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->tunnel_id);
+
+        oxm_field_sz += sizeof(*oxm) + oxm->length;
+        oxm = (struct ofp_oxm_header *)(buf + oxm_field_sz);
+        oxm_len += sizeof(struct ofp_oxm_header) + 4;
+    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_EXTHDR))
 //    {
 //    }
 
+
+
+
     return oxm_len;
 }
+
+static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
+{
+    struct ofp_action_set_field *oa_set = (struct ofp_action_set_field *)buf;
+    struct ofp_oxm_header *oxm = NULL;
+    size_t oxm_field_sz = 0;
+    UINT2 set_field_len = 0;
+    UINT4 netmask = 0;
+    UINT4 netmaskv6[4] = {0};
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IN_PORT))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_IN_PORT << 1;
+        oxm->length = OFPXMT_OFB_IN_PORT_SZ;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->in_port);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IN_PHY_PORT))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_IN_PHY_PORT << 1;
+        oxm->length = OFPXMT_OFB_IN_PORT_SZ;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->in_phy_port);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_METADATA))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_METADATA << 1;
+        oxm->length = 8;
+        *(UINT8 *)(oxm->data) = gn_htonll(oxm_fields->metadata);
+
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_METADATA_MASK))
+        {
+            oxm->length = 16;
+            *(UINT8 *)(oxm->data + 8) = gn_htonll(oxm_fields->metadata_mask);
+        }
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_DST))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ETH_DST << 1;
+        oxm->length = OFPXMT_OFB_ETH_SZ;
+        memcpy((UINT1 *)(oxm->data), oxm_fields->eth_dst, OFP_ETH_ALEN);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_SRC))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ETH_SRC << 1;
+        oxm->length = OFPXMT_OFB_ETH_SZ;
+        memcpy((UINT1 *)(oxm->data), oxm_fields->eth_src, OFP_ETH_ALEN);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_TYPE))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ETH_TYPE << 1;
+        oxm->length = OFPXMT_OFB_ETH_TYPE_SZ;
+        *(UINT2 *)(oxm->data) = htons(oxm_fields->eth_type);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_VLAN_VID))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_VLAN_VID << 1;
+        oxm->length = OFPXMT_OFB_VLAN_VID_SZ;
+        oxm_fields->vlan_vid = OFPVID_PRESENT | oxm_fields->vlan_vid;
+        *(UINT2 *)(oxm->data) = htons(oxm_fields->vlan_vid);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_VLAN_PCP))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_VLAN_PCP << 1;
+        oxm->length = OFPXMT_OFB_VLAN_PCP_SZ;
+        *(UINT1 *)(oxm->data) = htons(oxm_fields->vlan_pcp);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IP_DSCP))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_IP_DSCP << 1;
+        oxm->length = OFPXMT_OFB_IP_DSCP_SZ;
+        *(UINT1 *)(oxm->data) = oxm_fields->ip_dscp;
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IP_ECN))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_IP_ECN << 1;
+        oxm->length = OFPXMT_OFB_IP_DSCP_SZ;
+        *(UINT1 *)(oxm->data) = oxm_fields->ip_ecn;
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IP_PROTO))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_IP_PROTO << 1;
+        oxm->length = OFPXMT_OFB_IP_PROTO_SZ;
+        *(UINT1 *)(oxm->data) = oxm_fields->ip_proto;
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ÓÐÑÚÂë
+        {
+            oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
+            oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
+            *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_src);
+            switch(oxm_fields->ipv4_src_prefix)
+            {
+                case 8:
+                {
+                    netmask = 0xff000000;
+                    break;
+                }
+                case 16:
+                {
+                    netmask = 0xffff0000;
+                    break;
+                }
+                case 24:
+                {
+                    netmask = 0xffffff00;
+                    break;
+                }
+                default:break;
+            }
+
+            *(UINT4 *)(oxm->data + 4) = htonl(netmask);
+        }
+        else    //ÎÞÑÚÂë
+        {
+            oxm->oxm_field_hm = OFPXMT_OFB_IPV4_SRC << 1;
+            oxm->length = OFPXMT_OFB_IPV4_SZ;
+            *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_src);
+        }
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ÓÐÑÚÂë
+        {
+            oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
+            oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
+            *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_dst);
+            switch(oxm_fields->ipv4_dst_prefix)
+            {
+                case 8:
+                {
+                    netmask = 0xff000000;
+                    break;
+                }
+                case 16:
+                {
+                    netmask = 0xffff0000;
+                    break;
+                }
+                case 24:
+                {
+                    netmask = 0xffffff00;
+                    break;
+                }
+                default:break;
+            }
+
+            *(UINT4 *)(oxm->data + 4) = htonl(netmask);
+        }
+        else  //ÎÞÑÚÂë
+        {
+            oxm->oxm_field_hm = OFPXMT_OFB_IPV4_DST << 1;
+            oxm->length = OFPXMT_OFB_IPV4_SZ;
+            *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_dst);
+        }
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TCP_SRC))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_TCP_SRC << 1;
+        oxm->length = OFPXMT_OFB_L4_PORT_SZ;
+        *(UINT2 *)(oxm->data) = htons(oxm_fields->tcp_src);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TCP_DST))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_TCP_DST << 1;
+        oxm->length = OFPXMT_OFB_L4_PORT_SZ;
+        *(UINT2 *)(oxm->data) = htons(oxm_fields->tcp_dst);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_UDP_SRC))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_UDP_SRC << 1;
+        oxm->length = OFPXMT_OFB_L4_PORT_SZ;
+        *(UINT2 *)(oxm->data) = htons(oxm_fields->udp_src);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_UDP_DST))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_UDP_DST << 1;
+        oxm->length = OFPXMT_OFB_L4_PORT_SZ;
+        *(UINT2 *)(oxm->data) = htons(oxm_fields->udp_dst);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_SCTP_SRC))
+//    {
+//
+//    }
+//
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_SCTP_DST))
+//    {
+//
+//    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV4_TYPE))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ICMPV4_TYPE << 1;
+        oxm->length = 1;
+        *(UINT1 *)(oxm->data) = oxm_fields->icmpv4_type;
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV4_CODE))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ICMPV4_CODE << 1;
+        oxm->length = 1;
+        *(UINT1 *)(oxm->data) = oxm_fields->icmpv4_code;
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_OP))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ARP_OP << 1;
+        oxm->length = 1;
+        *(UINT1 *)(oxm->data) = oxm_fields->arp_op;
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_SPA))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ARP_SPA << 1;
+        oxm->length = OFPXMT_OFB_IPV4_SZ;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->arp_spa);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_TPA))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ARP_TPA << 1;
+        oxm->length = OFPXMT_OFB_IPV4_SZ;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->arp_tpa);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_SHA))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ARP_SHA << 1;
+        oxm->length = OFPXMT_OFB_ETH_SZ;
+        memcpy((UINT1 *)(oxm->data), oxm_fields->arp_sha, OFP_ETH_ALEN);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_THA))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_ARP_THA << 1;
+        oxm->length = OFPXMT_OFB_ETH_SZ;
+        memcpy((UINT1 *)(oxm->data), oxm_fields->arp_tha, OFP_ETH_ALEN);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX))
+        {
+            oxm->oxm_field_hm = (OFPXMT_OFB_IPV6_SRC << 1) + 1 ;
+            oxm->length = OFPXMT_OFB_IPV6_SZ + OFPXMT_OFB_IPV6_SZ;
+            memcpy((UINT1 *)(oxm->data), oxm_fields->ipv6_src, OFPXMT_OFB_IPV6_SZ);
+
+            switch(oxm_fields->ipv6_src_prefix)
+            {
+                case 8:
+                {
+                    netmaskv6[0] = htonl(0xff000000);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 16:
+                {
+                    netmaskv6[0] = htonl(0xffff0000);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 24:
+                {
+                    netmaskv6[0] = htonl(0xffffff00);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 32:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 40:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xff000000);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 48:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffff0000);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 56:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffff00);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 64:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 72:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xff000000);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 80:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffff0000);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 88:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffff00);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 96:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 104:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xff000000);
+                    break;
+                }
+                case 112:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xffff0000);
+                    break;
+                }
+                case 120:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xffffff00);
+                    break;
+                }
+                case 128:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xffffffff);
+                    break;
+                }
+                default:break;
+            }
+
+            memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
+        }
+        else   //æ— æŽ©ç ?
+        {
+            oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
+            oxm->length = OFPXMT_OFB_IPV6_SZ;
+            memcpy((UINT1 *)(oxm->data), oxm_fields->ipv6_src, 16);
+        }
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX))
+        {
+            oxm->oxm_field_hm = (OFPXMT_OFB_IPV6_DST << 1) + 1 ;
+            oxm->length = OFPXMT_OFB_IPV6_SZ + OFPXMT_OFB_IPV6_SZ;
+            memcpy((UINT1 *)(oxm->data), oxm_fields->ipv6_dst, OFPXMT_OFB_IPV6_SZ);
+
+            switch(oxm_fields->ipv6_dst_prefix)
+            {
+                case 8:
+                {
+                    netmaskv6[0] = htonl(0xff000000);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 16:
+                {
+                    netmaskv6[0] = htonl(0xffff0000);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 24:
+                {
+                    netmaskv6[0] = htonl(0xffffff00);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 32:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = 0x0;
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 40:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xff000000);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 48:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffff0000);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 56:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffff00);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 64:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = 0x0;
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 72:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xff000000);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 80:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffff0000);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 88:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffff00);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 96:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = 0x0;
+                    break;
+                }
+                case 104:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xff000000);
+                    break;
+                }
+                case 112:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xffff0000);
+                    break;
+                }
+                case 120:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xffffff00);
+                    break;
+                }
+                case 128:
+                {
+                    netmaskv6[0] = htonl(0xffffffff);
+                    netmaskv6[1] = htonl(0xffffffff);
+                    netmaskv6[2] = htonl(0xffffffff);
+                    netmaskv6[3] = htonl(0xffffffff);
+                    break;
+                }
+            }
+            memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
+        }
+        else  //ÎÞÑÚÂë
+        {
+            oxm->oxm_field_hm = OFPXMT_OFB_IPV6_DST << 1;
+            oxm->length = OFPXMT_OFB_IPV6_SZ;
+            memcpy((UINT1 *)(oxm->data), oxm_fields->ipv6_dst, 16);
+        }
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_FLABEL))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV6_TYPE))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV6_CODE))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_ND_TARGET))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_ND_SLL))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_ND_TLL))
+//    {
+//    }
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_MPLS_LABEL))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_MPLS_LABEL << 1;
+        oxm->length = 4;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->mpls_label);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_MPLS_TC))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFP_MPLS_BOS))
+//    {
+//    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_PBB_ISID))
+//    {
+//    }
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TUNNEL_ID))
+    {
+        oa_set->type = htons(OFPAT13_SET_FIELD);
+        oxm = (struct ofp_oxm_header *)oa_set->field;
+
+        oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
+        oxm->oxm_field_hm = OFPXMT_OFB_TUNNEL_ID << 1;
+        oxm->length = 4;
+        *(UINT4 *)(oxm->data) = htonl(oxm_fields->tunnel_id);
+
+        oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
+        set_field_len += oxm_field_sz;
+        oa_set->len = htons(oxm_field_sz);
+        oa_set = (struct ofp_action_set_field *)(buf + set_field_len);
+    }
+//    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_EXTHDR))
+//    {
+//    }
+
+    return set_field_len;
+}
+
 
 UINT2 of13_add_match(struct ofpx_match *match, gn_match_t *gn_match)
 {
@@ -1608,16 +2523,10 @@ UINT2 of13_add_action(UINT1 *buf, gn_action_t *action)
             {
 //                printf("action set\n");
                 gn_action_set_field_t *p_action_set_field = (gn_action_set_field_t *)p_action;
-                UINT2 oxm_len = 0;
-                struct ofp_action_set_field *oa_set = (struct ofp_action_set_field *)act;
-                oa_set->type = htons(OFPAT13_SET_FIELD);
+                UINT2 set_field_len = of13_add_set_field(act, &(p_action_set_field->oxm_fields));
 
-//                oxm_len = ALIGN_8(of13_add_oxm_field(oa_set->field, &(p_action_set_field->oxm_fields)));
-                oxm_len = of13_add_oxm_field(oa_set->field, &(p_action_set_field->oxm_fields));
-                oa_set->len = htons(ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + oxm_len));
-
-                act = act + ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + oxm_len);
-                action_len = action_len + ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + oxm_len);
+                act += set_field_len;
+                action_len += set_field_len;
                 break;
             }
             case OFPAT13_PUSH_PBB:
@@ -1793,9 +2702,12 @@ static INT4 of13_msg_group_mod(gn_switch_t *sw, UINT1 *groupmod_req)
         ofp13_bucket->watch_group = htonl(p_bucket->watch_group);
         action_len = of13_add_action((UINT1 *)ofp13_bucket->actions, p_bucket->actions);
         ofp13_bucket->len = htons(sizeof(struct ofp_bucket) + action_len);
-        bucket_len += action_len;
+        bucket_len = bucket_len + sizeof(struct ofp_bucket) + action_len;
+        p_bucket = p_bucket->next;
     }
 
+    total_len += bucket_len;
+    ofp13_group->header.length = htons(total_len);
     return send_of_msg(sw, total_len);
 }
 
@@ -1875,7 +2787,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
     gn_port_t new_sw_ports;
     struct ofp_multipart_reply *ofp_mr = (struct ofp_multipart_reply *)of_msg;
-    UINT2 body_len = ntohs(ofp_mr->header.length) - sizeof(*ofp_mr);
+    UINT2 body_len = ntohs(ofp_mr->header.length) - sizeof(struct ofp_multipart_reply);
     int loops;
 
     if (ntohs(ofp_mr->header.length) < sizeof(*ofp_mr))
@@ -1896,11 +2808,11 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
             loops = MAX_PORTS;
             UINT4 n_ports = 0;
 
-            while (body_len && (--loops > 0))     //Ã¿Ò»ï¿½ï¿½ï¿½Ë¿ï¿½Ñ­ï¿½ï¿½Ò»ï¿½ï¿½
+            while (body_len && (--loops > 0))     //Ã¿Ò»¸ö¶Ë¿ÚÑ­»·Ò»´Î
             {
                 memset(&new_sw_ports, 0x0, sizeof(new_sw_ports));
 
-                //Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1000Mbps
+                //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
                 (sw->msg_driver.convertter->port_convertter)((UINT1 *)port, &new_sw_ports);
                 new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
 
@@ -1917,7 +2829,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
                 n_ports++;
             }
 
-            sw->n_ports = n_ports;  //loï¿½ï¿½ï¿½ï¿½
+            sw->n_ports = n_ports;  //lo³ýÍâ
             break;
         }
 
@@ -1947,7 +2859,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
 
         case OFPMP_FLOW:
         {
-            of13_proc_flow_stats(sw, ofp_mr->body, body_len/sizeof(struct ofp13_flow_stats));
+            of13_proc_flow_stats(sw, ofp_mr->body, body_len);
             break;
         }
 

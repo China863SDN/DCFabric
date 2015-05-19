@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : tenant-mgr.h           *
@@ -31,38 +50,38 @@
 #pragma pack(1)
 typedef struct tenant
 {
-    UINT4 tenant_id;                    //×â»§ID
-    UINT4 member_cnt;                   //¸Ã×â»§ÏÂµ±Ç°³ÉÔ±×ÜÊı
-    char tenant_name[TENANT_NAME_LEN];  //×â»§Ãû³Æ
-    UINT1 **member_mac;                 //×â»§³ÉÔ±MACĞÅÏ¢
-    UINT1 status;                       //×â»§×´Ì¬£º0£¬Õı³££»  £¨Ô¤Áô£©
+    UINT4 tenant_id;                    //ç§Ÿæˆ·ID
+    UINT4 member_cnt;                   //è¯¥ç§Ÿæˆ·ä¸‹å½“å‰æˆå‘˜æ€»æ•°
+    char tenant_name[TENANT_NAME_LEN];  //ç§Ÿæˆ·åç§°
+    UINT1 **member_mac;                 //ç§Ÿæˆ·æˆå‘˜MACä¿¡æ¯
+    UINT1 status;                       //ç§Ÿæˆ·çŠ¶æ€ï¼š0ï¼Œæ­£å¸¸ï¼›  ï¼ˆé¢„ç•™ï¼‰
 }tenant_t;
 
 typedef struct tenant_member
 {
-    struct tenant_member *pre;   //ÏÂÒ»¸ö×â»§³ÉÔ±
-    struct tenant_member *next;  //ÏÂÒ»¸ö×â»§³ÉÔ±
-    UINT1 mac[6];       //ÓÃ»§MACµØÖ·
-    UINT1 status;       //×â»§×´Ì¬£º0£¬Õı³££» £¨Ô¤Áô£©
-    UINT4 tenant_id;    //ËùÔÚ×â»§µÄ×â»§ID
+    struct tenant_member *pre;   //ä¸‹ä¸€ä¸ªç§Ÿæˆ·æˆå‘˜
+    struct tenant_member *next;  //ä¸‹ä¸€ä¸ªç§Ÿæˆ·æˆå‘˜
+    UINT1 mac[6];       //ç”¨æˆ·MACåœ°å€
+    UINT1 status;       //ç§Ÿæˆ·çŠ¶æ€ï¼š0ï¼Œæ­£å¸¸ï¼› ï¼ˆé¢„ç•™ï¼‰
+    UINT4 tenant_id;    //æ‰€åœ¨ç§Ÿæˆ·çš„ç§Ÿæˆ·ID
 }tenant_member_t;
 
 typedef struct tenant_container
 {
-    tenant_t **tenants;                 //ËùÓĞ×â»§
-    pthread_mutex_t *tenant_mutex;      //×â»§Ëø
-    UINT4 max_tenants;          //ÔÊĞí×î´ó×â»§Êı
-    UINT4 max_memebers;         //Ã¿¸ö×â»§ÔÊĞí×î´ó³ÉÔ±Êı
-    UINT4 tenant_cnt;           //µ±Ç°×â»§×ÜÊı
+    tenant_t **tenants;                 //æ‰€æœ‰ç§Ÿæˆ·
+    pthread_mutex_t *tenant_mutex;      //ç§Ÿæˆ·é”
+    UINT4 max_tenants;          //å…è®¸æœ€å¤§ç§Ÿæˆ·æ•°
+    UINT4 max_memebers;         //æ¯ä¸ªç§Ÿæˆ·å…è®¸æœ€å¤§æˆå‘˜æ•°
+    UINT4 tenant_cnt;           //å½“å‰ç§Ÿæˆ·æ€»æ•°
 }tenant_container_t;
 
 typedef struct tenant_member_container
 {
-    tenant_member_t **member_table; //·ÖÅä´æ´¢¹şÏ£±íÄÚ´æµÄÊ×µØÖ·
-    void *table_mem_id;             //ÄÚ´æ³Ø±êÖ¾
-    pthread_mutex_t *member_mutex;  //³ÉÔ±Ëø
-    UINT4 member_cnt;               //µ±Ç°ËùÓĞ×â»§³ÉÔ±×ÜÊı
-    UINT4 table_size;               //Ö¸¶¨¹şÏ£±í´óĞ¡£¬³ÉÔ±×î´ó¸öÊı
+    tenant_member_t **member_table; //åˆ†é…å­˜å‚¨å“ˆå¸Œè¡¨å†…å­˜çš„é¦–åœ°å€
+    void *table_mem_id;             //å†…å­˜æ± æ ‡å¿—
+    pthread_mutex_t *member_mutex;  //æˆå‘˜é”
+    UINT4 member_cnt;               //å½“å‰æ‰€æœ‰ç§Ÿæˆ·æˆå‘˜æ€»æ•°
+    UINT4 table_size;               //æŒ‡å®šå“ˆå¸Œè¡¨å¤§å°ï¼Œæˆå‘˜æœ€å¤§ä¸ªæ•°
 }tenant_member_container_t;
 #pragma pack()
 

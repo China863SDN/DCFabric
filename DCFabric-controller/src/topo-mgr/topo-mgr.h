@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : topo-mgr.h           *
@@ -16,18 +35,18 @@
 
 #define NO_PATH -1
 
-//ÁÚ½Ó¾ØÕó±íÊ¾µÄÍ¼
+//é‚»æ¥çŸ©é˜µè¡¨ç¤ºçš„å›¾
 typedef struct adac_matrix
 {
-    UINT1 *V;              //¶¥µã´æ´¢¿Õ¼ä
-    UINT4 **src_port;      //ÄÄ¸ö¶Ë¿ÚÓëÏÂÒ»¸ö½ÚµãÏàÁ¬
-    UINT4 **A;             //ÁÚ½Ó¾ØÕó
+    UINT1 *V;              //é¡¶ç‚¹å­˜å‚¨ç©ºé—´
+    UINT4 **src_port;      //å“ªä¸ªç«¯å£ä¸ä¸‹ä¸€ä¸ªèŠ‚ç‚¹ç›¸è¿
+    UINT4 **A;             //é‚»æ¥çŸ©é˜µ
     gn_switch_t ***sw;
 }adac_matrix_t;
 
 extern adac_matrix_t g_adac_matrix;
-extern UINT4 **g_short_path;     //vµ½¸÷¶¥µãµÄ×î¶ÌÂ·¾¶ÏòÁ¿
-extern UINT4 **g_short_weight;   //vµ½¸÷¶¥µã×î¶ÌÂ·¾¶³¤¶ÈÏòÁ¿
+extern UINT4 **g_short_path;     //våˆ°å„é¡¶ç‚¹çš„æœ€çŸ­è·¯å¾„å‘é‡
+extern UINT4 **g_short_weight;   //våˆ°å„é¡¶ç‚¹æœ€çŸ­è·¯å¾„é•¿åº¦å‘é‡
 
 INT4 lldp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info);
 INT4 init_topo_mgr();

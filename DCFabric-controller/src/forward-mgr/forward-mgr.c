@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : forward-mgr.c           *
@@ -32,7 +51,7 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
 		fabric_arp_handle(sw, packet_in_info);
 		return GN_OK;
     }
-    //��¼ԴMAC��MAC�˿ڱ���
+    //记录源MAC到MAC端口表中
     mac_user_t *p_user_src = search_mac_user(arp->eth_head.src);
     if (NULL == p_user_src)
     {
@@ -40,7 +59,7 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
     }
     else if(p_user_src->ipv4 != host_ip)
     {
-        if(p_user_src->port != packet_in_info->inport)  //�����ں�֮ǰ��¼����ڲ�һ��˵���籩�ˣ�����ת��
+        if(p_user_src->port != packet_in_info->inport)  //如果入口和之前记录的入口不一样，说明风暴了，不再转发
         {
             return GN_ERR;
         }
@@ -55,7 +74,7 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
             return GN_ERR;
         }
 
-        if (search_l3_subnet(arp->targetip))                      //���������ص�MAC
+        if (search_l3_subnet(arp->targetip))                      //请求的是网关的MAC
         {
             packout_req_info_t packout_req_info;
             arp_t new_arp_pkt;
@@ -90,7 +109,7 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
     }
     else if(arp->opcode == htons(2))    //arp reply
     {
-        if(0 == memcmp(arp->eth_head.dest, g_controller_mac, 6))   //����ǶԿ�������ط�����arp����Ļ�Ӧ
+        if(0 == memcmp(arp->eth_head.dest, g_controller_mac, 6))   //如果是对控制器网关发出的arp请求的回应
         {
             l3_proc(sw, packet_in_info, 0);
             return GN_OK;
@@ -130,9 +149,9 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
         p_user_src->ipv4 = host_ip;
     }
 
-    if(0 == memcmp(p_ip->eth_head.dest, g_controller_mac, 6))   //���Ŀ��MACΪ��������ص�MAC, ��Ϊ�����ת��
+    if(0 == memcmp(p_ip->eth_head.dest, g_controller_mac, 6))   //如果目的MAC为控制器网关的MAC, 则为跨网段转发
     {
-        UINT4 gw_ip = find_gateway_ip(p_ip->dest);                 //����Ŀ��ip��Ӧ�����
+        UINT4 gw_ip = find_gateway_ip(p_ip->dest);                 //查找目的ip对应的网关
         if(0 == gw_ip)
         {
             return GN_ERR;

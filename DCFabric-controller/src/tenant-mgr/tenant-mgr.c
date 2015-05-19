@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : tenant-mgr.c           *
@@ -39,7 +58,7 @@ static tenant_member_container_t g_tenant_member_container;
 //}
 
 /************************************************************************
- *   ÄÚ²¿Ä£¿é¼ä½Ó¿Ú£¬Ò²¿ÉÒÔ×÷ÎªRest½Ó¿ÚÌá¹©
+ *   å†…éƒ¨æ¨¡å—é—´æ¥å£ï¼Œä¹Ÿå¯ä»¥ä½œä¸ºRestæ¥å£æä¾›
  ************************************************************************/
 static tenant_member_t* search_tenant_member(UINT1 *mac)
 {
@@ -94,11 +113,11 @@ void tenant_send_flow_mod_l2(gn_switch_t* sw, UINT1* eth_src, UINT1* eth_dst, UI
     memcpy(tenant_flow.match.oxm_fields.eth_dst, eth_dst, 0);
     tenant_flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
 
-    //×â»§¸ôÀëÁ÷±í³¬Ê±Ê±¼ä
+    //ç§Ÿæˆ·éš”ç¦»æµè¡¨è¶…æ—¶æ—¶é—´
     tenant_flow.idle_timeout = TENANT_TIMEOUT;
     tenant_flow.hard_timeout = TENANT_TIMEOUT;
 
-    //×â»§¸ôÀëÓÅÏÈ¼¶
+    //ç§Ÿæˆ·éš”ç¦»ä¼˜å…ˆçº§
     tenant_flow.priority = FLOW_TENANT_PRIORITY;
 
     enable_flow_entry(sw, &tenant_flow);
@@ -116,11 +135,11 @@ void tenant_send_flow_mod_l3(gn_switch_t* sw, UINT4 ipv4_src, UINT4 ipv4_dst, UI
     tenant_flow.match.oxm_fields.ipv4_dst = ipv4_dst;
     tenant_flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
 
-    //×â»§¸ôÀëÁ÷±í³¬Ê±Ê±¼ä
+    //ç§Ÿæˆ·éš”ç¦»æµè¡¨è¶…æ—¶æ—¶é—´
     tenant_flow.idle_timeout = TENANT_TIMEOUT;
     tenant_flow.hard_timeout = TENANT_TIMEOUT;
 
-    //×â»§¸ôÀëÓÅÏÈ¼¶
+    //ç§Ÿæˆ·éš”ç¦»ä¼˜å…ˆçº§
     tenant_flow.priority = FLOW_TENANT_PRIORITY;
 
     enable_flow_entry(sw, &tenant_flow);
@@ -134,23 +153,23 @@ static void tenant_delete_flow_mod(UINT1* member_mac)
 
     memset(&tenant_flow, 0, sizeof(gn_flow_t));
 
-    //×â»§¸ôÀëÁ÷±í³¬Ê±Ê±¼ä
+    //ç§Ÿæˆ·éš”ç¦»æµè¡¨è¶…æ—¶æ—¶é—´
     tenant_flow.idle_timeout = TENANT_TIMEOUT;
     tenant_flow.hard_timeout = TENANT_TIMEOUT;
 
-    //×â»§¸ôÀëÓÅÏÈ¼¶
+    //ç§Ÿæˆ·éš”ç¦»ä¼˜å…ˆçº§
     tenant_flow.priority = FLOW_TENANT_PRIORITY;
 
     for(;idx < g_server.max_switch; idx++)
     {
         if(g_server.switches[idx].state)
         {
-            //ÕıÏò
+            //æ­£å‘
             memcpy(tenant_flow.match.oxm_fields.eth_src, member_mac, 6);
             tenant_flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
             enable_flow_entry(&(g_server.switches[idx]), &tenant_flow);
 
-            //·´Ïò
+            //åå‘
             tenant_flow.match.oxm_fields.mask = 0;
             memcpy(tenant_flow.match.oxm_fields.eth_dst, member_mac, 6);
             tenant_flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
@@ -160,7 +179,7 @@ static void tenant_delete_flow_mod(UINT1* member_mac)
 }
 
 /************************************************************************
- *   Rest ½Ó¿Ú
+ *   Rest æ¥å£
  ************************************************************************/
 //tenant management
 INT4 create_tenant(const char* tenant_name)
@@ -435,19 +454,19 @@ INT4 delete_tenant_member(UINT1* mac)
 
 
 /************************************************************************
- *   ·şÎñÆôÍ£½Ó¿Ú
+ *   æœåŠ¡å¯åœæ¥å£
  ************************************************************************/
 
 INT4 init_tenant_mgr()
 {
-    //³õÊ¼»¯tenant_container
+    //åˆå§‹åŒ–tenant_container
     g_tenant_container.max_tenants = TENANT_MAX;
     g_tenant_container.max_memebers = TENANT_MAX_MEMBER;
     g_tenant_container.tenant_cnt = 0;
     g_tenant_container.tenant_mutex = 0;
     g_tenant_container.tenants = (tenant_t **)gn_malloc(sizeof(tenant_member_t **) * TENANT_MAX);
 
-    //³õÊ¼»¯tenant_member_container
+    //åˆå§‹åŒ–tenant_member_container
     g_tenant_member_container.table_size = TENANT_MAX * TENANT_MAX_MEMBER;
     g_tenant_member_container.member_cnt = 0;
     g_tenant_member_container.member_mutex = 0;

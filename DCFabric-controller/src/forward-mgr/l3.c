@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : l3.c           *
@@ -22,8 +41,8 @@ const UINT1 brodcast_mac[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 const UINT1 zero_mac[] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
 subnet_t g_subnet_info[MAX_L3_SUBNET];
 
-static UINT2 g_l3_flow_entry_idle_time = 0;         //ÍøÂç×Ö½ÚÐò
-static UINT2 g_l3_flow_entry_hard_time = 0;         //ÍøÂç×Ö½ÚÐò
+static UINT2 g_l3_flow_entry_idle_time = 0;         //ç½‘ç»œå­—èŠ‚åº
+static UINT2 g_l3_flow_entry_hard_time = 0;         //ç½‘ç»œå­—èŠ‚åº
 
 typedef struct l3_send_buf
 {
@@ -41,7 +60,7 @@ static l3_send_buf_t *g_l3_first_packets = NULL;
 static pthread_t g_timeout_thread_id;
 static pthread_mutex_t g_timeout_thread_mutex = PTHREAD_MUTEX_INITIALIZER;
 
-//ÐÂ¼ÍÂ¼·Åµ½×îºóÃæ
+//æ–°çºªå½•æ”¾åˆ°æœ€åŽé¢
 static inline void queue_in_packet(l3_send_buf_t *new_packet)
 {
     l3_send_buf_t *tmp = NULL;
@@ -66,7 +85,7 @@ static inline void queue_in_packet(l3_send_buf_t *new_packet)
     pthread_mutex_unlock(&g_timeout_thread_mutex);
 }
 
-//Ã¿´ÎÈ¡×îÇ°ÃæÒ»Ìõ¼ÇÂ¼
+//æ¯æ¬¡å–æœ€å‰é¢ä¸€æ¡è®°å½•
 static l3_send_buf_t * queue_out_packet(UINT4 dst_ip)
 {
     l3_send_buf_t *p_buf = g_l3_first_packets;
@@ -101,7 +120,7 @@ static l3_send_buf_t * queue_out_packet(UINT4 dst_ip)
     return NULL;
 }
 
-//Ã¿2sÇå¿ÕÒ»´Î
+//æ¯2sæ¸…ç©ºä¸€æ¬¡
 void *timeout_packets()
 {
     l3_send_buf_t *p_buf = NULL;
@@ -341,13 +360,13 @@ static INT4 l3_install_flow_local(gn_switch_t *sw, UINT4 gw_ip, UINT4 inport, et
         ret = sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
     }
 
-    //arp²éÕÒÄ¿µÄIP
+    //arpæŸ¥æ‰¾ç›®çš„IP
     if(gw_ip)
     {
         UINT4 port_idx = 0;
         for(port_idx = 0; port_idx < sw->n_ports; port_idx++)
         {
-           if(!(sw->neighbor[port_idx]))            //´Ó·ÇSW»¥Áª¶Ë¿ÚÑ°ÕÒ
+           if(!(sw->neighbor[port_idx]))            //ä»ŽéžSWäº’è”ç«¯å£å¯»æ‰¾
            {
                arp_request(sw, ntohl(gw_ip), dst_ip, sw->ports[port_idx].port_no);
            }
@@ -431,14 +450,14 @@ static INT4 l3_install_flow(gn_switch_t *sw, UINT4 gw_ip, UINT4 inport, ether_t 
         ret = sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
     }
 
-    //arp²éÕÒÄ¿µÄIP
+    //arpæŸ¥æ‰¾ç›®çš„IP
     if(gw_ip)
     {
         UINT4 port_idx = 0;
 
         for(port_idx = 0; port_idx < sw->n_ports; port_idx++)
         {
-           if(!(sw->neighbor[port_idx]))            //´Ó·ÇSW»¥Áª¶Ë¿ÚÑ°ÕÒ
+           if(!(sw->neighbor[port_idx]))            //ä»ŽéžSWäº’è”ç«¯å£å¯»æ‰¾
            {
                arp_request(sw, ntohl(gw_ip), dst_ip, sw->ports[port_idx].port_no);
            }
@@ -482,14 +501,14 @@ void l3_flowmod_chain(UINT4 gw_ip, UINT8 src_topo_id, UINT8 dst_topo_id, UINT4 i
             goto END;
         }
 
-        //µ±Ç°½»»»»ú
+        //å½“å‰äº¤æ¢æœº
         sw_pre = g_adac_matrix.sw[src_topo_id][id_tmp];
         if((NULL == sw_pre) || (0 == sw_pre->state))
         {
             goto END;
         }
 
-        //µ±Ç°½»»»»ú³ö¿Ú
+        //å½“å‰äº¤æ¢æœºå‡ºå£
         port_pre = g_adac_matrix.src_port[src_topo_id][id_tmp];
 
 //        //show source switch info
@@ -497,7 +516,7 @@ void l3_flowmod_chain(UINT4 gw_ip, UINT8 src_topo_id, UINT8 dst_topo_id, UINT4 i
 //        printf("Flow mod to sw[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x]\n", dpid[0], dpid[1],
 //                dpid[2] , dpid[3], dpid[4], dpid[5], dpid[6], dpid[7]);
 
-        //¸øÏàÁÚ½»»»»úÏÂ·¢Á÷±í
+        //ç»™ç›¸é‚»äº¤æ¢æœºä¸‹å‘æµè¡¨
         l3_install_flow(sw_pre, gw_ip, port_pre, ether);
 
     }while (dst_topo_id != g_short_path[src_topo_id][dst_topo_id]);
@@ -530,7 +549,7 @@ void l3_proc(gn_switch_t *sw, packet_in_info_t *packet_in_info, UINT4 gw_ip)
     {
         arp_t *arp = (arp_t *)packet_in_info->data;
 
-        //·¢ËÍ»º´æµÄÊ×°ü²¢¼ì²é×â»§
+        //å‘é€ç¼“å­˜çš„é¦–åŒ…å¹¶æ£€æŸ¥ç§Ÿæˆ·
         l3_forward_first_packet(sw, arp->sendip, arp->sendmac, packet_in_info->inport);
     }
 
@@ -560,7 +579,7 @@ UINT4 find_gateway_ip(UINT4 ip)
 
     for(i = 0; i < MAX_L3_SUBNET; i++)
     {
-        //ÅÐ¶ÏÄ¿µÄipÊôÓÚÄÄ¸öÍø¶Î,ÓÃÄÄ¸öÍø¹ØÈ¥ÇëÇóÄ¿µÄipµÄÍø¹ØµÄMAC
+        //åˆ¤æ–­ç›®çš„ipå±žäºŽå“ªä¸ªç½‘æ®µ,ç”¨å“ªä¸ªç½‘å…³åŽ»è¯·æ±‚ç›®çš„ipçš„ç½‘å…³çš„MAC
         if((ip_h >= ntohl(g_subnet_info[i].gw_minip)) && (ip_h <= ntohl(g_subnet_info[i].gw_maxip)))
         {
             gw_ip = g_subnet_info[i].gw_ip;
@@ -652,7 +671,7 @@ INT4 init_l3()
 
     for(i = 0; i < MAX_L3_SUBNET; i++)
     {
-        g_subnet_info[i].is_using = FALSE; //Î´Ê¹ÓÃ
+        g_subnet_info[i].is_using = FALSE; //æœªä½¿ç”¨
     }
 
     if(pthread_create(&g_timeout_thread_id, NULL, timeout_packets, NULL) != 0)

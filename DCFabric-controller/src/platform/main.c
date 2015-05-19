@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : main.c           *
@@ -148,7 +167,7 @@ void gnflush_fini()
 }
 app_fini(gnflush_fini);
 
-//ï¿½ï¿½ï¿½ï¿½__start_appinit_secï¿½ï¿½__stop_appinit_secÖ®ï¿½ï¿½ï¿½ï¿½ÚµÄºï¿½ï¿½ï¿½Ö¸ï¿½ï¿½app_init(x)
+//µ÷ÓÃ__start_appinit_secºÍ__stop_appinit_secÖ®¼ä½ÚÄÚµÄº¯ÊýÖ¸Õëapp_init(x)
 static void mod_initcalls()
 {
     initcall_t *p_init;
@@ -161,7 +180,7 @@ static void mod_initcalls()
     } while (p_init < &__stop_appinit_sec);
 }
 
-//ï¿½ï¿½ï¿½ï¿½__start_appfini_secï¿½ï¿½__stop_appfini_secÖ®ï¿½ï¿½ï¿½ï¿½ÚµÄºï¿½ï¿½ï¿½Ö¸ï¿½ï¿½app_fini(x)
+//µ÷ÓÃ__start_appfini_secºÍ__stop_appfini_secÖ®¼ä½ÚÄÚµÄº¯ÊýÖ¸Õëapp_fini(x)
 static void mod_finicalls()
 {
     initcall_t *p_fini;
@@ -184,12 +203,20 @@ INT4 module_init()
         LOG_PROC("ERROR", "Init system time failed");
         return GN_ERR;
     }
+    else
+    {
+        LOG_PROC("INFO", "Init system time finished");
+    }
 
     ret = init_forward_mgr();
     if(GN_OK != ret)
     {
         LOG_PROC("ERROR", "Init forward manager failed");
         return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init forward manager finished");
     }
 
     ret = init_meter_mgr();
@@ -198,12 +225,20 @@ INT4 module_init()
         LOG_PROC("ERROR", "Init meter manager failed");
         return GN_ERR;
     }
+    else
+    {
+        LOG_PROC("INFO", "Init meter manager finished");
+    }
 
     ret = init_group_mgr();
     if(GN_OK != ret)
     {
         LOG_PROC("ERROR", "Init group manager failed");
         return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init group manager finished");
     }
 
     ret = init_tenant_mgr();
@@ -212,12 +247,20 @@ INT4 module_init()
         LOG_PROC("ERROR", "Init tenant manager failed");
         return GN_ERR;
     }
+    else
+    {
+        LOG_PROC("INFO", "Init tenant manager finished");
+    }
 
     ret = init_cluster_mgr();
     if(GN_OK != ret)
     {
         LOG_PROC("ERROR", "Init cluster manager failed");
         return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init cluster manager finished");
     }
 
     ret = init_flow_mgr();
@@ -226,12 +269,20 @@ INT4 module_init()
         LOG_PROC("ERROR", "Init flow manager failed");
         return GN_ERR;
     }
+    else
+    {
+        LOG_PROC("INFO", "Init flow manager finished");
+    }
 
     ret = init_ovsdb();
     if(GN_OK != ret)
     {
         LOG_PROC("ERROR", "Init ovsdb manager failed");
         return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init ovsdb manager finished");
     }
 
     ret = init_conn_svr();
@@ -240,6 +291,11 @@ INT4 module_init()
         LOG_PROC("ERROR", "Init controller service failed");
         return GN_ERR;
     }
+    else
+    {
+        LOG_PROC("INFO", "Init controller service finished");
+    }
+
 
     if(GN_OK != init_mac_user())
     {
@@ -253,12 +309,20 @@ INT4 module_init()
         LOG_PROC("ERROR", "Init network topology failed");
         return GN_ERR;
     }
+    else
+    {
+        LOG_PROC("INFO", "Init network topology finished");
+    }
 
     ret = init_restful_svr();
     if(GN_OK != ret)
     {
         LOG_PROC("ERROR", "Init restful service failed");
         return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init restful service finished");
     }
 
 //    ret = init_stats_mgr();
@@ -268,7 +332,7 @@ INT4 module_init()
 //        return GN_ERR;
 //    }
 
-    //ï¿½ï¿½ï¿½ï¿½module_init
+    //µ÷ÓÃmodule_init
     mod_initcalls();
 
     return GN_OK;
@@ -278,8 +342,31 @@ void module_fini()
 {
     fini_conn_svr();
 
-    //ï¿½ï¿½ï¿½ï¿½module_fini
+    //µ÷ÓÃmodule_fini
     mod_finicalls();
+}
+
+void sigint_handler(int arg)
+{
+    g_server.state = FALSE;
+}
+
+void wait_exit()
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = sigint_handler;
+    sigfillset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+
+    while(1)
+    {
+        if(g_server.state == FALSE)
+        {
+            break;
+        }
+        sleep(1000);
+    }
 }
 
 int main(int argc, char **argv)
@@ -316,6 +403,7 @@ int main(int argc, char **argv)
         goto EXIT;
     }
 
+    wait_exit();
 EXIT:
     module_fini();
     return ret;

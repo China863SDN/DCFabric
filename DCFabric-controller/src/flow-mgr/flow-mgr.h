@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : flow-mgr.h           *
@@ -17,37 +36,37 @@ extern void *g_gnflow_mempool_id;
 extern void *g_gninstruction_mempool_id;
 extern void *g_gnaction_mempool_id;
 
-//¸ù¾İuuid²éÕÒÁ÷±í
+//æ ¹æ®uuidæŸ¥æ‰¾æµè¡¨
 gn_flow_t * find_flow_entry_by_id(gn_switch_t *sw, gn_flow_t *flow);
 
-//¸ù¾İÁ÷±íĞÅÏ¢²éÕÒÁ÷±í
+//æ ¹æ®æµè¡¨ä¿¡æ¯æŸ¥æ‰¾æµè¡¨
 gn_flow_t * find_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
-//ĞÂÔöÏÂ·¢Ò»ÌõÁ÷±í
+//æ–°å¢ä¸‹å‘ä¸€æ¡æµè¡¨
 INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
-//ĞŞ¸ÄÒ»ÌõÁ÷±í
+//ä¿®æ”¹ä¸€æ¡æµè¡¨
 INT4 modify_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
-//Ê¹Á÷±íÉúĞ§(ÏÂ·¢µ½½»»»»ú)
+//ä½¿æµè¡¨ç”Ÿæ•ˆ(ä¸‹å‘åˆ°äº¤æ¢æœº)
 INT4 enable_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
-//ÊÇÁ÷±íÊ§Ğ§(´Ó½»»»»úÉÏÉ¾³ı,¿ØÖÆÆ÷ÉÏ±£Áô)
+//æ˜¯æµè¡¨å¤±æ•ˆ(ä»äº¤æ¢æœºä¸Šåˆ é™¤,æ§åˆ¶å™¨ä¸Šä¿ç•™)
 INT4 disable_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
-//É¾³ıÒ»ÌõÁ÷±í(´Ó½»»»»úºÍ¿ØÖÆÆ÷ÉÏÉ¾³ı)
+//åˆ é™¤ä¸€æ¡æµè¡¨(ä»äº¤æ¢æœºå’Œæ§åˆ¶å™¨ä¸Šåˆ é™¤)
 INT4 delete_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
-//Çå¿ÕËùÓĞÁ÷±í(´Ó½»»»»úºÍ¿ØÖÆÆ÷ÉÏÉ¾³ıËùÓĞÁ÷±í)
+//æ¸…ç©ºæ‰€æœ‰æµè¡¨(ä»äº¤æ¢æœºå’Œæ§åˆ¶å™¨ä¸Šåˆ é™¤æ‰€æœ‰æµè¡¨)
 INT4 clear_flow_entries(gn_switch_t *sw);
 
-//ÏÂ·¢table_missÁ÷±í
+//ä¸‹å‘table_missæµè¡¨
 INT4 flow_mod_table_miss(gn_switch_t *sw);
 
-//Á÷±í³¬Ê±
+//æµè¡¨è¶…æ—¶
 INT4 flow_entry_timeout(gn_switch_t *sw, gn_flow_t *flow);
 
-//ÊÍ·Åflow_entryÄÚ´æ¿Õ¼ä
+//é‡Šæ”¾flow_entryå†…å­˜ç©ºé—´
 void gn_flow_free(gn_flow_t *flow);
 
 INT4 init_flow_mgr();

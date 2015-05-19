@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : forward-mgr.h           *
@@ -19,13 +38,13 @@
 #pragma pack(1)
 typedef struct subnet
 {
-    BOOL is_using;       //ÊÇ·ñÒÑÕ¼ÓÃ
-    INT1 name[64];       //Íø¹ØÃû
-    INT1 netmask[16];    //×ÓÍøÑÚÂë
-    UINT4 gw_prefix;     //×ÓÍøÑÚÂë
-    UINT4 gw_ip;         //Íø¹Øip      ÍøÂç×Ö½ÚĞò
-    UINT4 gw_minip;      //×îĞ¡ip      ÍøÂç×Ö½ÚĞò
-    UINT4 gw_maxip;      //×î´óip      ÍøÂç×Ö½ÚĞò
+    BOOL is_using;       //æ˜¯å¦å·²å ç”¨
+    INT1 name[64];       //ç½‘å…³å
+    INT1 netmask[16];    //å­ç½‘æ©ç 
+    UINT4 gw_prefix;     //å­ç½‘æ©ç 
+    UINT4 gw_ip;         //ç½‘å…³ip      ç½‘ç»œå­—èŠ‚åº
+    UINT4 gw_minip;      //æœ€å°ip      ç½‘ç»œå­—èŠ‚åº
+    UINT4 gw_maxip;      //æœ€å¤§ip      ç½‘ç»œå­—èŠ‚åº
 }subnet_t;
 
 typedef struct forward_handler
@@ -38,10 +57,10 @@ typedef struct forward_handler
 #pragma pack()
 
 
-//¿¼ÂÇÌá¹©´¦Àíº¯Êı×¢²á£¬²»Í¬µÄ½»»»»úÊ¹ÓÃ²»Í¨µÄ´¦ÀíÂß¼­
+//è€ƒè™‘æä¾›å¤„ç†å‡½æ•°æ³¨å†Œï¼Œä¸åŒçš„äº¤æ¢æœºä½¿ç”¨ä¸é€šçš„å¤„ç†é€»è¾‘
 extern forward_handler_t g_default_forward_handler;
 
-//L3×ÓÍøĞÅÏ¢
+//L3å­ç½‘ä¿¡æ¯
 extern subnet_t g_subnet_info[];
 
 UINT4 find_gateway_ip(UINT4 ip);

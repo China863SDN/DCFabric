@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : stats-mgr.c           *
@@ -216,11 +235,60 @@ void of13_proc_port_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
 //    printf("\n\n\n");
 }
 
-void of13_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
+void of13_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 length)
 {
+//    struct ofp13_flow_stats *flow_stats = (struct ofp13_flow_stats*)stats;
+//    struct ofp13_flow_stats *p_stats = flow_stats;
+//
+//    UINT2 offset = 0;                       //记录所有flow_stats处理偏移
+//    UINT2 cur_offset = 0;                   //记录当前flow_stats处理偏移
+//    UINT2 stats_len = 0;
+//    gn_flow_t *p_flow = NULL;
+//    struct ofp_oxm_header *oxm = NULL;
+//    UINT2 oxm_tot_len = 0;
+//    UINT2 oxm_len = 4;
+//
+//    while(offset != length)
+//    {
+//        cur_offset = 0;
+//        stats_len = ntohs(p_stats->length);
+//
+//        p_flow = (gn_flow_t *)mem_get(g_gnflow_mempool_id);
+//        memset(p_flow, 0, sizeof(gn_flow_t));
+//        oxm_tot_len = ntohs(p_stats->match.length);
+//        oxm = (struct ofp_oxm_header *)(flow_stats->match.oxm_fields);
+//
+//        strncpy(p_flow->creater, "controller", strlen("controller") + 1);
+//        p_flow->priority = ntohs(p_stats->priority);
+//        p_flow->table_id = p_stats->table_id;
+//        p_flow->idle_timeout = ntohs(p_stats->idle_timeout);
+//        p_flow->hard_timeout = ntohs(p_stats->hard_timeout);
+//        p_flow->match.type = OFPMT_OXM;
+//
+//        while(ALIGN_8(oxm_len) < oxm_tot_len)
+//        {
+//            sw->msg_driver.convertter->oxm_convertter((UINT1 *)oxm, &(p_flow->match.oxm_fields));
+//            oxm += sizeof(struct ofp_oxm_header) + oxm->length;
+//            oxm_len += sizeof(struct ofp_oxm_header) + oxm->length;
+//        }
+//
+//        cur_offset += sizeof(struct ofp13_flow_stats);
+//        struct ofp_instruction *instructions = p_stats + ALIGN_8(sizeof(struct ofp13_flow_stats));
+//
+//
+//        p_flow = add_flow_entry(sw, &p_flow);
+//        if(p_flow)
+//        {
+//            update_flow_stats(&(p_flow->stats), gn_ntohll(p_stats->byte_count),
+//                    gn_ntohll(p_stats->packet_count), ntohl(p_stats->duration_sec));
+//        }
+//    }
+
+
     struct ofp13_flow_stats *flow_stats = (struct ofp13_flow_stats*)stats;
     gn_flow_t *p_flow = NULL;
     gn_flow_t gn_flow;
+//    UINT2 offset = 0;
     UINT2 oxm_tot_len = ntohs(flow_stats->match.length);
     UINT2 oxm_len = 4;
     struct ofp_oxm_header *oxm = (struct ofp_oxm_header *)(flow_stats->match.oxm_fields);

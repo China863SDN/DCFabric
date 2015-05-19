@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : flow-mgr.c           *
@@ -58,7 +77,8 @@ gn_flow_t * find_flow_entry_by_id(gn_switch_t *sw, gn_flow_t *flow)
 
     while(p_flow)
     {
-        if((p_flow->table_id == flow->table_id) && (0 == strcmp(p_flow->uuid, flow->uuid)))
+//        if((p_flow->table_id == flow->table_id) && (0 == strcmp(p_flow->uuid, flow->uuid)))
+    	if(0 == strcmp(p_flow->uuid, flow->uuid))
         {
             return p_flow;
         }
@@ -818,6 +838,7 @@ INT4 delete_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 INT4 clear_flow_entries(gn_switch_t *sw)
 {
     gn_flow_t flow;
+    gn_flow_t *p_flow_tmp, *p_flow = sw->flow_entries;
     gn_instruction_actions_t instruction;
     gn_action_output_t action;
 
@@ -828,6 +849,7 @@ INT4 clear_flow_entries(gn_switch_t *sw)
 
     //删除所有流表
     memset(&flow, 0, sizeof(gn_flow_t));
+    flow.table_id = OFPTT_ALL;
     flow.idle_timeout = 0;
     flow.hard_timeout = 0;
     flow.priority = 0;
@@ -855,6 +877,17 @@ INT4 clear_flow_entries(gn_switch_t *sw)
     action.max_len = 0xffff;
     instruction.actions = (gn_action_t *)&action;
     send_flow_mod(sw, &flow, OFPFC_ADD);
+
+    sw->flow_entries = NULL;
+    while(p_flow)
+    {
+        p_flow_tmp = p_flow->next;
+
+        //recycle the memory
+        gn_flow_free(p_flow);
+
+        p_flow = p_flow_tmp;
+    }
 
     return GN_OK;
 }

@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
  *                                                                             *
  *   File Name   : ovsdb.c           *
@@ -16,15 +35,15 @@ INT4 g_ovsdb_sockfd;
 fd_set g_ovsdb_recvmask;
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovsµÄopenflow°æ±¾
-UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstackÍøÂçÀàĞÍ gre/vxlan
+UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovsçš„openflowç‰ˆæœ¬
+UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstackç½‘ç»œç±»å‹ gre/vxlan
 
 UINT1 g_ovsdb_clients[OVSDB_MAX_CONNECTION] = { 0 };
-UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clientsµÄ±¸·İ  ÓÃÓÚÉ¾³ı¶Ë¿ÚÁ¬½ÓµÄ½»»»»ú
+UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clientsçš„å¤‡ä»½  ç”¨äºåˆ é™¤ç«¯å£è¿æ¥çš„äº¤æ¢æœº
 UINT4 g_ovsdb_clients_ip[OVSDB_MAX_CONNECTION] = { 0 };
 
 ovsdb_server_t g_ovsdb_nodes[OVSDB_MAX_CONNECTION];
-UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdb½Ó¿Ú£¬Ä¬ÈÏ¶Ë¿Ú6640
+UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdbæ¥å£ï¼Œé»˜è®¤ç«¯å£6640
 
 INT4 ovsdb_connect_quit()
 {
@@ -986,7 +1005,7 @@ BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
 {
     json_t *controller = NULL;
 
-    //ÒÑÓĞController
+    //å·²æœ‰Controller
     controller = json_find_first_label(result->child, "Controller");
     if (controller)
     {
@@ -1254,7 +1273,7 @@ void *ovsdb_recv_msg(void *para)
     struct timeval wait;
     wait.tv_sec = 5;
     wait.tv_usec = 0;
-    UINT4 clientip = 0;    //ÍøÂç×Ö½ÚĞò
+    UINT4 clientip = 0;    //ç½‘ç»œå­—èŠ‚åº
     UINT2 client_port = 0;
     INT1 *p_str = NULL;
     INT4 len = 0;
@@ -1284,8 +1303,8 @@ void *ovsdb_recv_msg(void *para)
             memset(&g_ovsdb_addr, 0, sizeof(struct sockaddr_in));
             socklen_t size = sizeof(struct sockaddr);
 
-            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //³¤Á¬½ÓÆäÊµÖ»acceptÒ»´Î
-            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //ÍøÂç×Ö½ÚĞò
+            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //é•¿è¿æ¥å…¶å®åªacceptä¸€æ¬¡
+            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //ç½‘ç»œå­—èŠ‚åº
             client_port = *(UINT2 *) &g_ovsdb_addr.sin_port;
 
             LOG_PROC("INFO", "New OVSDB connected[%s:%d]", inet_htoa(ntohl(clientip)),ntohs(client_port));
@@ -1329,7 +1348,7 @@ void *ovsdb_recv_msg(void *para)
             {
                 if (FD_ISSET(g_ovsdb_clients[index], &recvmask))
                 {
-                    //Ò»´ÎÊÕÈ¡BUFF_LEN¸ö×Ö½Ú´æµ½¶ÔÓ¦½»»»»úµÄ»º´æÖĞ
+                    //ä¸€æ¬¡æ”¶å–BUFF_LENä¸ªå­—èŠ‚å­˜åˆ°å¯¹åº”äº¤æ¢æœºçš„ç¼“å­˜ä¸­
                     do
                     {
                         recv_len += read(g_ovsdb_clients[index], ovsdb_buff + recv_len, OVSDB_BUFF_LEN - recv_len);
@@ -1417,19 +1436,20 @@ INT4 ovsdb_connect_init()
         close(tcp_serv_fd);
     }
 
+    LOG_PROC("INFO", "Create OVSDB server succeed, listening at [%d]", g_ovsdb_port);
     return tcp_serv_fd;
 }
 
 INT4 init_ovsdb()
 {
-    //³õÊ¼»¯Á¬½Ó¹¤×÷
+    //åˆå§‹åŒ–è¿æ¥å·¥ä½œ
     g_ovsdb_sockfd = ovsdb_connect_init();
     if (g_ovsdb_sockfd < 0)
     {
         return GN_ERR;
     }
 
-    //recvÏß³Ì
+    //recvçº¿ç¨‹
     if (pthread_create(&g_ovsdb_recv_tid, NULL, ovsdb_recv_msg, NULL))
     {
         ovsdb_connect_quit();

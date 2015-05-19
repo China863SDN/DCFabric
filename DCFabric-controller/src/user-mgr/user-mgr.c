@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
  *                                                                             *
  *   File Name   : user-mgr.c           *
@@ -31,21 +50,21 @@ INT1 init_mac_user()
     pthread_mutex_init(&g_macuser_table.macuser_mutex, NULL);
 
 
-    //·ÖÅäÈ«¾ÖÖ¸ÕëÄÚ´æ
+    //åˆ†é…å…¨å±€æŒ‡é’ˆå†…å­˜
     g_macuser_table.macuser_tb = (mac_user_t **)gn_malloc(g_macuser_table.macuser_hsize_tot * sizeof(mac_user_t *));
 
-    //·ÖÅäMACµØÖ·ÓÃ»§±íÄÚ´æ
+    //åˆ†é…MACåœ°å€ç”¨æˆ·è¡¨å†…å­˜
     g_macuser_table.macuser_memid = mem_create(sizeof(mac_user_t), g_macuser_table.macuser_hsize_tot);
     if (NULL == g_macuser_table.macuser_memid)
     {
         return GN_ERR;
     }
 
-    //´´½¨¶¨Ê±Æ÷
+    //åˆ›å»ºå®šæ—¶å™¨
     g_macuser_table.macuser_timer = timer_init(g_macuser_table.macuser_hsize_tot);
     g_macuser_table.macuser_cnt = 0;
 
-    //³õÊ¼»¯Ô¤Éè½»»»»ú
+    //åˆå§‹åŒ–é¢„è®¾äº¤æ¢æœº
     for(; idx < g_server.max_switch; idx++)
     {
         //init users list
@@ -56,7 +75,7 @@ INT1 init_mac_user()
     return GN_OK;
 }
 
-//²éÑ¯¸ÃIPÓÃ»§ÊÇ·ñ´æÔÚ£¬È«¾Ö±éÀú×îºÃ²»ÒªÊ¹ÓÃ
+//æŸ¥è¯¢è¯¥IPç”¨æˆ·æ˜¯å¦å­˜åœ¨ï¼Œå…¨å±€éå†æœ€å¥½ä¸è¦ä½¿ç”¨
 mac_user_t* search_ip_user(UINT4 ip)
 {
     UINT4 index = 0;
@@ -71,7 +90,7 @@ mac_user_t* search_ip_user(UINT4 ip)
     return NULL;
 }
 
-//²éÑ¯¸ÃMACÓÃ»§ÊÇ·ñ´æÔÚ
+//æŸ¥è¯¢è¯¥MACç”¨æˆ·æ˜¯å¦å­˜åœ¨
 mac_user_t *search_mac_user(UINT1 *mac)
 {
     mac_user_t *p_macuser = NULL;
@@ -242,7 +261,7 @@ void timeout_mac_user(void *para, void *tid)
     p_macuser = NULL;
 }
 
-static mac_user_t * add_mac_user(mac_user_t * macuser)    //½«¸ÃMACµØÖ·Ìí¼Óµ½±íÖĞ
+static mac_user_t * add_mac_user(mac_user_t * macuser)    //å°†è¯¥MACåœ°å€æ·»åŠ åˆ°è¡¨ä¸­
 {
     mac_user_t *p_macuser = NULL;
     UINT4 idx = 0;
@@ -266,7 +285,7 @@ static mac_user_t * add_mac_user(mac_user_t * macuser)    //½«¸ÃMACµØÖ·Ìí¼Óµ½±íÖ
             {
                 if (p_macuser->mac[2] == macuser->mac[2]
                         && p_macuser->mac[1] == macuser->mac[1]
-                        && p_macuser->mac[0] == macuser->mac[0])    //ÒÑ¾­ÓĞ´Ë¼ÇÂ¼
+                        && p_macuser->mac[0] == macuser->mac[0])    //å·²ç»æœ‰æ­¤è®°å½•
                 {
                     mem_free(g_macuser_table.macuser_memid, (void *)macuser);
                     macuser = p_macuser;
@@ -317,7 +336,7 @@ static mac_user_t * add_mac_user(mac_user_t * macuser)    //½«¸ÃMACµØÖ·Ìí¼Óµ½±íÖ
 }
 
 //
-mac_user_t *create_mac_user(gn_switch_t *sw, UINT1 *mac, UINT4 inport, UINT4 host_ip, UINT4 *host_ipv6)           //ĞÂ½¨¸ÃMACµØÖ·ÓÃ»§
+mac_user_t *create_mac_user(gn_switch_t *sw, UINT1 *mac, UINT4 inport, UINT4 host_ip, UINT4 *host_ipv6)           //æ–°å»ºè¯¥MACåœ°å€ç”¨æˆ·
 {
     mac_user_t *p_macuser = NULL;
     p_macuser = (mac_user_t *)mem_get(g_macuser_table.macuser_memid);

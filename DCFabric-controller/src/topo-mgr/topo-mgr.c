@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : topo-mgr.c           *
@@ -33,7 +52,7 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
     int neigh_port_seq = 0;   //neigh's port_no's Sequence
     int own_port_seq = 0;   //our port_no's Sequence
 
-    //ͨ���ھӵ�dpid�ҵ��ھ�
+    //通过邻居的dpid找到邻居
     neigh_sw = find_sw_by_dpid(neighbor_dpid);
     if(neigh_sw)
     {
@@ -55,7 +74,7 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
     }
 
 
-    //ͨ����port_no���ҵ��˿����
+    //通过交换机的port_no，找到端口序号
     for(own_port_seq=0; own_port_seq<src_sw->n_ports; own_port_seq++)
     {
         //if(sw->sw_ports[own_port_seq])
@@ -72,8 +91,8 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
         src_sw->neighbor[own_port_seq] = (neighbor_t *)malloc(sizeof(neighbor_t));
     }
 
-    src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  //�ö˿�������ӵ�sw
-    src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); //�ö˿����ĸ��˿�����
+    src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  //该端口序号连接的sw
+    src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); //该端口与哪个端口相连
 
     return 1;
 }
@@ -158,7 +177,7 @@ static void lldp_tx(gn_switch_t *sw, UINT4 port_no, UINT1 *src_addr)
     }
 }
 
-//��ʱ����lldp
+//定时发送lldp
 static void lldp_tx_timer(void *para, void *tid)
 {
     UINT4 num  = 0;
@@ -202,13 +221,13 @@ static void lldp_tx_timer(void *para, void *tid)
     return;
 }
 
-//Floyd�㷨
+//Floyd算法
 void path_calc(adac_matrix_t *G, UINT4 **path, UINT4 **D, UINT4 n)
 {
     UINT4 i,j,k;
     for(i=0;i<n;i++)
     {
-        //��ʼ��
+        //初始化
         for(j=0;j<n;j++)
         {
             if(G->A[i][j] < 65535)
@@ -225,22 +244,22 @@ void path_calc(adac_matrix_t *G, UINT4 **path, UINT4 **D, UINT4 n)
 
     for(k=0;k<n;k++)
     {
-        //����n����̽
+        //进行n次试探
         for(i=0;i<n;i++)
         {
             for(j=0;j<n;j++)
             {
                 if(D[i][j]>D[i][k]+D[k][j])
                 {
-                    D[i][j]=D[i][k]+D[k][j];    //ȡС��
-                    path[i][j]=path[i][k];      //��Vi�ĺ��
+                    D[i][j]=D[i][k]+D[k][j];    //取小者
+                    path[i][j]=path[i][k];      //改Vi的后继
                 }
             }
         }
     }
 }
 
-//��ʱ�������·��
+//定时计算最短路径
 static void spath_tx_timer(void *para, void *tid)
 {
     path_calc(&g_adac_matrix, g_short_path, g_short_weight, g_server.max_switch);
@@ -248,7 +267,6 @@ static void spath_tx_timer(void *para, void *tid)
 
 INT4 init_topo_mgr()
 {
-    //UINT1 i, j;
 	UINT4 i, j;
 
     g_adac_matrix.V = (UINT1 *)gn_malloc(g_server.max_switch * sizeof(UINT1));
@@ -287,11 +305,11 @@ INT4 init_topo_mgr()
         }
     }
 
-    //��ʱ��������
+    //定时发现拓扑
     g_lldp_timerid = timer_init(1);
     timer_creat(g_lldp_timerid, g_lldp_interval, NULL, &g_lldp_timer, lldp_tx_timer);
 
-    //��ʱ���·��ѡ·
+    //定时最短路径选路
     g_spath_timerid = timer_init(1);
     timer_creat(g_spath_timerid, g_lldp_interval, NULL, &g_spath_timer, spath_tx_timer);
 

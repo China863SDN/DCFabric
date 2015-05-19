@@ -1,3 +1,22 @@
+/*
+ * GNFlush SDN Controller GPL Source Code
+ * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ *
+ * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
 /******************************************************************************
 *                                                                             *
 *   File Name   : cluster-mgr.c           *
@@ -135,7 +154,7 @@ void zookeeper_error_msg(INT4 rc, const INT1* opr_name)
         LOG_PROC("ERROR", "%s failed, connection loss", opr_name);
         break;
     case ZNODEEXISTS:
-        LOG_PROC("ERROR", "%s failed, node already exist", opr_name);
+        LOG_PROC("WARNING", "%s failed, node already exist", opr_name);
         break;
     default:
         LOG_PROC("ERROR", "%s failed. ret_code: %d", opr_name, rc);
@@ -253,7 +272,8 @@ INT4 init_cluster_mgr()
     INT4 ret = 0;
     INT1 *conf_value = NULL;
 
-    conf_value = get_value(g_controller_configure, "[controller]", "zoo_server");
+    g_cluster_id = g_controller_ip;
+    conf_value = get_value(g_controller_configure, "[cluster_conf]", "zoo_server");
     NULL == conf_value ? strncpy(g_zookeeper_server, "0", 300 - 1) : strncpy(g_zookeeper_server, conf_value, 300 - 1);
 
     if (0 == strcmp("0", g_zookeeper_server))
@@ -263,13 +283,13 @@ INT4 init_cluster_mgr()
     }
 
     //zookeeper日志级别设置
-    zoo_set_debug_level(ZOO_LOG_LEVEL_INFO);
+    zoo_set_debug_level(ZOO_LOG_LEVEL_WARN);
 
     //初始化，连接zookeeper服务器
     g_zkhandler = zookeeper_init(g_zookeeper_server, wt_zookeeper_init, timeout, 0, 0, 0);
     if (g_zkhandler == NULL)
     {
-        LOG_PROC("ERROR", "Connecting to zookeeper servers failed");
+        LOG_PROC("ERROR", "Connecting to zookeeper servers [%s] failed", g_zookeeper_server);
         return GN_ERR;
     }
 
