@@ -24,6 +24,7 @@
 *   Create Date : 2015-2-12           *
 *   Version     : 1.0           *
 *   Function    : .           *
+*   Modify      : 2015-5-19 by bnc
 *                                                                             *
 ******************************************************************************/
 
@@ -34,6 +35,7 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "../user-mgr/user-mgr.h"
+#include "../event/event_service.h"
 
 gn_server_t g_server;
 UINT4 g_sendbuf_len = 81920;
@@ -448,6 +450,10 @@ void free_switch(gn_switch_t *sw)
     }
     sw->msg_driver.msg_handler = of_message_handler;
     sw->send_len = 0;
+
+    // event delete switch
+    event_delete_switch_on(sw);
+    // event end
 }
 
 INT4 start_openflow_server()

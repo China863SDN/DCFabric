@@ -1,9 +1,31 @@
 /*
+ * DCFabric GPL Source Code
+ * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
+ *
+ * This file is part of the DCFabric SDN Controller. DCFabric SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
+
+/*
  * event_service.h
  *
  *  Created on: May 14, 2015
- *      Author: joe
- *  Modify Jonathan
+ *  Author: BNC administrator
+ *  E-mail: DCFabric-admin@bnc.org.cn
+ *
+ *  Modified on: May 19, 2015
  */
 
 #ifndef SRC_EVENT_EVENT_SERVICE_H_
