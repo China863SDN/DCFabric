@@ -24,6 +24,7 @@
 *   Create Date : 2015-2-12           *
 *   Version     : 1.0           *
 *   Function    : .           *
+*   Modify      : 2015-5-19 by bnc
 *                                                                             *
 ******************************************************************************/
 #ifndef VERSION
@@ -44,6 +45,7 @@
 #include "../cluster-mgr/cluster-mgr.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "../ovsdb/ovsdb.h"
+#include "../event/event_service.h"
 
 #define START_DATE __DATE__  // compile date.
 #define START_TIME __TIME__  // compile time.
@@ -167,7 +169,7 @@ void gnflush_fini()
 }
 app_fini(gnflush_fini);
 
-//µ÷ÓÃ__start_appinit_secºÍ__stop_appinit_secÖ®¼ä½ÚÄÚµÄº¯ÊýÖ¸Õëapp_init(x)
+//ï¿½ï¿½ï¿½ï¿½__start_appinit_secï¿½ï¿½__stop_appinit_secÖ®ï¿½ï¿½ï¿½ï¿½ÚµÄºï¿½ï¿½ï¿½Ö¸ï¿½ï¿½app_init(x)
 static void mod_initcalls()
 {
     initcall_t *p_init;
@@ -180,7 +182,7 @@ static void mod_initcalls()
     } while (p_init < &__stop_appinit_sec);
 }
 
-//µ÷ÓÃ__start_appfini_secºÍ__stop_appfini_secÖ®¼ä½ÚÄÚµÄº¯ÊýÖ¸Õëapp_fini(x)
+//ï¿½ï¿½ï¿½ï¿½__start_appfini_secï¿½ï¿½__stop_appfini_secÖ®ï¿½ï¿½ï¿½ï¿½ÚµÄºï¿½ï¿½ï¿½Ö¸ï¿½ï¿½app_fini(x)
 static void mod_finicalls()
 {
     initcall_t *p_fini;
@@ -332,7 +334,7 @@ INT4 module_init()
 //        return GN_ERR;
 //    }
 
-    //µ÷ÓÃmodule_init
+    //ï¿½ï¿½ï¿½ï¿½module_init
     mod_initcalls();
 
     return GN_OK;
@@ -342,7 +344,7 @@ void module_fini()
 {
     fini_conn_svr();
 
-    //µ÷ÓÃmodule_fini
+    //ï¿½ï¿½ï¿½ï¿½module_fini
     mod_finicalls();
 }
 
@@ -397,6 +399,9 @@ int main(int argc, char **argv)
         LOG_PROC("INFO", "***** All modules initialized succeed *****\n");
     }
 
+    // event thread start
+    thread_topo_change_start();
+    // event end
     ret = start_openflow_server();
     if(GN_ERR == ret)
     {

@@ -1,5 +1,331 @@
+/*
+ * DCFabric GPL Source Code
+ * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
+ *
+ * This file is part of the DCFabric SDN Controller. DCFabric SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
+/*
+ * fabric_path.c
+ *
+ *  Created on: Mar 20, 2015
+ *  Author: BNC administrator
+ *  E-mail: DCFabric-admin@bnc.org.cn
+ *
+ *  Modified on: May 19, 2015
+ */
 #include "fabric_path.h"
+#include "mem_pool.h"
 #include <stdlib.h>
+void *g_fabric_impl_flow_node_mem_id = NULL;
+void *g_fabric_impl_flow_list_mem_id = NULL;
+void *g_fabric_impl_flow_set_mem_id = NULL;
+void *g_fabric_path_node_mem_id = NULL;
+void *g_fabric_path_mem_id = NULL;
+void *g_fabric_path_list_mem_id = NULL;
+void *g_fabric_sw_node_mem_id = NULL;
+void *g_fabric_sw_node_list_mem_id = NULL;
+UINT1 g_mem_state = 0;
+void init_fabric_path_mem(){
+//	if(g_mem_state == 0){
+//		g_fabric_impl_flow_node_mem_id = mem_create(sizeof(t_fabric_impl_flow_node), FABRIC_IMPL_FLOW_NODE_MAX_NUM);
+//		g_fabric_impl_flow_list_mem_id = mem_create(sizeof(t_fabric_impl_flow_list), FABRIC_IMPL_FLOW_LIST_MAX_NUM);
+//		g_fabric_impl_flow_set_mem_id = mem_create(sizeof(t_fabric_impl_flow_list_set), FABRIC_IMPL_FLOW_SET_MAX_NUM);
+//		g_fabric_path_node_mem_id = mem_create(sizeof(t_fabric_path_node), FABRIC_PATH_NODE_MAX_NUM);
+//		g_fabric_path_mem_id = mem_create(sizeof(t_fabric_path), FABRIC_PATH_MAX_NUM);
+//		g_fabric_path_list_mem_id = mem_create(sizeof(t_fabric_path_list), FABRIC_PATH_LIST_MAX_NUM);
+//		g_fabric_sw_node_mem_id = mem_create(sizeof(t_fabric_sw_node), FABRIC_SW_NODE_MAX_NUM);
+//		g_fabric_sw_node_list_mem_id = mem_create(sizeof(t_fabric_sw_list), FABRIC_SW_NODE_LIST_MAX_NUM);
+//		g_mem_state = 1;
+//	}
+	return;
+};
+void destory_fabric_path_men(){
+//	if(g_mem_state == 1){
+//		mem_destroy(g_fabric_impl_flow_node_mem_id);
+//		mem_destroy(g_fabric_impl_flow_list_mem_id);
+//		mem_destroy(g_fabric_impl_flow_set_mem_id);
+//		mem_destroy(g_fabric_path_node_mem_id);
+//		mem_destroy(g_fabric_path_mem_id);
+//		mem_destroy(g_fabric_path_list_mem_id);
+//		mem_destroy(g_fabric_sw_node_mem_id);
+//		mem_destroy(g_fabric_sw_node_list_mem_id);
+//		g_mem_state = 0;
+//	}
+	return;
+};
+////////////////////////////////////////////////////////////////////////
+p_fabric_impl_flow_node create_fabric_impl_flow_node(gn_switch_t* sw,UINT4 port_no,UINT4 tag,UINT1 tabel_id){
+	p_fabric_impl_flow_node ret = NULL;
+	// check parameters
+	if(NULL != sw){
+		// alloc space for a node
+		ret = (p_fabric_impl_flow_node)malloc(sizeof(t_fabric_impl_flow_node));
+		//ret = (p_fabric_impl_flow_node)mem_get(g_fabric_impl_flow_node_mem_id);
+
+		// set the data by parameters
+		ret->sw = sw;
+		ret->port_no = port_no;
+		ret->tag = tag;
+		ret->table_id = tabel_id;
+		ret->next = NULL;
+	}
+	return ret;
+};
+p_fabric_impl_flow_node delete_fabric_impl_flow_node(p_fabric_impl_flow_node node){
+	// initialize the variables
+	p_fabric_impl_flow_node ret = NULL;
+
+	// free the space and get next node
+	if(NULL != node){
+		ret = node->next;
+		free(node);
+		//mem_free(g_fabric_impl_flow_node_mem_id,node);
+	}
+	return ret;
+};
+
+////////////////////////////////////////////////////////////////////////
+p_fabric_impl_flow_list create_fabric_impl_flow_list(gn_switch_t* sw){
+	p_fabric_impl_flow_list ret = NULL;
+	if(NULL != sw){
+		ret = (p_fabric_impl_flow_list)malloc(sizeof(t_fabric_impl_flow_list));
+		//ret = (p_fabric_impl_flow_list)mem_get(g_fabric_impl_flow_list_mem_id);
+		ret->sw = sw;
+		ret->list = NULL;
+		ret->next = NULL;
+	}
+	return ret;
+};
+void add_fabric_impl_flow_node_to_list(p_fabric_impl_flow_list list,p_fabric_impl_flow_node node){
+	// initialize the variables
+	t_fabric_impl_flow_node t_head;
+	p_fabric_impl_flow_node head = &t_head;
+
+	// check parameters
+	if(NULL == list || NULL == node){
+		return;
+	}
+	// find last node
+	head->next = list->list;
+	while(head->next != NULL){
+		head = head->next;
+	}
+	// add last node into path
+	head->next = node;
+
+	list->list = t_head.next;
+	return;
+};
+void insert_fabric_impl_flow_node_to_list(p_fabric_impl_flow_list list,p_fabric_impl_flow_node node){
+	// check parameters
+	if(NULL == list || NULL == node){
+		return;
+	}
+	node->next = list->list;
+	list->list = node;
+
+	return;
+};
+p_fabric_impl_flow_node remove_fabric_impl_flow_node_from_list(p_fabric_impl_flow_list list,p_fabric_impl_flow_node node){
+	// initialize the variables
+	t_fabric_impl_flow_node t_head;
+	p_fabric_impl_flow_node head = &t_head;
+	if( NULL != list && NULL != node){
+		head->next = list->list;
+		while(head->next != NULL){
+			if(head->next == node){
+				head->next = node->next;
+				node->next = NULL;
+				// reset list
+				list->list = t_head.next;
+				return node;
+			}
+			head = head->next;
+		}
+		list->list = t_head.next;
+	}
+	return node;
+};
+p_fabric_impl_flow_node remove_fabric_impl_flow_node_from_list_by_tag_and_table(p_fabric_impl_flow_list list,gn_switch_t* sw,UINT4 tag,UINT1 table_id){
+	// initialize the variables
+	t_fabric_impl_flow_node t_head;
+	p_fabric_impl_flow_node head = &t_head,ret=NULL;
+	if( NULL != list && NULL != sw){
+		head->next = list->list;
+		while(head->next != NULL){
+			if(head->next->table_id == table_id && head->next->tag == tag && head->next->sw == sw){
+				ret = head->next;
+				head->next = ret->next;
+				ret->next = NULL;
+				// reset list
+				list->list = t_head.next;
+				return ret;
+			}
+			head = head->next;
+		}
+		list->list = t_head.next;;
+	}
+	return ret;
+};
+p_fabric_impl_flow_node get_fabric_impl_flow_node_from_list_by_tag_and_table(p_fabric_impl_flow_list list,gn_switch_t* sw,UINT4 tag,UINT1 table_id){
+	p_fabric_impl_flow_node head = NULL;
+	if( NULL != list && NULL != sw){
+		head = list->list;
+		while(head != NULL){
+			if(head->table_id == table_id && head->tag == tag && head->sw == sw){
+				return head;
+			}
+			head = head->next;
+		}
+	}
+	return head;
+};
+p_fabric_impl_flow_list delete_fabric_impl_flow_list(p_fabric_impl_flow_list list){
+	// initialize the variables
+	p_fabric_impl_flow_list ret = NULL;
+	p_fabric_impl_flow_node sentinel = NULL;
+
+	// check parameters
+	if( NULL != list){
+		// get next path
+		ret = list->next;
+		// set NULL
+		sentinel = list->list;
+		list->list = NULL;
+		while(sentinel != NULL){
+			sentinel = delete_fabric_impl_flow_node(sentinel);
+		}
+		free(list);
+		//mem_free(g_fabric_impl_flow_list_mem_id,list);
+	}
+
+	return ret;
+};
+////////////////////////////////////////////////////////////////////////
+p_fabric_impl_flow_list_set create_fabric_impl_flow_list_set(){
+	p_fabric_impl_flow_list_set ret = NULL;
+	ret = (p_fabric_impl_flow_list_set)malloc(sizeof(t_fabric_impl_flow_list_set));
+	//ret = (p_fabric_impl_flow_list_set)mem_get(g_fabric_impl_flow_set_mem_id);
+	ret->num = 0;
+	ret->list = 0;
+	return ret;
+};
+void add_fabric_impl_flow_list_to_set(p_fabric_impl_flow_list_set set, p_fabric_impl_flow_list list){
+	t_fabric_impl_flow_list t_head;
+	p_fabric_impl_flow_list head = &t_head;
+	if(NULL != set && NULL != list){
+		head->next = set->list;
+		while(head->next != NULL){
+			head = head->next;
+		}
+		head->next = list;
+		set->list = t_head.next;
+		set->num++;
+	}
+	return;
+};
+void insert_fabric_impl_flow_list_to_set(p_fabric_impl_flow_list_set set, p_fabric_impl_flow_list list){
+	if(NULL != set && NULL != list){
+		list->next = set->list;
+		set->list = list;
+		set->num++;
+	}
+	return;
+};
+p_fabric_impl_flow_list remove_fabric_impl_flow_list_from_set(p_fabric_impl_flow_list_set set, p_fabric_impl_flow_list list){
+	// initialize the variables
+	t_fabric_impl_flow_list t_head;
+	p_fabric_impl_flow_list head = &t_head;
+	if( NULL != set && NULL != list){
+		head->next = set->list;
+		while(head->next != NULL){
+			if(head->next == list){
+				head->next = list->next;
+				list->next = NULL;
+				// reset set
+				set->list = t_head.next;
+				return list;
+			}
+			head = head->next;
+		}
+		set->list = t_head.next;
+	}
+	return list;
+
+};
+p_fabric_impl_flow_list remove_fabric_impl_flow_list_from_set_by_sw(p_fabric_impl_flow_list_set set, gn_switch_t* sw){
+	// initialize the variables
+	t_fabric_impl_flow_list t_head;
+	p_fabric_impl_flow_list head = &t_head,ret=NULL;
+	if( NULL != set && NULL != sw){
+		head->next = set->list;
+		while(head->next != NULL){
+			if(head->next->sw == sw){
+				ret = head->next;
+				head->next = ret->next;
+				ret->next = NULL;
+				// reset set
+				set->list = t_head.next;
+				return ret;
+			}
+			head = head->next;
+		}
+		set->list = t_head.next;
+	}
+	return ret;
+};
+p_fabric_impl_flow_list get_fabric_impl_flow_list_from_set_by_sw(p_fabric_impl_flow_list_set set,gn_switch_t* sw){
+	p_fabric_impl_flow_list head = NULL;
+	if( NULL != set && NULL != sw){
+		head = set->list;
+		while(head != NULL){
+			if(head->sw == sw ){
+				return head;
+			}
+			head = head->next;
+		}
+	}
+	return head;
+};
+p_fabric_impl_flow_list clear_fabric_impl_flow_list_set(p_fabric_impl_flow_list_set set){
+	// initialize the variables
+	p_fabric_impl_flow_list ret=NULL;
+	if(set != NULL){
+		ret = set->list;
+
+		set->list = NULL;
+		set->num = 0;
+	}
+	return ret;
+};
+void delete_fabric_impl_flow_list_set(p_fabric_impl_flow_list_set set){
+
+	// initialize the variables
+	p_fabric_impl_flow_list p_sentinel = NULL;
+	if(set != NULL){
+		p_sentinel = set->list;
+		while(p_sentinel != NULL){
+			p_sentinel = delete_fabric_impl_flow_list(p_sentinel);
+		}
+		free(set);
+		//mem_free(g_fabric_impl_flow_set_mem_id,set);
+	}
+	return;
+};
+
 ////////////////////////////////////////////////////////////////////
 /*
  * create a path node
@@ -12,6 +338,7 @@ p_fabric_path_node create_fabric_path_node(gn_switch_t* sw,gn_port_t* port){
 	if(NULL != sw){
 		// alloc space for a node
 		ret = (p_fabric_path_node)malloc(sizeof(t_fabric_path_node));
+		//ret = (p_fabric_path_node)mem_get(g_fabric_path_node_mem_id);
 
 		// set the data by parameters
 		ret->sw = sw;
@@ -32,6 +359,7 @@ p_fabric_path_node delete_fabric_path_node(p_fabric_path_node node){
 	if(NULL != node){
 		ret = node->next;
 		free(node);
+		//mem_free(g_fabric_path_node_mem_id,node);
 	}
 	return ret;
 };
@@ -72,7 +400,7 @@ p_fabric_path_node copy_fabric_path_node(p_fabric_path_node node){
  * create a path
  */
 p_fabric_path create_fabric_path(gn_switch_t* sw,gn_port_t* port){
-	// initialize the variables
+	// initialize the variables`
 	p_fabric_path ret = NULL;
 	p_fabric_path_node p_node = NULL;
 
@@ -82,6 +410,7 @@ p_fabric_path create_fabric_path(gn_switch_t* sw,gn_port_t* port){
 		p_node = create_fabric_path_node(sw,port);
 		// alloc space for the path
 		ret = (p_fabric_path)malloc(sizeof(t_fabric_path));
+		//ret = (p_fabric_path)mem_get(g_fabric_path_mem_id);
 
 		// set the head node
 		ret->node_list = p_node;
@@ -194,6 +523,7 @@ p_fabric_path delete_fabric_path(p_fabric_path path){
 			sentinel = delete_fabric_path_node(sentinel);
 		}
 		free(path);
+		//mem_free(g_fabric_path_mem_id,path);
 	}
 
 	return ret;
@@ -225,6 +555,8 @@ p_fabric_path_list create_fabric_path_list(gn_switch_t* sw){
 	p_fabric_path_list ret = NULL;
 	if(sw != NULL){
 		ret = (p_fabric_path_list)malloc(sizeof(t_fabric_path_list));
+		//ret = (p_fabric_path_list)mem_get(g_fabric_path_list_mem_id);
+
 		ret->path_list = create_fabric_path(sw,NULL);
 		ret->num = 1;
 		ret->sw = sw;
@@ -240,6 +572,8 @@ p_fabric_path_list create_fabric_path_list_NULL(gn_switch_t* sw){
 	p_fabric_path_list ret = NULL;
 
 	ret = (p_fabric_path_list)malloc(sizeof(t_fabric_path_list));
+	//ret = (p_fabric_path_list)mem_get(g_fabric_path_list_mem_id);
+
 	ret->path_list = NULL;
 	ret->num = 0;
 	ret->sw = sw;
@@ -438,6 +772,7 @@ void delete_fabric_path_list(p_fabric_path_list list){
 			p_sentinel = delete_fabric_path(p_sentinel);
 		}
 		free(list);
+		//mem_free(g_fabric_path_list_mem_id,list);
 	}
 	return;
 };
@@ -453,6 +788,7 @@ p_fabric_sw_node create_fabric_sw_node(gn_switch_t* sw,UINT4 tag){
 	if(sw != NULL){
 		// alloc space for a node
 		ret = (p_fabric_sw_node)malloc(sizeof(t_fabric_sw_node));
+		//ret = (p_fabric_sw_node)mem_get(g_fabric_sw_node_mem_id);
 
 		// set the data by parameters
 		ret->sw = sw;
@@ -472,6 +808,7 @@ p_fabric_sw_node delete_fabric_sw_node(p_fabric_sw_node node){
 	if(node != NULL){
 		ret = node->next;
 		free(node);
+		//mem_free(g_fabric_sw_node_mem_id,node);
 	}
 	return ret;
 };
@@ -505,6 +842,7 @@ p_fabric_sw_list create_fabric_sw_list(){
 	p_fabric_sw_list ret = NULL;
 
 	ret = (p_fabric_sw_list)malloc(sizeof(t_fabric_sw_list));
+	//ret = (p_fabric_sw_list)mem_get(g_fabric_sw_node_list_mem_id);
 	ret->num = 0;
 	ret->node_list = NULL;
 	return ret;
@@ -741,6 +1079,7 @@ void delete_fabric_sw_list(p_fabric_sw_list list){
 			p_sentinel = delete_fabric_sw_node(p_sentinel);
 		}
 		free(list);
+		//mem_free(g_fabric_sw_node_list_mem_id,list);
 	}
 	return;
 };
@@ -756,4 +1095,16 @@ p_fabric_sw_list copy_fabric_sw_list(p_fabric_sw_list list){
 	}
 	return ret;
 };
-
+/*
+ * pop the head p_fabric_sw_node
+ */
+p_fabric_sw_node pop_fabric_sw_list(p_fabric_sw_list list){
+	p_fabric_sw_node ret = NULL;
+	if(NULL != list && list->num > 0){
+		ret = list->node_list;
+		list->node_list = ret->next;
+		ret->next = 0;
+		list->num--;
+	}
+	return ret;
+};

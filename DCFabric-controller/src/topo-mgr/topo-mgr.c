@@ -24,6 +24,7 @@
 *   Create Date : 2015-2-28           *
 *   Version     : 1.0           *
 *   Function    : .           *
+*   Modify Date : 2015-5-19
 *                                                                             *
 ******************************************************************************/
 
@@ -34,6 +35,7 @@
 #include "openflow-common.h"
 #include "openflow-10.h"
 #include "openflow-13.h"
+#include "../event/event_service.h"
 
 void *g_lldp_timerid = NULL;
 UINT4 g_lldp_interval = 5;
@@ -49,6 +51,7 @@ UINT4 **g_short_weight;
 int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid, UINT4 tx_port)
 {
     gn_switch_t  *neigh_sw   = NULL;
+    UINT4 n_port = 0;
     int neigh_port_seq = 0;   //neigh's port_no's Sequence
     int own_port_seq = 0;   //our port_no's Sequence
 
@@ -90,6 +93,17 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
     {
         src_sw->neighbor[own_port_seq] = (neighbor_t *)malloc(sizeof(neighbor_t));
     }
+
+    // event add line between 2 ports
+    n_port = neigh_sw->ports[neigh_port_seq].port_no;
+
+    if(neigh_sw->neighbor[neigh_port_seq] != NULL
+    		&& neigh_sw->neighbor[neigh_port_seq]->sw == src_sw
+			&& src_sw->neighbor[own_port_seq]->sw != neigh_sw ){
+		event_add_switch_port_on(src_sw,rx_port);
+		event_add_switch_port_on(neigh_sw,n_port);
+    }
+    // event end
 
     src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  //该端口序号连接的sw
     src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); //该端口与哪个端口相连

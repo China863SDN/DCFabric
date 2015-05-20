@@ -24,6 +24,7 @@
 *   Create Date : 2015-2-13           *
 *   Version     : 1.0           *
 *   Function    : .           *
+*   Modify      : 2015-5-19 by bnc
 *                                                                             *
 ******************************************************************************/
 
@@ -37,6 +38,7 @@
 #include "../cluster-mgr/cluster-mgr.h"
 #include "../forward-mgr/forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
+#include "../event/event_service.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
@@ -579,6 +581,9 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
         ulli64_to_uc8(sw->dpid, dpid);
         LOG_PROC("INFO", "New Openflow13 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d]", dpid[0],
                 dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port));
+        // event add a switch
+        event_add_switch_on(sw);
+        // event end
     }
 
     if(OFPCR_ROLE_EQUAL != g_controller_role)
@@ -713,6 +718,11 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 {
     INT4 port;
     gn_port_t new_sw_ports;
+    // event delete line between 2 ports
+    gn_switch_t* n_sw = NULL;
+    UINT4 n_port = 0;
+    UINT4 n_port_index = 0;
+    // event end
 
     struct ofp13_port_status *ops = (struct ofp13_port_status *)of_msg;
 
@@ -721,7 +731,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
@@ -737,14 +747,34 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
     }
 
-    //É¾³ýÄ¿µÄ×ª·¢¿ÚdownµôµÄÁ÷±í
+    //É¾ï¿½ï¿½Ä¿ï¿½ï¿½×ªï¿½ï¿½ï¿½ï¿½downï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 //    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
 
-    //¸üÐÂÍØÆË
+    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
     for (port = 0; port < sw->n_ports; port++)
     {
         if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
         {
+        	// event delete line between 2 ports
+        	if(sw->neighbor[port] != NULL){
+				n_sw = sw->neighbor[port]->sw;
+				if(n_sw->state == 0){
+					event_delete_switch_port_on(sw,port);
+				}else{
+					n_port = sw->neighbor[port]->port->port_no;
+					for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
+						if(n_sw->ports[n_port_index].port_no == n_port){
+							break;
+						}
+					}
+					if(n_port_index < n_sw->n_ports && n_sw->neighbor[n_port_index] == NULL){
+						event_delete_switch_port_on(sw,port);
+						event_delete_switch_port_on(n_sw,n_port);
+					}
+				}
+        	}
+        	// event end
+
             sw->ports[port].state = ntohl(ops->desc.state);
             free(sw->neighbor[port]);
             sw->neighbor[port] = NULL;
@@ -774,7 +804,7 @@ static INT4 of13_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
     struct ofp13_action_output *ofp13_act = (struct ofp13_action_output *)of13_out->actions;
     ofp13_act->type = htons(OFPAT13_OUTPUT);
     ofp13_act->len = htons(sizeof(struct ofp13_action_output));
-    ofp13_act->port = htonl(packout_req_info->outport);    //´Ó¸÷¸ö¶Ë¿Ú·¢³öÈ¥
+    ofp13_act->port = htonl(packout_req_info->outport);    //ï¿½Ó¸ï¿½ï¿½ï¿½ï¿½Ë¿Ú·ï¿½ï¿½ï¿½È¥
     ofp13_act->max_len = htons(packout_req_info->max_len);
     memset(ofp13_act->pad, 0x0, 6);
 
@@ -939,7 +969,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
     {
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ÓÐÑÚÂë
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -967,7 +997,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
-        else    //ÎÞÑÚÂë
+        else    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_SRC << 1;
@@ -984,7 +1014,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
     {
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ÓÐÑÚÂë
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1012,7 +1042,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
-        else  //ÎÞÑÚÂë
+        else  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_DST << 1;
@@ -1313,7 +1343,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
             oxm_len += OFPXMT_OFB_IPV6_SZ;
         }
-        else   //ÎÞÑÚÂë
+        else   //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
@@ -1470,7 +1500,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
             oxm_len += OFPXMT_OFB_IPV6_SZ;
         }
-        else  //ÎÞÑÚÂë
+        else  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_DST << 1;
@@ -1740,7 +1770,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ÓÐÑÚÂë
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1767,7 +1797,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
         }
-        else    //ÎÞÑÚÂë
+        else    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV4_SZ;
@@ -1787,7 +1817,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ÓÐÑÚÂë
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1814,7 +1844,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
         }
-        else  //ÎÞÑÚÂë
+        else  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_DST << 1;
             oxm->length = OFPXMT_OFB_IPV4_SZ;
@@ -2161,7 +2191,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
         }
-        else   //æ— æŽ©ç ?
+        else   //æ— æŽ©ï¿½?
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -2320,7 +2350,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             }
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
         }
-        else  //ÎÞÑÚÂë
+        else  //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_DST << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -2808,11 +2838,11 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
             loops = MAX_PORTS;
             UINT4 n_ports = 0;
 
-            while (body_len && (--loops > 0))     //Ã¿Ò»¸ö¶Ë¿ÚÑ­»·Ò»´Î
+            while (body_len && (--loops > 0))     //Ã¿Ò»ï¿½ï¿½ï¿½Ë¿ï¿½Ñ­ï¿½ï¿½Ò»ï¿½ï¿½
             {
                 memset(&new_sw_ports, 0x0, sizeof(new_sw_ports));
 
-                //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+                //Ä¬ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½1000Mbps
                 (sw->msg_driver.convertter->port_convertter)((UINT1 *)port, &new_sw_ports);
                 new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
 
@@ -2829,7 +2859,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
                 n_ports++;
             }
 
-            sw->n_ports = n_ports;  //lo³ýÍâ
+            sw->n_ports = n_ports;  //loï¿½ï¿½ï¿½ï¿½
             break;
         }
 
