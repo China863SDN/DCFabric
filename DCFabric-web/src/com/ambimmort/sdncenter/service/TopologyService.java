@@ -6,6 +6,9 @@ package com.ambimmort.sdncenter.service;
 
 import com.ambimmort.sdncenter.util.RestClient;
 import com.ambimmort.sdncenter.util.StatusCode;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -14,6 +17,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 import java.util.Vector;
 
@@ -31,10 +35,12 @@ public class TopologyService {
     private static String STATIC_URL = "/gn/path/stats/json";
     private final static String topo_fabric_setup = "/gn/fabric/setup/json";
     private final static String topo_fabric_delete = "/gn/fabric/delete/json";
-    private final static String topo_path_optimal_path = "gn/fabric/getpath/json";
+    private final static String topo_path_optimal_path = "/gn/fabric/getpath/json";
     private final static String topo_path_optimal_path_all = "/gn/path_optimal_all/json";
     private final static String topo_path_optimal_path_part = "/gn/fabric/setupparts/json";
     private final static String topo_path_optimal_path_save = "/gn/path_optimal_save/json";
+    public  static String contextPath="";
+    private static String propertiesString = "";
     public JSONObject getSwitchLink(String ip, String port) throws IOException, Exception {
         JSONArray nodes = new JSONArray();
         JSONArray relation = new JSONArray();
@@ -93,7 +99,8 @@ public class TopologyService {
         return value;
     }
     private String checkMininet(String dpid) {
-    	if(dpid.equalsIgnoreCase("00:00:00:00:00:AB:CD:44")||dpid.equalsIgnoreCase("00:00:00:00:00:A0:10:29")||dpid.equalsIgnoreCase("67:8C:08:9E:01:A8:01:48")||dpid.equalsIgnoreCase("67:8C:08:9E:01:A7:FF:EF")){
+    	getProterties();
+    	if(propertiesString.contains(dpid)){
     	    return "0";
     	}else{
 	        if(dpid.length()<10){
@@ -127,8 +134,9 @@ public class TopologyService {
     	 }
     private String checkPhy(String dpid) {
     	String tempPhy = dpid;
-    	if(tempPhy.equalsIgnoreCase("OF|00:00:00:00:00:AB:CD:44")||tempPhy.equalsIgnoreCase("OF|00:00:00:00:00:A0:10:29")||tempPhy.equalsIgnoreCase("OF|67:8C:08:9E:01:A8:01:48")||tempPhy.equalsIgnoreCase("OF|67:8C:08:9E:01:A7:FF:EF")||tempPhy.equalsIgnoreCase("00:00:00:1e:08:09:df:00")||tempPhy.equalsIgnoreCase("00:00:00:1e:08:09:ec:36")){
-    	return "1";
+    	getProterties();
+    	if(propertiesString.contains(tempPhy)){
+    		return "1";
     	}
     	return "0";
     	}
@@ -188,6 +196,7 @@ public class TopologyService {
         	dstDpid = dstDpid.substring(3);
         }
         String resp = RestClient.getInstance().get("http://" + ip + ":" + port + STATIC_URL+"&srcDPID="+srcDpid+"&dstDPID="+dstDpid);
+        System.out.println("http://" + ip + ":" + port + STATIC_URL+"&srcDPID="+srcDpid+"&dstDPID="+dstDpid);
         JSONObject respObj = JSONObject.fromObject(resp);
         obj.put("usedRateCN", "传输速率(kbps)");
         obj.put("usedBpsCN", "传输量(Mb)");
@@ -244,22 +253,24 @@ public class TopologyService {
         rs.put("relation", relation);     
         return rs;
     }
-    public Vector<String> getSingleFabric(String ip, String port,String srcId,String dstId) throws IOException {
+    public JSONArray getSingleFabric(String ip, String port,String srcId,String dstId) throws IOException {
     	JSONObject obj = new JSONObject();
     	obj.put("srcDPID", stringToLong(srcId.replace("OF|", ""))+"");
     	obj.put("dstDPID", stringToLong(dstId.replace("OF|", ""))+"");
     	System.out.println(obj.toString());
         String resp = RestClient.getInstance().post("http://" + ip + ":" + port + topo_path_optimal_path,obj.toString());
+        //System.out.println("url:"+"http://" + ip + ":" + port + topo_path_optimal_path+"   data:"+obj.toString());
         JSONObject o = JSONObject.fromObject(resp);
         JSONArray resp_Obj = o.getJSONArray("path");
+        JSONArray resp_tmp = new JSONArray();
         Iterator it = resp_Obj.iterator();
-        Vector<String> v = new Vector<String>();
         while (it.hasNext()) {
         	 JSONObject ob = (JSONObject) it.next();
-             String dpid = ob.getString("DPID");
-             v.add(dpid);
+             String dpid = "OF|"+ob.getString("DPID");
+             //System.out.println(dpid);
+             resp_tmp.add(dpid);
         }
-        return v;
+        return resp_tmp;
     }
     public JSONObject getAllFabric(String ip, String port) throws IOException {
     	JSONArray nodes = new JSONArray();
@@ -358,5 +369,19 @@ public class TopologyService {
         rs.put("relation", relation);
 
         return rs;
+    }
+    
+    private void getProterties(){
+    	if(null==propertiesString || "".equals(propertiesString)){
+    		Properties pps = new Properties();
+        	try {
+    			pps.load(new FileInputStream(contextPath+"phy-route.properties"));
+    		} catch (FileNotFoundException e) {
+    			e.printStackTrace();
+    		} catch (IOException e) {
+    			e.printStackTrace();
+    		}
+        	propertiesString = pps.getProperty("phy-route");
+    	}
     }
 }

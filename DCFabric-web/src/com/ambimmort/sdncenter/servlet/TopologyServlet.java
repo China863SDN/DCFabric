@@ -16,6 +16,8 @@ import javax.servlet.annotation.WebServlet;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+
+import net.sf.json.JSONArray;
 import net.sf.json.JSONObject;
 
 /**
@@ -39,7 +41,9 @@ public class TopologyServlet extends HttpServlet {
             throws ServletException, IOException {
         response.setContentType("text/plain;charset=UTF-8");
         PrintWriter out = response.getWriter();
-        
+        if(null==TopologyService.contextPath || "".equals(TopologyService.contextPath)){
+        	TopologyService.contextPath = request.getSession().getServletContext().getRealPath("/"); 
+        }
         String action = request.getPathInfo();
         String ip = request.getParameter("ip");
         String port = request.getParameter("port");
@@ -50,7 +54,7 @@ public class TopologyServlet extends HttpServlet {
         if(null==port){
         	port="8081";
         }
-        System.out.println("action:"+action);
+       // System.out.println("action:"+action);
         try {
             if ("/link".equals(action)) {
                 JSONObject links = new TopologyService().getSwitchLink(ip, port);
@@ -81,7 +85,9 @@ public class TopologyServlet extends HttpServlet {
             } else if ("/path_optimal.json".equals(action)) {
             	String srcId = request.getParameter("srcId");
             	String dstId = request.getParameter("dstId");
-            	printInfoNewTwo( new TopologyService().getSingleFabric(ip, port,srcId,dstId), out);
+            	JSONArray v = new TopologyService().getSingleFabric(ip, port,srcId,dstId);
+            	response.setContentType("json;charset=UTF-8");
+            	printInfoNewTwo( v, out);
             } else if ("/allFabric".equals(action)) {
                 JSONObject hosts = new TopologyService().getAllFabric(ip, port);
                 printInfo(0, hosts, out);
@@ -114,20 +120,23 @@ public class TopologyServlet extends HttpServlet {
      * @param out 输出流
      */
     private void printInfo(int status, Object data, PrintWriter out) {
-        JSONObject obj = new JSONObject();
+    	//System.out.println("current:"+new Date(System.currentTimeMillis()-1224*24*60*60*1000)+"   before:"+(System.currentTimeMillis()-1224*24*60*60*1000));        
+    	JSONObject obj = new JSONObject();
         obj.put("status", status);
         obj.put("data", data);
         out.print(obj.toString());
     }
     
     private void printInfoNew(String layout,ArrayList<Map<String,Object>> map, PrintWriter out) {
-    	 JSONObject obj = new JSONObject();
+    	//System.out.println("current:"+new Date(System.currentTimeMillis()-1224*24*60*60*1000)+"   before:"+(System.currentTimeMillis()-1224*24*60*60*1000));    	
+    	JSONObject obj = new JSONObject();
     	 obj.put("nodes", map);
          obj.put("layout", layout);
          obj.put("need-layout", "true");
          out.print(obj);
     }
     private void printInfoNewTwo(Object o, PrintWriter out) {
+    	//System.out.println("current:"+new Date(System.currentTimeMillis()-1224*24*60*60*1000)+"   before:"+(System.currentTimeMillis()-1224*24*60*60*1000));
         out.print(o);
    }
     // <editor-fold defaultstate="collapsed" desc="HttpServlet methods. Click on the + sign on the left to edit the code.">
