@@ -3,7 +3,7 @@ MV=mv
 CD=cd
 CP=cp
 
-PRODUCT=GNFlush
+PRODUCT=DCFabric
 
 ifeq (,$(PRO_DIR))
 PRO_DIR =$(shell pwd)/src

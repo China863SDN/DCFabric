@@ -61,7 +61,7 @@ void show_copy_right()
 
     INT1 stars[] = {"*****************************************************************" };
     INT1 spaces[] = {"*                                                               *" };
-    INT1 ver[81], info[81], author[81], company[81], copyright[81];
+    INT1 ver[81], info[81], author[81], company[81], copyright[81],author2[81];
     UINT4 len = strlen(stars);
 
 //    now = time(NULL);
@@ -77,9 +77,9 @@ void show_copy_right()
     }
 
     sprintf(info, "*               Started at %8s, on%12s             *", START_TIME, START_DATE);
-    sprintf(author, "*                    Author: XueQiuBao, DengChao                *");
-    sprintf(author, "*                    BNC: ZhaoLiangZhi, YangLei                 *");
-    sprintf(company, "*               Copyright GreeNet 2015-10 ~ 2099-10             *");
+    sprintf(author, "*                GreenNet: XueQiuBao, DengChao                  *");
+    sprintf(author2, "*                    BNC: ZhaoLiangZhi, YangLei                 *");
+    sprintf(company, "*          Copyright GreenNet & BNC 2015-10 ~ 2099-10           *");
     sprintf(copyright, "*                  (c) All Rights Reserved.                     *");
 
     printf("\n");
@@ -89,6 +89,7 @@ void show_copy_right()
     printf("%s\n", info);
     printf("%s\n", spaces);
     printf("%s\n", author);
+    printf("%s\n", author2);
     printf("%s\n", spaces);
     printf("%s\n", company);
     printf("%s\n", copyright);
