@@ -40,7 +40,37 @@
 gn_server_t g_server;
 UINT4 g_sendbuf_len = 81920;
 UINT4 g_controller_south_port = 0;
-
+void of13_delete_line2(gn_switch_t* sw,UINT4 port_index){
+	gn_switch_t* n_sw = NULL;
+	UINT4 port = 0, n_port = 0,n_port_index = 0;
+	// event delete line between 2 ports
+	if(sw->neighbor[port_index] != NULL){
+		n_sw = sw->neighbor[port_index]->sw;
+		port = sw->ports[port_index].port_no;
+		// if neighbor is alived, find neighbor, delete port
+		if(n_sw->state != 0){
+			n_port = sw->neighbor[port_index]->port->port_no;
+			// get neighbor sw's neighbor
+			for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
+				if(n_sw->ports[n_port_index].port_no == n_port){
+					if(n_sw->neighbor[n_port_index] != NULL){
+			            free(n_sw->neighbor[n_port_index]);
+			            n_sw->neighbor[n_port_index] = NULL;
+			            // delete neighbor
+						event_delete_switch_port_on(n_sw,n_port);
+					}
+					break;
+				}
+			}
+		}
+	    free(sw->neighbor[port_index]);
+	    sw->neighbor[port_index] = NULL;
+		event_delete_switch_port_on(sw,port);
+	}
+	// event end
+    //
+	return;
+};
 gn_switch_t *find_sw_by_dpid(UINT8 dpid)
 {
     UINT4 num;
@@ -419,11 +449,12 @@ void free_switch(gn_switch_t *sw)
     {
         if (sw->neighbor[port_idx])
         {
-            sw->neighbor[port_idx]->sw   = NULL;
-            sw->neighbor[port_idx]->port = 0;
+        	of13_delete_line2(sw,port_idx);
+//            sw->neighbor[port_idx]->sw   = NULL;
+//            sw->neighbor[port_idx]->port = 0;
 
-            free(sw->neighbor[port_idx]);
-            sw->neighbor[port_idx] = NULL;
+//            free(sw->neighbor[port_idx]);
+//            sw->neighbor[port_idx] = NULL;
         }
     }
     memset(sw->ports, 0, sizeof(gn_port_t) * MAX_PORTS);

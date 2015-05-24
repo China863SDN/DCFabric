@@ -43,7 +43,37 @@
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
 
-
+void of13_delete_line(gn_switch_t* sw,UINT4 port_index){
+	gn_switch_t* n_sw = NULL;
+	UINT4 port = 0, n_port = 0,n_port_index = 0;
+	// event delete line between 2 ports
+	if(sw->neighbor[port_index] != NULL){
+		n_sw = sw->neighbor[port_index]->sw;
+		port = sw->ports[port_index].port_no;
+		// if neighbor is alived, find neighbor, delete port
+		if(n_sw->state != 0){
+			n_port = sw->neighbor[port_index]->port->port_no;
+			// get neighbor sw's neighbor
+			for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
+				if(n_sw->ports[n_port_index].port_no == n_port){
+					if(n_sw->neighbor[n_port_index] != NULL){
+			            free(n_sw->neighbor[n_port_index]);
+			            n_sw->neighbor[n_port_index] = NULL;
+			            // delete neighbor
+						event_delete_switch_port_on(n_sw,n_port);
+					}
+					break;
+				}
+			}
+		}
+	    free(sw->neighbor[port_index]);
+	    sw->neighbor[port_index] = NULL;
+		event_delete_switch_port_on(sw,port);
+	}
+	// event end
+    //
+	return;
+};
 static gn_port_t *of13_port_convertter(UINT1 *of_port, gn_port_t *new_sw_port)
 {
     const struct ofp13_port *ofp = (struct ofp13_port *)of_port;
@@ -716,70 +746,144 @@ static INT4 of13_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 
 static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 {
-    INT4 port;
+//    INT4 port;
+//    gn_port_t new_sw_ports;
+//    // event delete line between 2 ports
+//    gn_switch_t* n_sw = NULL;
+//    UINT4 n_port = 0;
+//    UINT4 n_port_index = 0;
+//    // event end
+//
+//    struct ofp13_port_status *ops = (struct ofp13_port_status *)of_msg;
+//
+//    if (ops->reason == OFPPR_ADD)
+//    {
+//        LOG_PROC("INFO", "New port found: %s", ops->desc.name);
+//        of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
+//
+//        //Ĭ���������1000Mbps
+//        new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
+//        sw->ports[sw->n_ports] = new_sw_ports;
+//        sw->n_ports++;
+//
+//        return GN_OK;
+//    }
+//    else if (ops->reason == OFPPR_DELETE)
+//    {
+//        LOG_PROC("INFO", "Port deleted: %s", ops->desc.name);
+//    }
+//    else if (ops->reason == OFPPR_MODIFY)
+//    {
+//        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
+//    }
+//
+//    //ɾ��Ŀ��ת����down��������
+////    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
+//
+//    //��������
+//    for (port = 0; port < sw->n_ports; port++)
+//    {
+//        if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
+//        {
+//        	// event delete line between 2 ports
+//        	if(sw->neighbor[port] != NULL){
+//				n_sw = sw->neighbor[port]->sw;
+//				if(n_sw->state == 0){
+//					event_delete_switch_port_on(sw,port);
+//				}else{
+//					n_port = sw->neighbor[port]->port->port_no;
+//					for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
+//						if(n_sw->ports[n_port_index].port_no == n_port){
+//							break;
+//						}
+//					}
+//					if(n_port_index < n_sw->n_ports && n_sw->neighbor[n_port_index] == NULL){
+//						event_delete_switch_port_on(sw,port);
+//						event_delete_switch_port_on(n_sw,n_port);
+//					}
+//				}
+//        	}
+//        	// event end
+//
+//            sw->ports[port].state = ntohl(ops->desc.state);
+//            free(sw->neighbor[port]);
+//            sw->neighbor[port] = NULL;
+//            break;
+//        }
+//    }
+//
+//    return GN_OK;
+    INT4 port_index,port_state,port_no;
     gn_port_t new_sw_ports;
-    // event delete line between 2 ports
-    gn_switch_t* n_sw = NULL;
-    UINT4 n_port = 0;
-    UINT4 n_port_index = 0;
-    // event end
 
     struct ofp13_port_status *ops = (struct ofp13_port_status *)of_msg;
+
+    port_state = ntohl(ops->desc.state);
+    port_no = ntohl(ops->desc.port_no);
 
     if (ops->reason == OFPPR_ADD)
     {
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        //Ĭ���������1000Mbps
+        //1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
+        for (port_index = 0; port_index < sw->n_ports; port_index++)
+        {
+            if (sw->ports[port_index].port_no == port_no){
+            	sw->ports[port_index] = new_sw_ports;
+            	return GN_OK;
+            }
+        }
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
-
         return GN_OK;
     }
     else if (ops->reason == OFPPR_DELETE)
     {
         LOG_PROC("INFO", "Port deleted: %s", ops->desc.name);
-    }
-    else if (ops->reason == OFPPR_MODIFY)
-    {
-        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
-    }
 
-    //ɾ��Ŀ��ת����down��������
-//    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
-
-    //��������
-    for (port = 0; port < sw->n_ports; port++)
-    {
-        if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
+        for (port_index = 0; port_index < sw->n_ports; port_index++)
         {
-        	// event delete line between 2 ports
-        	if(sw->neighbor[port] != NULL){
-				n_sw = sw->neighbor[port]->sw;
-				if(n_sw->state == 0){
-					event_delete_switch_port_on(sw,port);
-				}else{
-					n_port = sw->neighbor[port]->port->port_no;
-					for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
-						if(n_sw->ports[n_port_index].port_no == n_port){
-							break;
-						}
-					}
-					if(n_port_index < n_sw->n_ports && n_sw->neighbor[n_port_index] == NULL){
-						event_delete_switch_port_on(sw,port);
-						event_delete_switch_port_on(n_sw,n_port);
-					}
-				}
-        	}
-        	// event end
-
-            sw->ports[port].state = ntohl(ops->desc.state);
-            free(sw->neighbor[port]);
-            sw->neighbor[port] = NULL;
-            break;
+            if (sw->ports[port_index].port_no == port_no)
+            {
+            	sw->ports[port_index].state = port_state;
+            	of13_delete_line(sw,port_index);
+                break;
+            }
         }
+    }
+    else if (ops->reason == OFPPR_MODIFY){
+//        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
+//        if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED){
+//			for (port_index = 0; port_index < sw->n_ports; port_index++)
+//			{
+//				if (sw->ports[port_index].port_no == port_no)
+//				{
+//					sw->ports[port_index].state = port_state;
+//					of13_delete_line(sw,port_index);
+//					break;
+//				}
+//			}
+//        }else if( port_state == OFPPS13_LIVE){
+//        	// send lldp
+//        }
+        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
+
+		for (port_index = 0; port_index < sw->n_ports; port_index++)
+		{
+			if (sw->ports[port_index].port_no == port_no)
+			{
+				sw->ports[port_index].state = port_state;
+				if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED){
+					of13_delete_line(sw,port_index);
+				}else if( port_state == OFPPS13_LIVE){
+					// send lldp
+					//lldp_tx(sw,port_no,sw->ports[port_index].hw_addr);
+				}
+				break;
+			}
+		}
     }
 
     return GN_OK;

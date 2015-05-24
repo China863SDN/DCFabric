@@ -103,7 +103,7 @@ INT1 *json_to_reply(json_t *obj, INT4 code)
     json_tree_to_string(obj, &reply);
     json_free_value(&obj);
 
-    LOG_PROC("INFO", "Reply: %s", reply);
+    //LOG_PROC("INFO", "Reply: %s", reply);
     return reply;
 }
 

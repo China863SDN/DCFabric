@@ -51,6 +51,13 @@ void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UIN
 //extern void *g_gnflow_mempool_id;
 //extern void *g_gninstruction_mempool_id;
 //extern void *g_gnaction_mempool_id;
+// temp fucntion
+UINT1 check_down_flow(gn_switch_t* sw){
+	if(sw->dpid == 128983883520 || sw->dpid == 128983886902){
+		return 0;
+	}
+	return 1;
+};
 /**************************************
  * Interface functions
  **************************************/
@@ -87,9 +94,11 @@ void delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table
  * install fabric base flows
  */
 void install_fabric_base_flows(gn_switch_t * sw){
+
 	install_add_fabric_host_input_flow(sw);
-	install_add_fabric_miss_match_flow(sw);
 	install_add_fabric_ARP_miss_match_flow(sw);
+	if(check_down_flow(sw))
+		install_add_fabric_miss_match_flow(sw);
 	return;
 };
 /*
@@ -103,7 +112,8 @@ void install_fabric_last_flow(gn_switch_t * sw,UINT4 tag){
  *install first tag
  */
 void install_fabric_first_flow(gn_switch_t * sw,UINT4 port,UINT4 tag){
-	install_add_fabric_impl_first_flow(sw,port,tag);
+	if(check_down_flow(sw))
+		install_add_fabric_impl_first_flow(sw,port,tag);
 	return;
 };
 /*

@@ -36,6 +36,7 @@
 #define EVENT_MAX_FUNCTION_NUM 4
 #define EVENT_MAX_CHANGED_SWITCH_NUM 1024
 #define EVENT_MAX_CHANGED_SWITCH_PORT_NUM 10240
+#define EVENT_SLEEP_DEFAULT_TIME 1
 
 typedef struct event_sw_port{
 	gn_switch_t* sw;
@@ -63,4 +64,5 @@ void event_add_switch_on(gn_switch_t* sw);
 void event_delete_switch_on(gn_switch_t* sw);
 void event_add_switch_port_on(gn_switch_t* sw,UINT4 port_no);
 void event_delete_switch_port_on(gn_switch_t* sw,UINT4 port_no);
+
 #endif /* SRC_EVENT_EVENT_SERVICE_H_ */

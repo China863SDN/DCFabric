@@ -72,12 +72,6 @@ void delete_fabric_flows();
 // help functions
 ////////////////////////////////////////////////
 UINT1 check_dpid_avaliable(UINT8 dpid);
-p_fabric_impl_flow_node remove_fabric_impl_flow_node_from_old_set(gn_switch_t* sw,UINT4 tag,UINT1 table_id);
-p_fabric_impl_flow_node remove_fabric_impl_flow_nodes_by_tag(UINT4 tag);
-void insert_fabric_impl_flow_node(p_fabric_impl_flow_node node);
-void insert_delete_fabric_impl_flow_node(p_fabric_impl_flow_node node);
-void clear_delete_fabric_impl_flow();
-void clear_delete_fabric_impl_flow_old();
 ////////////////////////////////////////////////
 // register functions
 ////////////////////////////////////////////////
@@ -86,8 +80,7 @@ void unregister_fabric_functions_into_event();
 ////////////////////////////////////////////////
 // test functions
 ////////////////////////////////////////////////
-void print_list_flow_num();
-void print_list_flow_ones(p_fabric_impl_flow_list list);
+
 /*****************************
  * global variables
  *****************************/
@@ -99,11 +92,6 @@ t_fabric_sw_list g_fabric_sw_list;
 t_fabric_sw_list g_fabric_sw_list_total;
 t_fabric_sw_list g_fabric_sw_list_old_tag;
 UINT4 g_fabric_tag = 0;
-
-// fabric impl flow list
-t_fabric_impl_flow_list_set g_fabric_impl_flow_list_set;
-t_fabric_impl_flow_list_set g_fabric_impl_flow_list_set_old; // old set ,only for update
-t_fabric_impl_flow_list g_fabric_impl_flow_list_delete;
 
 // fabric path list
 p_fabric_path_list g_fabric_path_list = NULL;
@@ -127,28 +115,7 @@ void of131_fabric_impl_setup_by_dpids(UINT8* dpids,UINT4 len){
 		of131_fabric_impl_set_dpids(dpids,len);
 	}
 	of131_fabric_impl_setup();
-//	if(len != 0){
-//
-//		// clear global variables
-//		clear_fabric_server();
-//
-//		// initialize fabric id
-//		init_fabric_id_by_dpids(dpids,len);
-//
-//		// initialize fabric base flows
-//		init_fabric_base_flows();
-//
-//		// initialize fabric swap flows
-//		init_fabric_swap_flows();
-//
-//		// start fabric threads
-//		start_fabric_thread();
-//
-//		// set the state is available
-//		g_fabric_state = 1;
-//
-//		printf("of131_fabric_impl_setup_by_dpids!\n");
-//	}
+
 	return;
 };
 /*
@@ -183,7 +150,8 @@ void of131_fabric_impl_setup(){
 
 	// register event
 	register_fabric_functions_into_event();
-	printf("Fabric: v 2015/05/15 \nof131_fabric_impl_setup!\n");
+	//printf("Fabric: v 2015/05/15 \nof131_fabric_impl_setup!\n");
+	LOG_PROC("INFO", "of131_fabric_impl_setup!");
 	return;
 };
 /*
@@ -208,7 +176,8 @@ void of131_fabric_impl_delete(){
 
 	// delete memory to pool
 	destory_fabric_path_men();
-	printf("of131_fabric_impl_delete!\n");
+	//printf("of131_fabric_impl_delete!\n");
+	LOG_PROC("INFO", "of131_fabric_impl_delete!");
 	return;
 };
 /*
@@ -265,7 +234,6 @@ void of131_fabric_impl_add_sws(gn_switch_t** swList, UINT4 num){
 			}else{
 				node->sw = sw;
 			}
-			//LOG_PROC("INFO", "of131_fabric_impl_add_sws,node tag:%d",node->tag);
 			available_node = create_fabric_sw_node(node->sw,node->tag);
 			// add to fabric node list
 			insert_fabric_sw_list(&g_fabric_sw_list,available_node);
@@ -284,9 +252,7 @@ void of131_fabric_impl_remove_sws(gn_switch_t** swList, UINT4 num){
 	UINT4 i = 0;
 	gn_switch_t* sw = NULL;
 	p_fabric_sw_node node = NULL;
-	p_fabric_impl_flow_list list = NULL;
-	p_fabric_impl_flow_node flow_node = NULL;
-	//LOG_PROC("INFO", "of131_fabric_impl_remove_sws");
+	// LOG_PROC("INFO", "of131_fabric_impl_remove_sws");
 	// assign a new tag for new switch
 	// and initialize base flows
 	for(i = 0 ; i < num; i++){
@@ -294,28 +260,16 @@ void of131_fabric_impl_remove_sws(gn_switch_t** swList, UINT4 num){
 		delete_fabric_host_from_list_by_sw(sw);
 		node = remove_fabric_sw_list_by_sw(&g_fabric_sw_list_total,sw);
 		if(node != NULL){
-			// delete all this node's impl flows objects
-			// not need to download flows for the sw has been delete
-			list = remove_fabric_impl_flow_list_from_set_by_sw(&g_fabric_impl_flow_list_set,sw);
-			delete_fabric_impl_flow_list(list);
 			// delete sw node
 			delete_fabric_sw_node(node);
 		}
-	}
-	// deal the fabric flows
-	for(i = 0 ; i < num; i++){
-		sw = swList[i];
 		node = remove_fabric_sw_list_by_sw(&g_fabric_sw_list,sw);
 		if(node != NULL){
-			flow_node = remove_fabric_impl_flow_nodes_by_tag(node->tag);
-			while(flow_node != NULL){
-				delete_fabric_impl_flow(flow_node->sw,flow_node->port_no,flow_node->table_id,flow_node->tag);
-				flow_node = delete_fabric_impl_flow_node(flow_node);
-			}
 			// add to old ones
 			insert_fabric_sw_list(&g_fabric_sw_list_old_tag,node);
 		}
 	}
+
 	return;
 };
 /*
@@ -431,18 +385,9 @@ void init_fabric_swap_flows(){
 	t_fabric_path_list sentinel;
 	p_fabric_path_list p_sentinel = &sentinel;
 
-	// flow list
-	p_fabric_impl_flow_list list = NULL;
-
 	// create flow node list
 	// get sw node list
 	p_fabric_sw_node sw_node= g_fabric_sw_list_total.node_list;
-	while(sw_node != NULL){
-		// initialize each switch's swap flows
-    	list = create_fabric_impl_flow_list(sw_node->sw);
-    	insert_fabric_impl_flow_list_to_set(&g_fabric_impl_flow_list_set,list);
-    	sw_node = sw_node->next;
-	}
 
 	// get sw node list
 	sw_node= g_fabric_sw_list.node_list;
@@ -474,10 +419,6 @@ p_fabric_path_list init_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 
 	UINT2 next_num = 0;// next switch num
 
-	p_fabric_impl_flow_node flow_node = NULL;// flow node
-	UINT1 table_last_flow = get_fabric_last_flow_table();
-	UINT1 table_middle_flow = get_fabric_middle_flow_table();
-
 	// check swith object
 	if(sw != NULL){
 		// copy total switch list
@@ -496,8 +437,6 @@ p_fabric_path_list init_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 
 		// create destination node swap flow
 		install_fabric_last_flow(sw,tag);
-		flow_node = create_fabric_impl_flow_node(sw,0,tag,table_last_flow);
-		insert_fabric_impl_flow_node(flow_node);
 
 		// install neighbors' flows
 		init_fabric_neighbor_flows(sw,sw_list,temp_path,current_list,tag);
@@ -512,9 +451,6 @@ p_fabric_path_list init_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 			next_num = init_fabric_neighbor_flows(temp_path_node->sw,sw_list,temp_path,current_list,tag);
 			if(next_num > 0 ){
 				install_fabric_middle_flow(temp_path_node->sw,temp_path_node->port->port_no,tag);
-				// insert middle flow
-				flow_node = create_fabric_impl_flow_node(temp_path_node->sw,temp_path_node->port->port_no,tag,table_middle_flow);
-				insert_fabric_impl_flow_node(flow_node);
 			}
 			insert_fabric_list_path_to_list(ret_list,temp_path);
 		}
@@ -542,9 +478,6 @@ UINT2 init_fabric_neighbor_flows(gn_switch_t* sw,
 	p_fabric_path temp_path = NULL;
 	p_fabric_path_node temp_node = NULL;
 
-	p_fabric_impl_flow_node flow_node = NULL; // flow node
-	UINT1 table_first_flow = get_fabric_first_flow_table();
-
 	while(i < sw->n_ports){
 		// get neighbor switch
 		if(sw->neighbor[i] != NULL && sw->neighbor[i]->sw != NULL){
@@ -558,9 +491,6 @@ UINT2 init_fabric_neighbor_flows(gn_switch_t* sw,
 
 				if(sw_node->tag != 0){
 					install_fabric_first_flow(neighbor,sw_port->port_no,tag);
-					// insert first flow
-					flow_node = create_fabric_impl_flow_node(neighbor,sw_port->port_no,tag,table_first_flow);
-					insert_fabric_impl_flow_node(flow_node);
 				}
 				// add neighbor
 				// create current path node
@@ -594,26 +524,9 @@ void update_fabric_swap_flows(){
 	// initialize the variables
 	t_fabric_path_list sentinel;
 	p_fabric_path_list p_sentinel = &sentinel;
-	//LOG_PROC("INFO","update_fabric_swap_flows begin!");
-	//print_list_flow_num();
-	// flow list
-	p_fabric_impl_flow_list list = NULL;
+	LOG_PROC("INFO","update_fabric_swap_flows begin!");
 
-	// create flow node list
-	// get total sw node list
 	p_fabric_sw_node sw_node= g_fabric_sw_list_total.node_list;
-	// give old data to old set and initialize itself
-	g_fabric_impl_flow_list_set_old.num = g_fabric_impl_flow_list_set.num;
-	g_fabric_impl_flow_list_set_old.list = g_fabric_impl_flow_list_set.list;
-	g_fabric_impl_flow_list_set.num = 0;
-	g_fabric_impl_flow_list_set.list = NULL;
-	while(sw_node != NULL){
-   		list = create_fabric_impl_flow_list(sw_node->sw);
-   		insert_fabric_impl_flow_list_to_set(&g_fabric_impl_flow_list_set,list);
-   		sw_node = sw_node->next;
-	}
-
-	// get sw node list
 	sw_node= g_fabric_sw_list.node_list;
 	p_sentinel->next = NULL;
 	while(sw_node != NULL){
@@ -623,12 +536,11 @@ void update_fabric_swap_flows(){
 		sw_node = sw_node->next;
 		p_sentinel = p_sentinel->next;
 	}
-	// cleart old flows
-	clear_delete_fabric_impl_flow_old();
 
 	// swap path
 	p_sentinel = g_fabric_path_list;
 	// clear path
+	//LOG_PROC("INFO","update_fabric_swap_flows: clear path!");
 	while(p_sentinel != NULL){
 		g_fabric_path_list = g_fabric_path_list->next;
 		delete_fabric_path_list(p_sentinel);
@@ -637,8 +549,7 @@ void update_fabric_swap_flows(){
 
 	// set the global path list variable
 	g_fabric_path_list = sentinel.next;
-//	LOG_PROC("INFO","update_fabric_swap_flows end!");
-//	print_list_flow_num();
+	//LOG_PROC("INFO","update_fabric_swap_flows end!");
 	return;
 };
 /*
@@ -656,11 +567,6 @@ p_fabric_path_list update_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 	p_fabric_sw_node temp_sw_node = NULL; // temp variable : for switch node
 
 	UINT2 next_num = 0;// next switch num
-
-	p_fabric_impl_flow_node flow_node = NULL; // flow node
-	p_fabric_impl_flow_node delete_flow_node = NULL; // flow node
-	UINT1 table_last_flow = get_fabric_last_flow_table();
-	UINT1 table_middle_flow = get_fabric_middle_flow_table();
 
 	// check swith object
 	if(sw != NULL){
@@ -680,13 +586,7 @@ p_fabric_path_list update_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 		delete_fabric_sw_node(temp_sw_node);
 
 		// create destination node swap flow
-		// get flow list
-		flow_node = remove_fabric_impl_flow_node_from_old_set(sw,tag,table_last_flow);
-		if(flow_node == NULL ){
-			install_fabric_last_flow(sw,tag);
-			flow_node = create_fabric_impl_flow_node(sw,0,tag,table_last_flow);
-		}
-		insert_fabric_impl_flow_node(flow_node);
+		install_fabric_last_flow(sw,tag);
 
 		// install neighbors' flows
 		update_fabric_neighbor_flows(sw,sw_list,temp_path,current_list,tag);
@@ -700,22 +600,7 @@ p_fabric_path_list update_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 			// install neighbors' flows
 			next_num = update_fabric_neighbor_flows(temp_path_node->sw,sw_list,temp_path,current_list,tag);
 			if(next_num > 0 ){
-				flow_node = remove_fabric_impl_flow_node_from_old_set(temp_path_node->sw,tag,table_middle_flow);
-				if(flow_node == NULL){
-					// install middle flow
-					install_fabric_middle_flow(temp_path_node->sw,temp_path_node->port->port_no,tag);
-					// create flow node
-					flow_node = create_fabric_impl_flow_node(temp_path_node->sw,temp_path_node->port->port_no,tag,table_middle_flow);
-				}else if(flow_node->port_no != temp_path_node->port->port_no){
-					// install middle flow
-					install_fabric_middle_flow(temp_path_node->sw,temp_path_node->port->port_no,tag);
-					// create delete flow node
-					delete_flow_node = create_fabric_impl_flow_node(temp_path_node->sw,flow_node->port_no,tag,table_middle_flow);
-					insert_delete_fabric_impl_flow_node(delete_flow_node);
-					// update flow node
-					flow_node->port_no = temp_path_node->port->port_no;
-				}
-				insert_fabric_impl_flow_node(flow_node);
+				install_fabric_middle_flow(temp_path_node->sw,temp_path_node->port->port_no,tag);
 			}
 			insert_fabric_list_path_to_list(ret_list,temp_path);
 		}
@@ -724,8 +609,6 @@ p_fabric_path_list update_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
 		delete_fabric_path_list(current_list);
 		delete_fabric_sw_list(sw_list);
 
-		// clear update flows
-		clear_delete_fabric_impl_flow();
 	}
 	return ret_list;
 };
@@ -746,10 +629,6 @@ UINT2 update_fabric_neighbor_flows(gn_switch_t* sw,
 	p_fabric_path temp_path = NULL;
 	p_fabric_path_node temp_node = NULL;
 
-	p_fabric_impl_flow_node flow_node = NULL; // flow node
-	p_fabric_impl_flow_node delete_flow_node = NULL; // flow node
-	UINT1 table_first_flow = get_fabric_first_flow_table();
-
 	while(i < sw->n_ports){
 		// get neighbor switch
 		if(sw->neighbor[i] != NULL && sw->neighbor[i]->sw != NULL){
@@ -763,23 +642,7 @@ UINT2 update_fabric_neighbor_flows(gn_switch_t* sw,
 
 				// if is fabric sw
 				if(sw_node->tag != 0){
-					flow_node = remove_fabric_impl_flow_node_from_old_set(neighbor,tag,table_first_flow);
-					if(flow_node == NULL){
-						// install first flow
-						install_fabric_first_flow(neighbor,sw_port->port_no,tag);
-						// create flow node
-						flow_node = create_fabric_impl_flow_node(neighbor,sw_port->port_no,tag,table_first_flow);
-
-					}else if(flow_node->port_no != sw_port->port_no){
-						// install first flow
-						install_fabric_first_flow(neighbor,sw_port->port_no,tag);
-						// create delete flow node
-						delete_flow_node = create_fabric_impl_flow_node(neighbor,flow_node->port_no,tag,table_first_flow);
-						insert_delete_fabric_impl_flow_node(delete_flow_node);
-						// update flow node
-						flow_node->port_no = sw_port->port_no;
-					}
-					insert_fabric_impl_flow_node(flow_node);
+					install_fabric_first_flow(neighbor,sw_port->port_no,tag);
 				}
 				// add neighbor
 				// create current path node
@@ -970,78 +833,78 @@ void delete_fabric_flows(){
 /////////////////////////////////////////////////////////
 // get flows
 /////////////////////////////////////////////////////////
-p_fabric_impl_flow_node remove_fabric_impl_flow_node_from_old_set(gn_switch_t* sw,UINT4 tag,UINT1 table_id){
-	p_fabric_impl_flow_node ret = NULL;
-	p_fabric_impl_flow_list list = NULL;
-    list = get_fabric_impl_flow_list_from_set_by_sw(&g_fabric_impl_flow_list_set_old,sw);
-    if(list != NULL){
-    	ret = remove_fabric_impl_flow_node_from_list_by_tag_and_table(list,sw,tag,table_id);
-    	//print_list_flow_ones(list);
-    }
-    return ret;
-};
-p_fabric_impl_flow_node remove_fabric_impl_flow_nodes_by_tag(UINT4 tag){
-	t_fabric_impl_flow_node sentienal,ret;
-	p_fabric_impl_flow_node p_sentienal = &sentienal,p_ret=&ret;
-	p_fabric_impl_flow_list list = NULL;
-	// get all list
-	list = g_fabric_impl_flow_list_set.list;
-	ret.next = NULL;
-	while(list != NULL){
-		sentienal.next = list->list;
-		p_sentienal = &sentienal;
-		while(p_sentienal->next != NULL){
-			if(p_sentienal->next->tag == tag){
-				p_ret->next = p_sentienal->next;
-				p_sentienal->next = p_sentienal->next->next;
-				p_ret = p_ret->next;
-			}else{
-				p_sentienal = p_sentienal->next;
-			}
-		}
-		list->list = sentienal.next;
-		list = list->next;
-	}
-	return ret.next;
-};
-void insert_fabric_impl_flow_node(p_fabric_impl_flow_node node){
-	p_fabric_impl_flow_list list = NULL;
-    list = get_fabric_impl_flow_list_from_set_by_sw(&g_fabric_impl_flow_list_set,node->sw);
-    if(list == NULL){
-    	list = create_fabric_impl_flow_list(node->sw);
-    	insert_fabric_impl_flow_list_to_set(&g_fabric_impl_flow_list_set,list);
-    }
-    insert_fabric_impl_flow_node_to_list(list,node);
-    return;
-};
-void insert_delete_fabric_impl_flow_node(p_fabric_impl_flow_node node){
-	insert_fabric_impl_flow_node_to_list(&g_fabric_impl_flow_list_delete,node);
-};
-
-void clear_delete_fabric_impl_flow(){
-	p_fabric_impl_flow_node temp = NULL;
-	temp = g_fabric_impl_flow_list_delete.list;
-	while(temp != NULL){
-		delete_fabric_impl_flow(temp->sw,temp->port_no,temp->table_id,temp->tag);
-		temp = delete_fabric_impl_flow_node(temp);
-	}
-	g_fabric_impl_flow_list_delete.list = NULL;
-	return;
-};
-
-void clear_delete_fabric_impl_flow_old(){
-	p_fabric_impl_flow_list list = NULL;
-	p_fabric_impl_flow_node node = NULL;
-	list = clear_fabric_impl_flow_list_set(&g_fabric_impl_flow_list_set_old);
-	while(list != NULL){
-		node = list->list;
-		while(node != NULL){
-			delete_fabric_impl_flow(node->sw,node->port_no,node->table_id,node->tag);
-			node = node->next;
-		}
-		list = delete_fabric_impl_flow_list(list);
-	}
-};
+//p_fabric_impl_flow_node remove_fabric_impl_flow_node_from_old_set(gn_switch_t* sw,UINT4 tag,UINT1 table_id){
+//	p_fabric_impl_flow_node ret = NULL;
+//	p_fabric_impl_flow_list list = NULL;
+//    list = get_fabric_impl_flow_list_from_set_by_sw(&g_fabric_impl_flow_list_set_old,sw);
+//    if(list != NULL){
+//    	ret = remove_fabric_impl_flow_node_from_list_by_tag_and_table(list,sw,tag,table_id);
+//    	//print_list_flow_ones(list);
+//    }
+//    return ret;
+//};
+//p_fabric_impl_flow_node remove_fabric_impl_flow_nodes_by_tag(UINT4 tag){
+//	t_fabric_impl_flow_node sentienal,ret;
+//	p_fabric_impl_flow_node p_sentienal = &sentienal,p_ret=&ret;
+//	p_fabric_impl_flow_list list = NULL;
+//	// get all list
+//	list = g_fabric_impl_flow_list_set.list;
+//	ret.next = NULL;
+//	while(list != NULL){
+//		sentienal.next = list->list;
+//		p_sentienal = &sentienal;
+//		while(p_sentienal->next != NULL){
+//			if(p_sentienal->next->tag == tag){
+//				p_ret->next = p_sentienal->next;
+//				p_sentienal->next = p_sentienal->next->next;
+//				p_ret = p_ret->next;
+//			}else{
+//				p_sentienal = p_sentienal->next;
+//			}
+//		}
+//		list->list = sentienal.next;
+//		list = list->next;
+//	}
+//	return ret.next;
+//};
+//void insert_fabric_impl_flow_node(p_fabric_impl_flow_node node){
+//	p_fabric_impl_flow_list list = NULL;
+//    list = get_fabric_impl_flow_list_from_set_by_sw(&g_fabric_impl_flow_list_set,node->sw);
+//    if(list == NULL){
+//    	list = create_fabric_impl_flow_list(node->sw);
+//    	insert_fabric_impl_flow_list_to_set(&g_fabric_impl_flow_list_set,list);
+//    }
+//    insert_fabric_impl_flow_node_to_list(list,node);
+//    return;
+//};
+//void insert_delete_fabric_impl_flow_node(p_fabric_impl_flow_node node){
+//	insert_fabric_impl_flow_node_to_list(&g_fabric_impl_flow_list_delete,node);
+//};
+//
+//void clear_delete_fabric_impl_flow(){
+//	p_fabric_impl_flow_node temp = NULL;
+//	temp = g_fabric_impl_flow_list_delete.list;
+//	while(temp != NULL){
+//		delete_fabric_impl_flow(temp->sw,temp->port_no,temp->table_id,temp->tag);
+//		temp = delete_fabric_impl_flow_node(temp);
+//	}
+//	g_fabric_impl_flow_list_delete.list = NULL;
+//	return;
+//};
+//
+//void clear_delete_fabric_impl_flow_old(){
+//	p_fabric_impl_flow_list list = NULL;
+//	p_fabric_impl_flow_node node = NULL;
+//	list = clear_fabric_impl_flow_list_set(&g_fabric_impl_flow_list_set_old);
+//	while(list != NULL){
+//		node = list->list;
+//		while(node != NULL){
+//			delete_fabric_impl_flow(node->sw,node->port_no,node->table_id,node->tag);
+//			node = node->next;
+//		}
+//		list = delete_fabric_impl_flow_list(list);
+//	}
+//};
 /////////////////////////////////////////////////////////
 // register functions
 /////////////////////////////////////////////////////////
@@ -1094,33 +957,38 @@ void of131_test_update(){
 	of131_fabric_impl_add_sws(add_sw_list,add_num);
 };
 
-void print_list_flow_num(){
-	p_fabric_impl_flow_list list = NULL;
-	printf("****************************\n");
-	printf("new num is: %d\n",g_fabric_impl_flow_list_set.num);
-	list = g_fabric_impl_flow_list_set.list;
-	while(list!= NULL){
-		print_list_flow_ones(list);
-		list = list->next;
-	}
-
-//	printf("old num is: %d\n",g_fabric_impl_flow_list_set_old.num);
-//	list = g_fabric_impl_flow_list_set_old.list;
+//void print_list_flow_num(){
+//	p_fabric_impl_flow_list list = NULL;
+//	UINT4 flow_num = 0;
+//	printf("****************************\n");
+//	//printf("new num is: %d\n",g_fabric_impl_flow_list_set.num);
+//	list = g_fabric_impl_flow_list_set.list;
 //	while(list!= NULL){
-//		print_list_flow_ones(list);
+//		flow_num += print_list_flow_ones(list);
 //		list = list->next;
 //	}
-	printf("****************************\n");
-}
-void print_list_flow_ones(p_fabric_impl_flow_list list){
-	p_fabric_impl_flow_node head = list->list;
-	UINT4 i = 0;
-	printf("===============================\n");
-	while(head != NULL){
-//		printf("flow node: tag:%d,table:%d,port:%d | addr:0x%x\n",head->tag,head->table_id,head->port_no,head);
-		head = head->next;
-		i++;
-	}
-	printf("list num is: %d | addr:0x%x\n",i,list);
-	printf("===============================\n");
-}
+//	printf("flow total num is: %d\n",flow_num);
+//
+//	flow_num = print_list_flow_ones(&g_fabric_impl_flow_list_delete);
+//	printf("flow delete num is: %d\n",flow_num);
+////	printf("old num is: %d\n",g_fabric_impl_flow_list_set_old.num);
+////	list = g_fabric_impl_flow_list_set_old.list;
+////	while(list!= NULL){
+////		print_list_flow_ones(list);
+////		list = list->next;
+////	}
+//	printf("****************************\n");
+//}
+//UINT4 print_list_flow_ones(p_fabric_impl_flow_list list){
+//	p_fabric_impl_flow_node head = list->list;
+//	UINT4 i = 0;
+////	printf("===============================\n");
+//	while(head != NULL){
+////		printf("flow node: tag:%d,table:%d,port:%d | addr:0x%x\n",head->tag,head->table_id,head->port_no,head);
+//		head = head->next;
+//		i++;
+//	}
+////	printf("list num is: %d | addr:0x%x\n",i,list);
+////	printf("===============================\n");
+//	return i;
+//}

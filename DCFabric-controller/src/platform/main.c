@@ -30,7 +30,7 @@
 #ifndef VERSION
 #define VERSION 0x020000
 #endif
-#define PRODUCT "GNFlush"
+#define PRODUCT "DCFabric"
 
 #include "common.h"
 #include "timer.h"
@@ -78,6 +78,7 @@ void show_copy_right()
 
     sprintf(info, "*               Started at %8s, on%12s             *", START_TIME, START_DATE);
     sprintf(author, "*                    Author: XueQiuBao, DengChao                *");
+    sprintf(author, "*                    BNC: ZhaoLiangZhi, YangLei                 *");
     sprintf(company, "*               Copyright GreeNet 2015-10 ~ 2099-10             *");
     sprintf(copyright, "*                  (c) All Rights Reserved.                     *");
 

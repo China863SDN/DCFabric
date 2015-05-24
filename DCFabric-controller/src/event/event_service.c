@@ -246,7 +246,7 @@ void *topo_change_event_thread(){
 		if(g_event_delete_switch_list_num){
 			do{
 				last_delete_sw_num = g_event_add_switch_list_num;
-				sleep(2);
+				sleep(EVENT_SLEEP_DEFAULT_TIME);
 			}while(last_delete_sw_num < g_event_add_switch_list_num );
 			call_delete_switch_fun();
 		}
@@ -254,7 +254,7 @@ void *topo_change_event_thread(){
 		if(g_event_add_switch_list_num){
 			do{
 				last_add_sw_num = g_event_add_switch_list_num;
-				sleep(2);
+				sleep(EVENT_SLEEP_DEFAULT_TIME);
 			}while(last_add_sw_num < g_event_add_switch_list_num );
 			//sleep_times = 5>g_event_add_switch_list_num?5:g_event_add_switch_list_num;
 			call_add_switch_fun();
@@ -263,7 +263,7 @@ void *topo_change_event_thread(){
 		if(g_event_delete_switch_port_list_num){
 			do{
 				last_delete_sw_port_num = g_event_delete_switch_port_list_num;
-				sleep(2);
+				sleep(EVENT_SLEEP_DEFAULT_TIME);
 			}while(last_delete_sw_port_num < g_event_delete_switch_port_list_num );
 			call_delete_switch_port_fun();
 		}
@@ -271,7 +271,7 @@ void *topo_change_event_thread(){
 		if(g_event_add_switch_port_list_num){
 			do{
 				last_add_sw_port_num = g_event_add_switch_port_list_num;
-				sleep(2);
+				sleep(EVENT_SLEEP_DEFAULT_TIME);
 			}while(last_add_sw_port_num < g_event_add_switch_port_list_num );
 			//sleep(sleep_times);
 			call_add_switch_port_fun();
