@@ -1,22 +1,3 @@
-/*
- * GNFlush SDN Controller GPL Source Code
- * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
- *
- * This file is part of the GNFlush SDN Controller. GNFlush SDN
- * Controller is a free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, , see <http://www.gnu.org/licenses/>.
- */
-
 /******************************************************************************
  *                                                                             *
  *   File Name   : ovsdb.c           *
@@ -35,15 +16,15 @@ INT4 g_ovsdb_sockfd;
 fd_set g_ovsdb_recvmask;
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovsçš„openflowç‰ˆæœ¬
-UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstackç½‘ç»œç±»å‹ gre/vxlan
+UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovsµÄopenflow°æ±¾
+UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstackÍøÂçÀàĞÍ gre/vxlan
 
 UINT1 g_ovsdb_clients[OVSDB_MAX_CONNECTION] = { 0 };
-UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clientsçš„å¤‡ä»½  ç”¨äºåˆ é™¤ç«¯å£è¿æ¥çš„äº¤æ¢æœº
+UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clientsµÄ±¸·İ  ÓÃÓÚÉ¾³ı¶Ë¿ÚÁ¬½ÓµÄ½»»»»ú
 UINT4 g_ovsdb_clients_ip[OVSDB_MAX_CONNECTION] = { 0 };
 
 ovsdb_server_t g_ovsdb_nodes[OVSDB_MAX_CONNECTION];
-UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdbæ¥å£ï¼Œé»˜è®¤ç«¯å£6640
+UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdb½Ó¿Ú£¬Ä¬ÈÏ¶Ë¿Ú6640
 
 INT4 ovsdb_connect_quit()
 {
@@ -685,71 +666,70 @@ void add_bridge(INT4 conn_fd, INT1 *br_name, INT1 *open_vswitch_uuid, INT1 *fail
 void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
 {
     INT4 index;
+    INT4 index_br;
     INT1 control_tunnel_port_name[32];
     INT1 compute_tunnel_port_name[32];
-    ovsdb_server_t *control_node = NULL;
+    INT1 *remote_ip = NULL;
+    INT1 *compute_ip = NULL;
+
+    ovsdb_server_t *remote_node = NULL;
 
     for (index = 0; index < OVSDB_MAX_CONNECTION; index++)
     {
         if (g_ovsdb_clients[index])
         {
-            if (g_ovsdb_nodes[index].node_type == NODE_TYPE_CONTROL)
+            if (g_ovsdb_nodes[index].bridge[0].is_using)
             {
-                control_node = &g_ovsdb_nodes[index];
-                break;
-            }
-        }
-    }
+                remote_node = &g_ovsdb_nodes[index];
+                remote_ip = strdup(inet_htoa(ntohl(remote_node->node_ip)));
+                compute_ip = strdup(inet_htoa(ntohl(compute_node->node_ip)));
 
-    if (control_node)
-    {
-        INT1 *controller_ip = strdup(inet_htoa(ntohl(control_node->node_ip)));
-        INT1 *compute_ip = strdup(inet_htoa(ntohl(compute_node->node_ip)));
-
-        if (g_tunnel_type == NETWORK_TYPE_GRE)
-        {
-            sprintf(control_tunnel_port_name, "gre-%s", inet_htoa(ntohl(compute_node->node_ip)));
-            sprintf(compute_tunnel_port_name, "gre-%s", inet_htoa(ntohl(control_node->node_ip)));
-        }
-        else if(g_tunnel_type == NETWORK_TYPE_VXLAN)
-        {
-            sprintf(control_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(compute_node->node_ip)));
-            sprintf(compute_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(control_node->node_ip)));
-        }
-
-        //control---->compute
-        for (index = 0; index < NEUTRON_BRIDGE_MAX_NUM; index++)
-        {
-            if (strncmp(control_node->bridge[index].name, "br-int", 6) == 0)
-            {
                 if (g_tunnel_type == NETWORK_TYPE_GRE)
                 {
-                    add_port_and_portoption(control_node->node_fd, control_node->bridge[index]._uuid,
-                            control_tunnel_port_name, controller_ip, compute_ip, "key", INTERFACE_TYPE_GRE);
+                    sprintf(control_tunnel_port_name, "gre-%s", inet_htoa(ntohl(compute_node->node_ip)));
+                    sprintf(compute_tunnel_port_name, "gre-%s", inet_htoa(ntohl(remote_node->node_ip)));
+                }
+                else if(g_tunnel_type == NETWORK_TYPE_VXLAN)
+                {
+                    sprintf(control_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(compute_node->node_ip)));
+                    sprintf(compute_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(remote_node->node_ip)));
+                }
+
+                //control---->compute
+                for (index_br = 0; index_br < NEUTRON_BRIDGE_MAX_NUM; index_br++)
+                {
+                    if (strncmp(remote_node->bridge[index_br].name, "br-int", 6) == 0)
+                    {
+                        if (g_tunnel_type == NETWORK_TYPE_GRE)
+                        {
+                            add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
+                                    control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_GRE);
+                        }
+                        else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
+                        {
+                            add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
+                                    control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_VXLAN);
+                        }
+                        break;
+                    }
+                }
+
+                //compute---->control
+                if (g_tunnel_type == NETWORK_TYPE_GRE)
+                {
+                    add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
+                            compute_ip, remote_ip, "key", INTERFACE_TYPE_GRE);
                 }
                 else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
                 {
-                    add_port_and_portoption(control_node->node_fd, control_node->bridge[index]._uuid,
-                            control_tunnel_port_name, controller_ip, compute_ip, "key", INTERFACE_TYPE_VXLAN);
+                    add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
+                            compute_ip, remote_ip, "key", INTERFACE_TYPE_VXLAN);
                 }
-                break;
+
+                free(remote_ip);
+                free(compute_ip);
             }
         }
-
-        //compute---->control
-        if (g_tunnel_type == NETWORK_TYPE_GRE)
-        {
-            add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
-                    compute_ip, controller_ip, "key", INTERFACE_TYPE_GRE);
-        }
-        else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
-        {
-            add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
-                    compute_ip, controller_ip, "key", INTERFACE_TYPE_VXLAN);
-        }
-
-        free(controller_ip);
-        free(compute_ip);
     }
 }
 
@@ -1005,7 +985,7 @@ BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
 {
     json_t *controller = NULL;
 
-    //å·²æœ‰Controller
+    //ÒÑÓĞController
     controller = json_find_first_label(result->child, "Controller");
     if (controller)
     {
@@ -1113,9 +1093,6 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
                     g_ovsdb_nodes[seq].bridge[1].is_using = TRUE;
                 }
             }
-
-            g_ovsdb_nodes[seq].node_type = NODE_TYPE_CONTROL;
-
         }
     }
     else    //add br-int
@@ -1182,7 +1159,11 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                             memcpy(g_ovsdb_nodes[seq].bridge[0]._uuid, br->child->child->text, strlen(br->child->child->text));
                             LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[0].name, g_ovsdb_nodes[seq].bridge[0]._uuid);
                             sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
+
+                            //ÉèÖÃ¿ØÖÆÆ÷
                             set_controller(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, controller_ip);
+
+                            //ĞÂ½¨port: br-int
                             add_port(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, g_ovsdb_nodes[seq].bridge[0].name);
                             add_tunnel(&g_ovsdb_nodes[seq], &g_ovsdb_nodes[seq].bridge[0]);
                             g_ovsdb_nodes[seq].bridge[0].is_using = TRUE;
@@ -1273,7 +1254,7 @@ void *ovsdb_recv_msg(void *para)
     struct timeval wait;
     wait.tv_sec = 5;
     wait.tv_usec = 0;
-    UINT4 clientip = 0;    //ç½‘ç»œå­—èŠ‚åº
+    UINT4 clientip = 0;    //ÍøÂç×Ö½ÚĞò
     UINT2 client_port = 0;
     INT1 *p_str = NULL;
     INT4 len = 0;
@@ -1303,8 +1284,8 @@ void *ovsdb_recv_msg(void *para)
             memset(&g_ovsdb_addr, 0, sizeof(struct sockaddr_in));
             socklen_t size = sizeof(struct sockaddr);
 
-            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //é•¿è¿æ¥å…¶å®åªacceptä¸€æ¬¡
-            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //ç½‘ç»œå­—èŠ‚åº
+            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //³¤Á¬½ÓÆäÊµÖ»acceptÒ»´Î
+            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //ÍøÂç×Ö½ÚĞò
             client_port = *(UINT2 *) &g_ovsdb_addr.sin_port;
 
             LOG_PROC("INFO", "New OVSDB connected[%s:%d]", inet_htoa(ntohl(clientip)),ntohs(client_port));
@@ -1324,7 +1305,6 @@ void *ovsdb_recv_msg(void *para)
 
                     g_ovsdb_nodes[index].node_ip = clientip;
                     g_ovsdb_nodes[index].node_fd = conn_fd;
-                    g_ovsdb_nodes[index].node_type = NODE_TYPE_COMPUTE;
 
                     FD_SET(conn_fd, &g_ovsdb_recvmask);
 
@@ -1348,7 +1328,7 @@ void *ovsdb_recv_msg(void *para)
             {
                 if (FD_ISSET(g_ovsdb_clients[index], &recvmask))
                 {
-                    //ä¸€æ¬¡æ”¶å–BUFF_LENä¸ªå­—èŠ‚å­˜åˆ°å¯¹åº”äº¤æ¢æœºçš„ç¼“å­˜ä¸­
+                    //Ò»´ÎÊÕÈ¡BUFF_LEN¸ö×Ö½Ú´æµ½¶ÔÓ¦½»»»»úµÄ»º´æÖĞ
                     do
                     {
                         recv_len += read(g_ovsdb_clients[index], ovsdb_buff + recv_len, OVSDB_BUFF_LEN - recv_len);
@@ -1442,14 +1422,14 @@ INT4 ovsdb_connect_init()
 
 INT4 init_ovsdb()
 {
-    //åˆå§‹åŒ–è¿æ¥å·¥ä½œ
+    //³õÊ¼»¯Á¬½Ó¹¤×÷
     g_ovsdb_sockfd = ovsdb_connect_init();
     if (g_ovsdb_sockfd < 0)
     {
         return GN_ERR;
     }
 
-    //recvçº¿ç¨‹
+    //recvÏß³Ì
     if (pthread_create(&g_ovsdb_recv_tid, NULL, ovsdb_recv_msg, NULL))
     {
         ovsdb_connect_quit();
