@@ -113,6 +113,9 @@ mac_user_t *search_mac_user(UINT1 *mac)
                 }
 
                 pthread_mutex_unlock(&g_macuser_table.macuser_mutex);
+//                printf("#### Find user: sw[%u][%s:%d], ", p_macuser->sw->index,
+//                        inet_htoa(ntohl(p_macuser->sw->sw_ip)), ntohs(p_macuser->sw->sw_port));
+//                printf("user[%s], inport[%d]\n", inet_htoa(p_macuser->ipv4), p_macuser->port);
                 return p_macuser;
             }
         }
@@ -289,7 +292,6 @@ static mac_user_t * add_mac_user(mac_user_t * macuser)    //将该MAC地址添�
                 {
                     mem_free(g_macuser_table.macuser_memid, (void *)macuser);
                     macuser = p_macuser;
-                    printf("record exist\n");
                     break;
                 }
             }
@@ -331,6 +333,10 @@ static mac_user_t * add_mac_user(mac_user_t * macuser)    //将该MAC地址添�
             break;
         }
     }
+
+//    printf("#### New user: sw[%u][%s:%d], ", macuser->sw->index,
+//            inet_htoa(ntohl(macuser->sw->sw_ip)), ntohs(macuser->sw->sw_port));
+//    printf("user[%s], inport[%d]\n", inet_htoa(macuser->ipv4), macuser->port);
 
     return macuser;
 }

@@ -70,7 +70,7 @@ static INT4 l2_install_flow(gn_switch_t *sw, UINT4 inport, UINT4 outport, UINT1 
 
     action_outport = &sw->flowmod_helper.action_output;
     action_outport->port = outport;
-    action_outport->next = instruction->actions;
+    action_outport->next = NULL;
     instruction->actions = (gn_action_t *)action_outport;
 
     flow_mod_req.xid = 0;
@@ -103,21 +103,18 @@ void l2_flowmod_chain(UINT8 src_topo_id, UINT8 dst_topo_id, mac_user_t *user_src
 
     if((src_topo_id < 0) || (dst_topo_id < 0))
     {
-        printf("1\n");
         goto END;
     }
 
     id_tmp = g_short_path[src_topo_id][dst_topo_id];
     if(NO_PATH == id_tmp)
     {
-        printf("2\n");
         goto END;
     }
 
     id_tmp = g_short_path[dst_topo_id][src_topo_id];
     if(NO_PATH == id_tmp)
     {
-        printf("3\n");
         goto END;
     }
 
@@ -128,22 +125,20 @@ void l2_flowmod_chain(UINT8 src_topo_id, UINT8 dst_topo_id, mac_user_t *user_src
         id_tmp = g_short_path[src_topo_id][dst_topo_id];
         if(NO_PATH == id_tmp)
         {
-            printf("3\n");
             goto END;
         }
 
-        //µ±Ç°½»»»»ú
+        //ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         sw_pre = g_adac_matrix.sw[src_topo_id][id_tmp];
         if((NULL == sw_pre) || (0 == sw_pre->state))
         {
-            printf("4\n");
             goto END;
         }
 
-        //µ±Ç°½»»»»ú³ö¿Ú
+        //ï¿½ï¿½Ç°ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         port_nxt = g_adac_matrix.src_port[src_topo_id][id_tmp];
 
-        //¸øÏàÁÚ½»»»»úÏÂ·¢Ë«ÏòÁ÷±í
+        //ï¿½ï¿½ï¿½ï¿½ï¿½Ú½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Â·ï¿½Ë«ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
         l2_install_flow(sw_pre, port_nxt, port_pre, user_src->mac);
         l2_install_flow(sw_pre, port_pre, port_nxt, user_dst->mac);
         port_pre = g_adac_matrix.src_port[id_tmp][src_topo_id];
@@ -166,9 +161,7 @@ void l2_proc(gn_switch_t *sw, mac_user_t *user_src, mac_user_t *user_dst, packet
     UINT4 outport = OFPP13_FLOOD;
     if(NULL != user_dst)
     {
-        printf("Get user dst\n");
-
-        //¼ì²éÊÇ·ñÊôÓÚÍ¬Ò»×â»§
+        //ï¿½ï¿½ï¿½ï¿½Ç·ï¿½ï¿½ï¿½ï¿½ï¿½Í¬Ò»ï¿½â»§
         if(user_dst->tenant_id != user_src->tenant_id)
         {
             tenant_send_flow_mod_l2(user_src->sw, user_src->mac, user_dst->mac, OFPFC_ADD);
@@ -183,8 +176,10 @@ void l2_proc(gn_switch_t *sw, mac_user_t *user_src, mac_user_t *user_dst, packet
             l2_install_flow(user_src->sw, port_nxt, port_pre, user_src->mac);
             l2_install_flow(user_src->sw, port_pre, port_nxt, user_dst->mac);
         }
-
-        l2_flowmod_chain(user_src->sw->index, user_dst->sw->index, user_src, user_dst);
+        else
+        {
+            l2_flowmod_chain(user_src->sw->index, user_dst->sw->index, user_src, user_dst);
+        }
     }
 
     pakout_req.buffer_id = 0xffffffff;

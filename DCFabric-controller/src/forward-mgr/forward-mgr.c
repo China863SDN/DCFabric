@@ -1,4 +1,4 @@
-/*
+﻿/*
  * GNFlush SDN Controller GPL Source Code
  * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
  *
@@ -57,14 +57,27 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
     {
         p_user_src = create_mac_user(sw, arp->eth_head.src, packet_in_info->inport, host_ip, NULL);
     }
-    else if(p_user_src->ipv4 != host_ip)
+    else
     {
-        if(p_user_src->port != packet_in_info->inport)  //如果入口和之前记录的入口不一样，说明风暴了，不再转发
+        if(p_user_src->sw == sw)
         {
-            return GN_ERR;
+            if(p_user_src->port != packet_in_info->inport)  //如果入口和之前记录的入口不一样，说明风暴了，不再转发
+            {
+                return GN_ERR;
+            }
         }
-
-        p_user_src->ipv4 = host_ip;
+        else
+        {
+            if(g_adac_matrix.src_port[sw->index][p_user_src->sw->index] != packet_in_info->inport)  //入口非最优入口，说明是环路多余报文，不再转发
+            {
+                return GN_ERR;
+            }
+        }
+        
+        if(p_user_src->ipv4 != host_ip)
+        {
+            p_user_src->ipv4 = host_ip;
+        }
     }
 
     if(arp->opcode == htons(1))         //arp request
@@ -116,6 +129,10 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
         }
 
         p_user_dst = search_mac_user(arp->eth_head.dest);
+        if(NULL == p_user_dst)
+        {
+            printf("####No user:[%s]\n", inet_htoa(ntohl(arp->targetip)));
+        }
     }
 
     l2_proc(sw, p_user_src, p_user_dst, packet_in_info);
@@ -129,24 +146,38 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
     mac_user_t *p_user_src = NULL;
     mac_user_t *p_user_dst = NULL;
 
-    if (0 == host_ip)
-    {
-        return GN_ERR;
-    }
-
     if(get_fabric_state()){
     	fabric_ip_handle(sw,packet_in_info);
     	return GN_ERR;
     }
-    //��¼ԴMAC��MAC�˿ڱ���
+
+    //记录源MAC到MAC端口表中
     p_user_src = search_mac_user(p_ip->eth_head.src);
     if (NULL == p_user_src)
     {
         p_user_src = create_mac_user(sw, p_ip->eth_head.src, packet_in_info->inport, host_ip, NULL);
     }
-    else if(p_user_src->ipv4 != host_ip)
+    else
     {
-        p_user_src->ipv4 = host_ip;
+        if(p_user_src->sw == sw)
+        {
+            if(p_user_src->port != packet_in_info->inport)  //如果入口和之前记录的入口不一样，说明风暴了，不再转发
+            {
+                return GN_ERR;
+            }
+        }
+        else
+        {
+            if(g_adac_matrix.src_port[sw->index][p_user_src->sw->index] != packet_in_info->inport)  //入口非最优入口，说明是环路多余报文，不再转发
+            {
+                return GN_ERR;
+            }
+        }
+        
+        if(p_user_src->ipv4 != host_ip)
+        {
+            p_user_src->ipv4 = host_ip;
+        }
     }
 
     if(0 == memcmp(p_ip->eth_head.dest, g_controller_mac, 6))   //如果目的MAC为控制器网关的MAC, 则为跨网段转发
@@ -162,6 +193,11 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
     }
 
     p_user_dst = search_mac_user(p_ip->eth_head.dest);
+    if(NULL == p_user_dst)
+    {
+        printf("####No user:[%s]\n", inet_htoa(ntohl(p_ip->dest)));
+    }
+
     l2_proc(sw, p_user_src, p_user_dst, packet_in_info);
     return GN_OK;
 }
