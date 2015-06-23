@@ -47,13 +47,6 @@ public class TopologyServlet extends HttpServlet {
         String action = request.getPathInfo();
         String ip = request.getParameter("ip");
         String port = request.getParameter("port");
-        if(null==ip){
-        	//ip="192.168.53.10";
-        	ip="192.168.53.3";
-        }
-        if(null==port){
-        	port="8081";
-        }
        // System.out.println("action:"+action);
         try {
             if ("/link".equals(action)) {
@@ -62,7 +55,13 @@ public class TopologyServlet extends HttpServlet {
             } else if ("/host".equals(action)) {
                 JSONObject hosts = new TopologyService().getSwitchHost(ip, port);
                 printInfo(0, hosts, out);
-            } else if("/exchange_tree.json".equals(action)){
+            }else if("/exchange_host.json".equals(action)){
+            	ArrayList<Map<String,Object>> maps = new TopologyService().getNodeData(ip, port);
+            	response.setContentType("json;charset=UTF-8");
+            	printInfoNew("tree",maps, out);
+            } 
+            
+            else if("/exchange_tree.json".equals(action)){
             	ArrayList<Map<String,Object>> maps = new TopologyService().getNodeData(ip, port);
             	response.setContentType("json;charset=UTF-8");
             	printInfoNew("tree",maps, out);

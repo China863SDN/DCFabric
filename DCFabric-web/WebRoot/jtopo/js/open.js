@@ -1188,7 +1188,9 @@ var prefix = "../jtopo/";
             //return $.ajax({url: dynamic_add_delete});
         };
         // 初始化Canvas内容
-        $.when($.ajax({ url: exchange_tree}), $.ajax({url: exchange_circle})).done(function(treeData, circleData){
+        var ipp =$("#control").val().split("|")[0];
+        var portt =$("#control").val().split("|")[1];
+        $.when($.ajax({ url: exchange_tree+"?ip="+ipp+"&port="+portt}), $.ajax({url: exchange_circle+"?ip="+ipp+"&port="+portt})).done(function(treeData, circleData){
             Topo.initTree(treeData[0], $('#canvas_tree')[0]);
             Topo.initCircle(circleData[0], $('#canvas_circle')[0]);
 
@@ -2083,7 +2085,7 @@ var prefix = "../jtopo/";
                 //加载最优路径
                 loadOptimalPath(nodeA,nodeB);
                 //显示菜单，提醒可以选择更多路径
-                addPathMenu();
+                //addPathMenu();
                 $('#pathMenu').css({
                     top: event.pageY + 17,
                     left: event.pageX +287
@@ -2491,6 +2493,6 @@ $(document).ready(function(){
             return false;
         });
     });
-    window.initAll();
+    
 
 });

@@ -106,27 +106,17 @@ public class TopologyService {
 	        if(dpid.length()<10){
 	            return "";
 	        }
-	        Long mininetid = stringToLong(dpid);
-	       if(mininetid<=100){
-	            return "1";
-	        }else if(mininetid<=200){
-	          return "2";
-	        }else if(mininetid<=300){
-	          return "3";
-	        }else if(mininetid<=400){
-	          return "4";
-	        }else if(mininetid<=500){
-	          return "5";
-	        }else if(mininetid<=600){
-	          return "6";
+	       Long mininetid = stringToLong(dpid);
+	        if(mininetid>100){
+	            return (mininetid-1)/100+"";
 	        }else{
-    	      return "0";
+	        	return "99";
 	        }
     	}
     }
     private String checkCore(String dpid) {
     	long mininetid = stringToLong(dpid);
-    	  if((mininetid>=1&&mininetid<=4) || (mininetid>=101&&mininetid<=104) ||(mininetid>=201&&mininetid<=204)||(mininetid>=301&&mininetid<=304)||(mininetid>=401&&mininetid<=404)||(mininetid>=501&&mininetid<=504)||(mininetid>=601&&mininetid<=604)){
+    	  if((mininetid%100)>=1&& (mininetid%100)<=4 ){
     	   return "true";
     	  }else{
     	   return "false";
@@ -312,24 +302,6 @@ public class TopologyService {
         JSONArray relation = new JSONArray();
 
         String resp = RestClient.getInstance().get("http://" + ip + ":" + port + HOST_URL);
-        // 添加解析代码
-//        JSONObject o = JSONObject.fromObject(resp);
-//        Iterator it = o.keys();
-//        while (it.hasNext()) {
-//            String key = (String) it.next();
-//            nodes.add(key);
-//            JSONArray hosts = o.getJSONArray(key);
-//
-//            Iterator hit = hosts.iterator();
-//            while (hit.hasNext()) {
-//                JSONObject ob = (JSONObject) hit.next();
-//                JSONObject newObj = new JSONObject();
-//                newObj.put("dpid", key);
-//                newObj.put("port", ob.get("src-port"));
-//                newObj.put("hosts", ob.get("hosts"));
-//                newObj.put("total", ob.get("total"));
-//                relation.add(newObj);
-//            }
         JSONObject o = JSONObject.fromObject(resp);
         if (o.getInt("retCode") != StatusCode.SUCCESS) {
             throw new Exception(o.getString("retMsg"));
@@ -338,9 +310,8 @@ public class TopologyService {
         Iterator it = resp_O.iterator();
         while (it.hasNext()) {
             JSONObject Ob = (JSONObject) it.next();
-            String dpid = Ob.getString("srcDPID");
+            String dpid = Ob.getString("DPID");
             nodes.add(dpid);
-            String total = Ob.getString("total");
 
             Iterator hit = Ob.getJSONArray("ports").iterator();
             while (hit.hasNext()) {
@@ -359,7 +330,7 @@ public class TopologyService {
                     nO.add(ho);
                     newObj.put("hosts", nO);
                 }
-                newObj.put("total", total);
+                newObj.put("total", ob.getString("portNo"));
                 relation.add(newObj);
             }
         }
@@ -370,6 +341,7 @@ public class TopologyService {
 
         return rs;
     }
+
     
     private void getProterties(){
     	if(null==propertiesString || "".equals(propertiesString)){

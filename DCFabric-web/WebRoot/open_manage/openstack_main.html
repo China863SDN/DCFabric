@@ -101,116 +101,139 @@
     <div class="content container-fluid">
         <div id="middle-top" class="row-fluid">
             <div class="span12">
-                <h4 class="page-title">流表配置 <small></small></h4>
+                <h4 class="page-title">Openstack <small></small></h4>
             </div>
         </div>
         <div class="row-fluid">
             <div class="span12">
-                <div id="middle-left" class='span6'>
+                <div id="middle-left" class=''>
                     <div class="row-fluid">
                         <section class="widget">
                             <header style="padding-bottom: 20px;">
                                 <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                    交换机连接列表
+                                   添加Openstack Controller
                                 </h4>
-                                <div style="display: block;float: right;">
-                                    <div style="display: block;float: right;">
-                                    控制器IP：
-                                    <!-- <input type='text' style='width:80px;height:15px;margin-top: 10px;margin-right:20px;'> -->
-                                    <select id="control" style='width:160px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'></select>
-                                    <button type="button" class="btn btn-success btn-small" onclick="search()">查&nbsp;询</button>
-                                </div>
-                            </header>
-                            <div class="body">
-                                <table id="datatable-table" class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>源交换机</th>
-                                            <th>源交换机端口</th>
-                                            <th>目的交换机</th>
-                                            <th>目的交换机端口</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
+                                <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" data-toggle="modal" data-target="#myModal2">添加控制器</button></div>
+                                <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog" style="background-color: rgba(61, 66, 68, 1);color:#fff">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" >×</button>
+                                <h4 id="myModalLabel2" style="color:#fff">添加控制器</h4>
                             </div>
-                        </section>
-                    </div>
-                    <div class="row-fluid">
-                        <section class="widget hostbody">
-                            <header style="padding-bottom: 20px;">
-                                <h4 style="display: block;float: left;">
-                                    <i class="icon-file-alt"></i>
-                                    主机列表
-                                </h4>
-                                <div style="display: block;float: right;">
-                                    <div style="display: block;float: right;">
-                                    交换机ID：
-                                    <!-- <input type='text' style='width:80px;height:15px;margin-top: 10px;margin-right:20px;'> -->
-                                    <select id="dpid" style='width:160px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'></select>
-                                    <button id="search_btn" type="button" class="btn btn-success btn-small" onclick="searchHost()">查&nbsp;询</button>
-                                </div>
-                            </header>
-                            <div class="body">
-                                <table id="datatable-table1" class="table table-striped">
-                                    <thead>
-                                        <tr>
-                                            <th>主机IP地址</th>
-                                            <th>主机MAC地址</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody></tbody>
-                                </table>
-                            </div>
-                        </section>
-                    </div>
-                    <div class="row-fluid">
-                        <section class="widget">
-                            <header style="padding-bottom: 20px;">
-                                <h4 style="display: block;float: left;">
-                                    <i class="icon-file-alt"></i>
-                                    sFabric 设置
-                                    </h4>
-                                    <div style="display: block;float: right;">
-                                    <button type="button" class="btn btn-success btn-small" onclick="setupFabric()">初始化</button>
-                                     
+                            <div class="modal-body">
+                                <form id="user-form" class="form-horizontal label-right">
+                                    <div class="control-group">
+                                        <label class="control-label" for="ip">IP地址</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="ip" name="ip" class="span6">
+                                        </div>
                                     </div>
+                                </form>
+                                
+                            </div>
+                            <div class="modal-footer" style="background-color: rgba(61, 66, 68, 1);">
+                                <button class="btn" data-dismiss="modal">关闭</button>
+                                <button class="btn btn-primary" onclick='add()'>提交</button>
+                            </div>
+                        </div>
+                            </header>
+                            <div class="body">
+                        <table id="datatable-table3" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>IP</th>
+                                
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                        </section>
+                    </div>
+                   
+                    <div class="row-fluid">
+                        <section class="widget">
+                            <header style="padding-bottom: 20px;">
+                                <h4 style="display: block;float: left;">
+                                    <i class="icon-file-alt"></i>
+                                    网络列表
+                                    </h4>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchNetwork()">查询</button></div>
                                     </header>
+                                     <div class="body">
+                                <table id="datatable-table4" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>名称</th>
+                                            <th>id</th>
+                                            <th>是否共享</th>
+                                            <th>类型</th>
+                                            <th>租户id</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                                     </section>
                                     </div>
                            <div class="row-fluid">
-                                    <section class="widget" style="height:200px">
-                                    <header style="padding-bottom: 50px;">
+                                    <section class="widget" style="">
+                                    <header style="padding-bottom: 20px;">
                                     <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                    组Fabric设置
+                                 子网列表
                                     </h4>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchSubnets()">查询</button></div>
                                     </header>
                                     <header style="padding-bottom: 10px;">
                                     <div style="display: block;float: left;margin-top:-20px">
-                                    <form>
-                                    <textarea rows="7" cols="" style="width:400px" id="partF"></textarea>
-                                     <button type="button" class="btn btn-success btn-small" onclick="partFabric()" style="margin-top:90px">提交</button>
-                                     </form>
                                     </div>
                                     </header>
+                                     <div class="body">
+                                <table id="datatable-table5" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>名称</th>
+                                            <th>子网id</th>
+                                            <th>网络id</th>
+                                            <th>网关</th>
+                                            <th>租户id</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
                                      </section>
                                     </div>
+                                    
+                                     <div class="row-fluid">
+                        <section class="widget">
+                            <header style="padding-bottom: 20px;">
+                                <h4 style="display: block;float: left;">
+                                    <i class="icon-file-alt"></i>
+                                    port列表
+                                    </h4>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchPorts()">查询</button></div>
+                                    </header>
+                                     <div class="body">
+                                <table id="datatable-table6" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>网关ip</th>
+                                            <th>mac地址</th>
+                                            <th>子网id</th>
+                                            <th>网络id</th>
+                                            <th>租户id</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                                    </section>
+                                    </div>
                 </div>
-                <div id="middle-right" class='span6'>
-                    <section class='widget' id="canvas-bg">
-                        <header style="padding-bottom: 20px;">
-                            <h4 style="display: block;float: left;">
-                                <i class="icon-file-alt"></i>
-                                拓扑图
-                            </h4>
-                        </header>
-                        <div class="body" style="background-color: #ffffff;">
-                            <div id="chart" style="height:500px; padding:10px;"></div>
-                        </div>
-                    </section>
-                </div>
+                
             </div>
         </div>
     </div>
@@ -248,10 +271,8 @@
 <script src="../js/tables-dynamic.js"></script>
 
 <!--chart-->
-<script src="../js/echarts/echarts-plain.js" type="text/javascript"></script>
-<script src="../js/echarts/echarts.js" type="text/javascript"></script>
-<script type="text/javascript" src="../jtopo/js/jtopo-0.4.7-min.js"></script>
-<script  src="../jtopo/js/open.js"></script>
+
+
 <script type="text/javascript">
     function getControl(obj){
         $.post("../control/list",{},function(data){
@@ -261,10 +282,8 @@
                 for(var i in data){                    
                     obj.append("<option value='"+data[i].ip+"|"+data[i].port+"'>"+data[i].ip+":"+data[i].port+"</option>")
                 }
-                window.initAll();
             }
         },"json");
-        
     }
     function initDPID(value){
         $("#dpid").append("<option value='"+ value +"'>"+value+"</option>")
@@ -333,6 +352,73 @@
                 alert("error");
             }
         });
+    }
+    function add(){
+        var ip = $("#ip").val();
+        $.post("../openstack/add",{ip:ip},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("添加成功！")
+                    $("#myModal2").hide();
+                    search();
+                }else{
+                    alert("添加失败！")
+                }
+            }
+        },'json')
+    }
+    function searchController(){
+        $("#datatable-table3").hide();
+        $.post("../openstack/list",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                for(var i in data){
+                    var oper = "<button type='button' class='btn btn-danger btn-small' onclick='del(" + JSON.stringify(data[i]) + ")''>删除</button>"+
+                            "<button type='button' class='btn btn-primary btn-small' onclick='viewSwitchesInfo(" + JSON.stringify(data[i]) + ")'>查看交换机信息</button>";
+                    $("#datatable-table3 tbody").append("<tr><td>"+data[i]+"</td><td>"+oper+"</td></tr>");
+                }
+                $("#datatable-table3").show();
+            }
+        },"json");
+    }
+    function searchNetwork(){
+        $("#datatable-table4").hide();
+        $.post("../openstack/allnetwork",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                $("#datatable-table4 tbody").html("");
+                for(var i in data){
+                   $("#datatable-table4 tbody").append("<tr><td>"+data[i]["name"]+"</td><td>"+data[i]["id"]+"</td><td>"+data[i]["shared"]+"</td><td>"+data[i]["provider:network_type"]+"</td><td>"+data[i]["tenant_id"]+"</td></tr>");
+                }
+                $("#datatable-table4").show();
+            }
+        },"json");
+    }
+    function searchSubnets(){
+        $("#datatable-table5").hide();
+        $.post("../openstack/allsubnets",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                $("#datatable-table5 tbody").html("");
+                for(var i in data){
+                   $("#datatable-table5 tbody").append("<tr><td>"+data[i]["name"]+"</td><td>"+data[i]["id"]+"</td><td>"+data[i]["network_id"]+"</td><td>"+data[i]["gateway_ip"]+"</td><td>"+data[i]["tenant_id"]+"</td></tr>");
+                }
+                $("#datatable-table5").show();
+            }
+        },"json");
+    }
+    function searchPorts(){
+        $("#datatable-table6").hide();
+        $.post("../openstack/allports",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                $("#datatable-table6 tbody").html("");
+                for(var i in data){
+                   $("#datatable-table6 tbody").append("<tr><td>"+data[i]["fixed_ips"][0]["ip_address"]+"</td><td>"+data[i]["mac_address"]+"</td><td>"+data[i]["fixed_ips"][0]["subnet_id"]+"</td><td>"+data[i]["network_id"]+"</td><td>"+data[i]["tenant_id"]+"</td></tr>");
+                }
+                $("#datatable-table6").show();
+            }
+        },"json");
     }
     function search(){
         $("#dpid").html("");
@@ -426,8 +512,8 @@
         $("#datatable-table1").hide();
         $(".hostbody").hide();
         getControl($("#control"));
-    });
+        searchController();
+    })
 </script>
-
 </body>
 </html>

@@ -4,16 +4,11 @@
  */
 package com.ambimmort.sdncenter.util;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.net.HttpURLConnection;
-import java.net.URL;
+import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.apache.http.HttpEntity;
-import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
@@ -114,5 +109,61 @@ public class RestClient {
         }
         throw new IOException("POST请求失败！");
     }
+    public String get(String uri,Map<String,String> header) throws IOException {
+        CloseableHttpClient client = HttpClients.createDefault();
+        HttpGet post = new HttpGet(uri);
+        if(null!=header){
+        	for(String s : header.keySet()){
+        		post.addHeader(s, header.get(s));
+        	}
+        }
+        CloseableHttpResponse resp = client.execute(post);
+        int code = resp.getStatusLine().getStatusCode();
+        if (code == 200) {
+            HttpEntity respEntity = resp.getEntity();
+            if(null!=header){
+            	for(String s : header.keySet()){
+            		resp.addHeader(s, header.get(s));
+            	}
+            }
+            String respStr = null;
+            if (respEntity != null) {
+                respStr = EntityUtils.toString(respEntity, "utf-8");
+                Logger.getLogger(RestClient.class.getName()).log(Level.INFO, "RECEIVE: {0}", respStr);
+            }
+            return respStr;
+        }
+        throw new IOException("POST请求失败！");
+    }
+    public String post(String uri, String content,Map<String,String> header) throws IOException {
+        CloseableHttpClient client = HttpClients.createDefault();
+        HttpPost post = new HttpPost(uri);
+        if(null!=header){
+        	for(String s : header.keySet()){
+        		post.addHeader(s, header.get(s));
+        	}
+        }
+        StringEntity entity = new StringEntity(content, ContentType.create("text/json", "utf-8"));
+        post.setEntity(entity);
+        CloseableHttpResponse resp = client.execute(post);
+        if(null!=header){
+        	for(String s : header.keySet()){
+        		resp.addHeader(s, header.get(s));
+        	}
+        }
+        int code = resp.getStatusLine().getStatusCode();
+        if (code == 200) {
+            HttpEntity respEntity = resp.getEntity();
+            
+            String respStr = null;
+            if (respEntity != null) {
+                respStr = EntityUtils.toString(respEntity, "utf-8");
+                Logger.getLogger(RestClient.class.getName()).log(Level.INFO, "RECEIVE: {0}", respStr);
+            }
+            return respStr;
+        }
+        throw new IOException("POST请求失败！");
+    }
+    
     
 }
