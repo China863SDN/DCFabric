@@ -2005,7 +2005,7 @@ var prefix = "../jtopo/";
     //设置刷新频率
     function updateInterval(interval){
         //alert(interval);
-        $.post(topo_path_interval_save,{interval:interval,ip:ipp,port:portt},function(dataObj){
+        $.post(topo_path_interval_save,{interval:interval,ip:ipp, port:portt},function(dataObj){
             if(dataObj.status == 'true'){
                 alert(dataObj.message);
                 refresh_Interval = interval;
