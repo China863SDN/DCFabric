@@ -1178,18 +1178,20 @@ var prefix = "../jtopo/";
     var currentVirtualNetId;//当前虚拟网ID
     var lastPopShowContent;//内容弹出框，最后显示的内容，可能是 虚拟网节点 vn，检索结果 rs
     //
+    var ipp="";
+    var portt="";
     function initAll(){
         initUI();
 
         Topo.loadHostDatas = function(switchId){
-            return $.ajax({ url: exchange_host+"?switch_id=" + switchId});
+            return $.ajax({ url: exchange_host+"?ip="+ipp+"&port="+portt+"switch_id=" + switchId});
         };
         Topo.loadDynamicDatas = function(){
             //return $.ajax({url: dynamic_add_delete});
         };
         // 初始化Canvas内容
-        var ipp =$("#control").val().split("|")[0];
-        var portt =$("#control").val().split("|")[1];
+        ipp =$("#control").val().split("|")[0];
+        portt =$("#control").val().split("|")[1];
         $.when($.ajax({ url: exchange_tree+"?ip="+ipp+"&port="+portt}), $.ajax({url: exchange_circle+"?ip="+ipp+"&port="+portt})).done(function(treeData, circleData){
             Topo.initTree(treeData[0], $('#canvas_tree')[0]);
             Topo.initCircle(circleData[0], $('#canvas_circle')[0]);
@@ -1995,7 +1997,7 @@ var prefix = "../jtopo/";
 
     //加载刷新频率
     function loadInterval(){
-        $.ajax({ url: topo_path_interval_load, context: document.body, success: function(data){
+        $.ajax({ url: topo_path_interval_load+"?ip="+ipp+"&port="+portt, context: document.body, success: function(data){
             refresh_Interval = data.interval;
         }});
     }
@@ -2003,7 +2005,7 @@ var prefix = "../jtopo/";
     //设置刷新频率
     function updateInterval(interval){
         //alert(interval);
-        $.post(topo_path_interval_save,{interval:interval},function(dataObj){
+        $.post(topo_path_interval_save,{interval:interval,ip:ipp,port:portt},function(dataObj){
             if(dataObj.status == 'true'){
                 alert(dataObj.message);
                 refresh_Interval = interval;
@@ -2113,7 +2115,7 @@ var prefix = "../jtopo/";
 
     //加载最优路径
     function loadOptimalPath(nodeA,nodeB){
-        $.post(topo_path_optimal_path,{srcId:nodeA.id,dstId:nodeB.id},function(dataObj){
+        $.post(topo_path_optimal_path,{srcId:nodeA.id,dstId:nodeB.id,ip:ipp,port:portt},function(dataObj){
             Topo.fadeAllLinks();//淡化所有节点
             Topo.boldLink(dataObj);
         });
@@ -2221,7 +2223,7 @@ var prefix = "../jtopo/";
     var rate_src_node;
     var rate_dst_node;
     function refreshRateDetail(){
-        $.get(topo_path_detail_rate+'?srcNodeId='+ rate_src_node.id+'&dstNodeId='+rate_dst_node.id,function(dataObj){
+        $.get(topo_path_detail_rate+'?ip='+ipp+'&port='+portt+'&srcNodeId='+ rate_src_node.id+'&dstNodeId='+rate_dst_node.id,function(dataObj){
             console.log('refresh rate detail div.........');
 
             var detailContent = '<table  width="100%" id="rateDetailTable">'
@@ -2341,7 +2343,7 @@ var prefix = "../jtopo/";
 
     //整体刷新线条颜色
     function refreshLinkColor(){
-        $.ajax({ url: topo_path_rate_used, type: "POST", success: function(data){
+        $.ajax({ url: topo_path_rate_used+"?ip="+ipp+"&port="+portt, type: "POST", success: function(data){
             //加载到数据...动态刷新
             for(var i=0;i<data.length;i++){
                 var srcNodeId = data[i].srcNodeId;
