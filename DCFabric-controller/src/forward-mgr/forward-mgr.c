@@ -32,6 +32,7 @@
 #include "l3.h"
 #include "fabric_arp.h"
 #include "fabric_impl.h"
+#include "fabric_openstack_arp.h"
 #include "../topo-mgr/topo-mgr.h"
 #include "../user-mgr/user-mgr.h"
 #include "../tenant-mgr/tenant-mgr.h"
@@ -40,6 +41,7 @@
 #include "openflow-13.h"
 
 forward_handler_t g_default_forward_handler;
+extern UINT4 g_openstack_on;
 
 static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
@@ -47,10 +49,6 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
     UINT4 host_ip = ntohl(arp->sendip);
     mac_user_t *p_user_dst = NULL;
 
-    if(get_fabric_state()){
-		fabric_arp_handle(sw, packet_in_info);
-		return GN_OK;
-    }
     //记录源MAC到MAC端口表中
     mac_user_t *p_user_src = search_mac_user(arp->eth_head.src);
     if (NULL == p_user_src)
@@ -80,6 +78,14 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
         }
     }
 
+    if(get_fabric_state()){
+    	if(	g_openstack_on == 0 ){
+    		fabric_arp_handle(sw, packet_in_info);
+    	}else{
+    		fabric_openstack_arp_handle(sw,packet_in_info);
+    	}
+		return GN_OK;
+    }
     if(arp->opcode == htons(1))         //arp request
     {
         if (arp->targetip == 0)
@@ -146,11 +152,6 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
     mac_user_t *p_user_src = NULL;
     mac_user_t *p_user_dst = NULL;
 
-    if(get_fabric_state()){
-    	fabric_ip_handle(sw,packet_in_info);
-    	return GN_ERR;
-    }
-
     //记录源MAC到MAC端口表中
     p_user_src = search_mac_user(p_ip->eth_head.src);
     if (NULL == p_user_src)
@@ -179,7 +180,14 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
             p_user_src->ipv4 = host_ip;
         }
     }
-
+    if(get_fabric_state()){
+    	if(	g_openstack_on == 0 ){
+    		fabric_ip_handle(sw,packet_in_info);
+    	}else{
+    		fabric_openstack_ip_handle(sw,packet_in_info);
+    	}
+    	return GN_ERR;
+    }
     if(0 == memcmp(p_ip->eth_head.dest, g_controller_mac, 6))   //如果目的MAC为控制器网关的MAC, 则为跨网段转发
     {
         UINT4 gw_ip = find_gateway_ip(p_ip->dest);                 //查找目的ip对应的网关

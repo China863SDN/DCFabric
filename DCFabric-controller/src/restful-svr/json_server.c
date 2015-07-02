@@ -46,6 +46,7 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "fabric_impl.h"
+#include "openstack_app.h"
 //从url中解析附带的参数
 static void get_url_argument(const char *url, key_value_t *arg)
 {
@@ -3655,14 +3656,118 @@ static INT1 *get_neutron_port(const INT1 *url, json_t *root)
 
 static INT1 *post_neutron_network(const INT1 *url, json_t *root)
 {
+	json_t *networks=NULL,*temp = NULL;
+	char tenant_id[48] ={0};
+	char network_id[48] = {0};
+	UINT1 shared=0;
+	networks = json_find_first_label(root, "network");
+	if(networks){
+		json_t *network  = networks->child;
+		if(network){
+			temp = json_find_first_label(network, "tenant_id");
+			if(temp){
+//				printf("tenantid:%s \n",temp->child->text);
+				strcpy(tenant_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(network, "id");
+			if(temp){
+//				printf("id:%s \n",temp->child->text);
+				strcpy(network_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(network, "shared");
+			if(temp){
+				if(temp->child->type==JSON_TRUE){
+					shared=1;
+					printf("shared:%s\n","True");
+				}else if(temp->child->type==JSON_FALSE){
+					shared=0;
+					printf("shared:%s\n","False");
+				}else{
+					printf("Jon_type:error.\n");
+				}
+				json_free_value(&temp);
+			}
+			json_free_value(&network);
+		}
+	}
+    update_openstack_app_network(tenant_id,network_id,shared);
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
-
     return reply;
 }
 
 static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 {
+	json_t *subnets=NULL,*temp = NULL;
+	char tenant_id[48] ={0};
+	char network_id[48] = {0};
+	char subnet_id[48] = {0};
+	char cidr[30] = {0};
+	INT4 gateway_ip = 0, start_ip = 0, end_ip = 0;
+	subnets = json_find_first_label(root, "subnet");
+	UINT4 longtemp=0;
+	if(subnets){
+		json_t *subnet  = subnets->child;
+		if(subnet){
+			temp = json_find_first_label(subnet, "tenant_id");
+			if(temp){
+//				printf("tenantid:%s \n",temp->child->text);
+				strcpy(tenant_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(subnet, "network_id");
+			if(temp){
+//				printf("network_id:%s \n",temp->child->text);
+				strcpy(network_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(subnet, "id");
+			if(temp){
+//				printf("subnet_id:%s \n",temp->child->text);
+				strcpy(subnet_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(subnet, "cidr");
+			if(temp){
+//				printf("cidr:%s \n",temp->child->text);
+				strcpy(cidr,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(subnet, "gateway_ip");
+			if(temp){
+				longtemp = inet_addr(temp->child->text) ;
+				gateway_ip = longtemp;
+//				printf("gateway_ip:%u \n",gateway_ip);
+				json_free_value(&temp);
+			}
+			json_t *allocations = json_find_first_label(subnet, "allocation_pools");
+			if(allocations){
+				json_t *allocation = allocations->child->child;
+				while(allocation){
+					temp = json_find_first_label(allocation, "start");
+					if(temp){
+						longtemp  = inet_addr(temp->child->text) ;
+						start_ip = longtemp;
+//						printf("start_ip:%u \n",start_ip);
+						json_free_value(&temp);
+					}
+					temp = json_find_first_label(allocation, "end");
+					if(temp){
+						longtemp = inet_addr(temp->child->text) ;
+						end_ip = longtemp;
+//						printf("end_ip:%u \n",end_ip);
+						json_free_value(&temp);
+					}
+					allocation=allocation->next;
+				}
+				json_free_value(&allocations);
+			}
+			json_free_value(&subnet);
+		}
+	}
+    update_openstack_app_subnet(tenant_id,network_id,subnet_id,gateway_ip,start_ip,end_ip,cidr);
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
 
@@ -3671,6 +3776,86 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 
 static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 {
+	json_t *ports=NULL,*temp = NULL;
+	char tenant_id[48] ={0};
+	char network_id[48] = {0};
+	char subnet_id[48] = {0};
+	char port_id[48] = {0};
+	//char *tenant_id = NULL,*network_id = NULL,*subnet_id = NULL,*port_id = NULL;
+	char port_type[40] = {0};
+	char* computer = "compute:nova";
+	char* dhcp="network:dhcp";
+	INT4 ip = 0;
+	UINT1 mac[6]={0};
+	UINT4 port_number = 0;
+	ports = json_find_first_label(root, "port");
+	if(ports){
+		json_t *port  = ports->child;
+		if(port){
+			temp = json_find_first_label(port, "tenant_id");
+			if(temp){
+//				printf("tenantid:%s \n",temp->child->text);
+				strcpy(tenant_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(port, "network_id");
+			if(temp){
+//				printf("network_id:%s \n",temp->child->text);
+				strcpy(network_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(port, "id");
+			if(temp){
+//				printf("port_id:%s \n",temp->child->text);
+				strcpy(port_id,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(port, "device_owner");
+			if(temp){
+//				printf("device_owner:%s \n",temp->child->text);
+//				port_type = temp->child->text;
+				strcpy(port_type,temp->child->text);
+				json_free_value(&temp);
+			}
+			temp = json_find_first_label(port, "mac_address");
+			if(temp){
+//				printf("mac_address:%s \n",temp->child->text);
+				macstr2hex(temp->child->text,mac);
+				json_free_value(&temp);
+			}
+			json_t *fix_ips = json_find_first_label(port, "fixed_ips");
+			if(fix_ips){//ip = temp->child->text;
+				json_t *fix_ip = fix_ips->child->child;
+				while(fix_ip){
+					temp = json_find_first_label(fix_ip, "subnet_id");
+					if(temp){
+//						printf("subnet_id:%s \n",temp->child->text);
+						strcpy(subnet_id,temp->child->text);
+						json_free_value(&temp);
+					}
+					temp = json_find_first_label(fix_ip, "ip_address");
+					if(temp){
+//						printf("ip_address:%s \n",temp->child->text);
+						UINT4 longtemp = inet_addr(temp->child->text) ;
+						ip = longtemp;
+//						printf("ip_address:%u \n",ip);
+						json_free_value(&temp);
+					}
+					fix_ip=fix_ip->next;
+				}
+				json_free_value(&fix_ips);
+			}
+			json_free_value(&port);
+		}
+		if(strcmp(port_type,computer)==0){
+			update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+		}else if(strcmp(port_type,dhcp)==0){
+			update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+		}else{
+			update_openstack_app_gateway_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+		}
+	}
+
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
 
@@ -3695,6 +3880,7 @@ static INT1 *put_neutron_subnet(const INT1 *url, json_t *root)
 
 static INT1 *put_neutron_port(const INT1 *url, json_t *root)
 {
+	printf("put_neutron_port 3847\n");
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
 
@@ -3760,6 +3946,7 @@ INT1 *proc_restful_request(UINT1 type, const INT1 *url, json_t *root)
     {
         if (p_handles[i].used == 1)
         {
+        	//printf(" test-openstack:%s   %s  /n",url,p_handles[i].url);
             if (strncmp(url, p_handles[i].url, p_handles[i].url_len) == 0)
             {
                 reply = p_handles[i].handler(url, root);
@@ -3875,17 +4062,17 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/member/json", del_tenant_member);
 
     ret += register_restful_handler(HTTP_GET, "/controller/nb/v2/neutron/networks", get_neutron_network);
-    ret += register_restful_handler(HTTP_POST, "/controller/nb/v2/neutron/networks", post_neutron_network);
+    ret += register_restful_handler(HTTP_POST, "/gn/neutron/networks", post_neutron_network);
     ret += register_restful_handler(HTTP_PUT, "/controller/nb/v2/neutron/networks", put_neutron_network);
     ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/networks", del_neutron_network);
 
     ret += register_restful_handler(HTTP_GET, "/controller/nb/v2/neutron/subnets", get_neutron_subnet);
-    ret += register_restful_handler(HTTP_POST, "/controller/nb/v2/neutron/subnets", post_neutron_subnet);
+    ret += register_restful_handler(HTTP_POST, "/gn/neutron/subnets", post_neutron_subnet);
     ret += register_restful_handler(HTTP_PUT, "/controller/nb/v2/neutron/subnets", put_neutron_subnet);
     ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/networks", del_neutron_subnet);
 
     ret += register_restful_handler(HTTP_GET, "/controller/nb/v2/neutron/ports", get_neutron_port);
-    ret += register_restful_handler(HTTP_POST, "/controller/nb/v2/neutron/ports", post_neutron_port);
+    ret += register_restful_handler(HTTP_POST, "/gn/neutron/ports", post_neutron_port);
     ret += register_restful_handler(HTTP_PUT, "/controller/nb/v2/neutron/ports", put_neutron_port);
     ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/ports", del_neutron_port);
 

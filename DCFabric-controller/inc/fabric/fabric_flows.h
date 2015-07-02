@@ -35,7 +35,7 @@
 #define FABRIC_IMPL_IDLE_TIME_OUT 0
 #define FABRIC_ARP_HARD_TIME_OUT 0
 #define FABRIC_ARP_IDLE_TIME_OUT 100
-#define FABRIC_FIND_HOST_IDLE_TIME_OUT 0
+#define FABRIC_FIND_HOST_IDLE_TIME_OUT 100
 
 #define FABRIC_PRIORITY_HOST_INPUT_FLOW 5
 #define FABRIC_PRIORITY_SWITCH_INPUT_FLOW 10
@@ -63,8 +63,10 @@ void install_fabric_first_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 void install_fabric_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 
 void install_fabric_same_switch_flow(gn_switch_t * sw,UINT1* mac, UINT4 port);
+void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 port);
 void install_fabric_output_flow(gn_switch_t * sw,UINT1* mac, UINT4 port);
 void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac,UINT4 tag);
+void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 tag);
 
 void init_fabric_flows();
 void delete_fabric_flow(gn_switch_t *sw);

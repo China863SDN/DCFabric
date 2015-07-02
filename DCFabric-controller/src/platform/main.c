@@ -46,6 +46,7 @@
 #include "../flow-mgr/flow-mgr.h"
 #include "../ovsdb/ovsdb.h"
 #include "../event/event_service.h"
+#include "../restful-svr/openstack-server.h"
 
 #define START_DATE __DATE__  // compile date.
 #define START_TIME __TIME__  // compile time.
@@ -338,6 +339,8 @@ INT4 module_init()
 
     //����module_init
     mod_initcalls();
+
+    initOpenstackFabric();
 
     return GN_OK;
 }

@@ -1,22 +1,3 @@
-/*
- * GNFlush SDN Controller GPL Source Code
- * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
- *
- * This file is part of the GNFlush SDN Controller. GNFlush SDN
- * Controller is a free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, , see <http://www.gnu.org/licenses/>.
- */
-
 /******************************************************************************
 *                                                                             *
 *   File Name   : restful-svr.c           *
@@ -29,6 +10,7 @@
 
 #include "restful-svr.h"
 #include "json_server.h"
+#include "timer.h"
 
 pthread_t g_restful_pid;
 UINT4 g_restful_port = 8081;
@@ -39,34 +21,44 @@ restful_handles_t g_restful_post_handles[REST_CAPACITY];
 restful_handles_t g_restful_put_handles[REST_CAPACITY];
 restful_handles_t g_restful_delete_handles[REST_CAPACITY];
 
-struct connection_info_struct
+struct connection_info
 {
-    UINT4 connectiontype;
-    struct MHD_PostProcessor *postprocessor;
-    FILE *fp;
-    UINT4 conn_seq;
+    UINT4 connection_type;
+    UINT8 connection_time;
 };
+
+static BOOL is_json(const INT1 *json_string, UINT4 string_len)
+{
+    UINT4 brace_left_cnt = 0;
+    UINT4 brace_right_cnt = 0;
+    UINT4 offset = 0;
+
+    for(; offset < string_len; offset++)
+    {
+        if(json_string[offset] == '{')
+        {
+            brace_left_cnt++;
+        }
+        else if(json_string[offset] == '}')
+        {
+            brace_right_cnt++;
+        }
+    }
+
+    if((brace_left_cnt > 0) && (brace_left_cnt == brace_right_cnt))
+    {
+        return TRUE;
+    }
+
+    return FALSE;
+}
 
 static void request_completed(void *cls, struct MHD_Connection *connection,
         void **con_cls, enum MHD_RequestTerminationCode toe)
 {
-    struct connection_info_struct *con_info = *con_cls;
+    struct connection_info *conn_info = *con_cls;
 
-    if (NULL == con_info)
-        return;
-
-    if (con_info->connectiontype == HTTP_POST)
-    {
-        if (NULL != con_info->postprocessor)
-        {
-            MHD_destroy_post_processor(con_info->postprocessor);
-        }
-
-        if (con_info->fp)
-            fclose(con_info->fp);
-    }
-
-    free(con_info);
+    free(conn_info);
     *con_cls = NULL;
 }
 
@@ -91,41 +83,6 @@ static INT4 send_page (struct MHD_Connection *connection, const INT1 *page, INT4
 
     MHD_destroy_response(response);
     return ret;
-}
-
-static INT4 iterate_post(void *coninfo_cls, enum MHD_ValueKind kind,
-        const char * key, const char *filename, const char *content_type,
-        const char *transfer_encoding, const char *data, uint64_t off,
-        size_t size)
-{
-    struct connection_info_struct *con_info = coninfo_cls;
-    FILE *fp;
-
-    if (0 != strcmp(key, "file"))
-        return MHD_NO;
-
-    if (!con_info->fp)
-    {
-        if (NULL != (fp = fopen(filename, "rb")))
-        {
-            fclose(fp);
-            return MHD_NO;
-        }
-
-        con_info->fp = fopen(filename, "ab");
-        if (!con_info->fp)
-        {
-            return MHD_NO;
-        }
-    }
-
-    if (size > 0)
-    {
-        if (!fwrite(data, size, sizeof(char), con_info->fp))
-            return MHD_NO;
-    }
-
-    return MHD_YES;
 }
 
 static INT1 *proc_rest_msg(const INT1 *method, const INT1 *url, const INT1 *upload_data)
@@ -172,35 +129,14 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
 
     if (NULL == *con_cls)
     {
-        struct connection_info_struct * con_info;
-        con_info = malloc(sizeof(struct connection_info_struct));
-        if (NULL == con_info)
+        struct connection_info *conn_info = (struct connection_info *)gn_malloc(sizeof(struct connection_info));
+        if(NULL == conn_info)
         {
             return MHD_NO;
         }
 
-        con_info->fp = NULL;
-
-        if (0 == strcmp(method, "POST") || 0 == strcmp(method, "DELETE")
-                || 0 == strcmp(method, "PUT") || 0 == strcmp(method, "PATCH")
-                || 0 == strcmp(method, "HEAD"))
-        {
-//            MHD_set_connection_value(connection, MHD_RESPONSE_HEADER_KIND, "charset", "UTF-8");
-            con_info->postprocessor = MHD_create_post_processor(connection,
-                    POSTBUFFERSIZE, iterate_post, (void *) con_info);
-
-            if (NULL == con_info->postprocessor)
-            {
-                LOG_PROC("ERROR", "Create post processor failed");
-                free(con_info);
-                return MHD_NO;
-            }
-
-            con_info->connectiontype = HTTP_POST;
-        }
-
-        *con_cls = (void *) con_info;
-
+        conn_info->connection_time = g_cur_sys_time.tv_sec;
+        *con_cls = (void *)conn_info;
         return MHD_YES;
     }
 
@@ -222,39 +158,43 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
             || 0 == strcmp(method, "PUT") || 0 == strcmp(method, "PATCH")
             || 0 == strcmp(method, "HEAD"))
     {
-        struct connection_info_struct *con_info = *con_cls;
-        if (upload_data)
-        {
-            char *tmp = (char*) upload_data;
-            for (idx = *upload_data_size; idx > 0; --idx)
-            {
-                if ('}' == tmp[idx])
-                {
-                    tmp[idx + 1] = '\0';
-                    break;
-                }
-            }
-
-            LOG_PROC("INFO", "Restful[%s]: [%s] %s\n", method, url, upload_data);
-            g_rest_reply = proc_rest_msg(method, url, upload_data);
-        }
+        struct connection_info *conn_info = *con_cls;
+        conn_info->connection_type = HTTP_POST;
 
         if (*upload_data_size)
         {
-            MHD_post_process(con_info->postprocessor, upload_data, *upload_data_size);
-            memset((char *) upload_data, 0x0, *upload_data_size);    //清空缓冲区
-            *upload_data_size = 0;
+            if(is_json(upload_data, *upload_data_size))
+            {
+                INT1 *tmp = (char*) upload_data;
+                for (idx = *upload_data_size; idx > 0; --idx)
+                {
+                    if ('}' == tmp[idx])
+                    {
+                        tmp[idx + 1] = '\0';
+                        break;
+                    }
+                }
+
+                LOG_PROC("INFO", "Restful[%s]: [%s] %s\n", method, url, upload_data);
+                g_rest_reply = proc_rest_msg(method, url, upload_data);
+
+                memset((char *) upload_data, 0x0, *upload_data_size);    //清空缓冲区
+                *upload_data_size = 0;
+            }
+            else
+            {
+                if(conn_info->connection_time - g_cur_sys_time.tv_sec > HTTP_TIMEOUT)
+                {
+                    memset((char *) upload_data, 0x0, *upload_data_size);    //清空缓冲区
+                    *upload_data_size = 0;
+                    return MHD_NO;
+                }
+            }
 
             return MHD_YES;
         }
         else
         {
-            if (NULL != con_info->fp)
-            {
-                fclose(con_info->fp);
-                con_info->fp = NULL;
-            }
-
             ret = send_page(connection, g_rest_reply, MHD_HTTP_OK);
             memset((char *) upload_data, 0x0, *upload_data_size);    //清空缓冲区
             *upload_data_size = 0;
@@ -282,7 +222,7 @@ static void *start_httpd_service(void *para)
 
     while(1)
     {
-        usleep(100);
+        usleep(5000);
     }
 
     (void)getchar();

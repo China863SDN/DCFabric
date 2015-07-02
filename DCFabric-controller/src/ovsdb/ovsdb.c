@@ -16,15 +16,16 @@ INT4 g_ovsdb_sockfd;
 fd_set g_ovsdb_recvmask;
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovsµÄopenflow°æ±¾
-UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstackÍøÂçÀàÐÍ gre/vxlan
+UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovsï¿½ï¿½openflowï¿½æ±¾
+UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstackï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ gre/vxlan
 
 UINT1 g_ovsdb_clients[OVSDB_MAX_CONNECTION] = { 0 };
-UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clientsµÄ±¸·Ý  ÓÃÓÚÉ¾³ý¶Ë¿ÚÁ¬½ÓµÄ½»»»»ú
+UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clientsï¿½Ä±ï¿½ï¿½ï¿½  ï¿½ï¿½ï¿½ï¿½É¾ï¿½ï¿½Ë¿ï¿½ï¿½ï¿½ï¿½ÓµÄ½ï¿½ï¿½ï¿½ï¿½ï¿½
 UINT4 g_ovsdb_clients_ip[OVSDB_MAX_CONNECTION] = { 0 };
 
 ovsdb_server_t g_ovsdb_nodes[OVSDB_MAX_CONNECTION];
-UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdb½Ó¿Ú£¬Ä¬ÈÏ¶Ë¿Ú6640
+UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdbï¿½Ó¿Ú£ï¿½Ä¬ï¿½Ï¶Ë¿ï¿½6640
+UINT4 g_ovsdb_turnel_on = 1;
 
 INT4 ovsdb_connect_quit()
 {
@@ -673,6 +674,9 @@ void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
     INT1 *compute_ip = NULL;
 
     ovsdb_server_t *remote_node = NULL;
+    if(g_ovsdb_turnel_on == 0){
+    	return;
+    }
 
     for (index = 0; index < OVSDB_MAX_CONNECTION; index++)
     {
@@ -985,7 +989,7 @@ BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
 {
     json_t *controller = NULL;
 
-    //ÒÑÓÐController
+    //ï¿½ï¿½ï¿½ï¿½Controller
     controller = json_find_first_label(result->child, "Controller");
     if (controller)
     {
@@ -1160,10 +1164,10 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                             LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[0].name, g_ovsdb_nodes[seq].bridge[0]._uuid);
                             sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
 
-                            //ÉèÖÃ¿ØÖÆÆ÷
+                            //ï¿½ï¿½ï¿½Ã¿ï¿½ï¿½ï¿½ï¿½ï¿½
                             set_controller(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, controller_ip);
 
-                            //ÐÂ½¨port: br-int
+                            //ï¿½Â½ï¿½port: br-int
                             add_port(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, g_ovsdb_nodes[seq].bridge[0].name);
                             add_tunnel(&g_ovsdb_nodes[seq], &g_ovsdb_nodes[seq].bridge[0]);
                             g_ovsdb_nodes[seq].bridge[0].is_using = TRUE;
@@ -1254,7 +1258,7 @@ void *ovsdb_recv_msg(void *para)
     struct timeval wait;
     wait.tv_sec = 5;
     wait.tv_usec = 0;
-    UINT4 clientip = 0;    //ÍøÂç×Ö½ÚÐò
+    UINT4 clientip = 0;    //ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
     UINT2 client_port = 0;
     INT1 *p_str = NULL;
     INT4 len = 0;
@@ -1284,8 +1288,8 @@ void *ovsdb_recv_msg(void *para)
             memset(&g_ovsdb_addr, 0, sizeof(struct sockaddr_in));
             socklen_t size = sizeof(struct sockaddr);
 
-            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //³¤Á¬½ÓÆäÊµÖ»acceptÒ»´Î
-            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //ÍøÂç×Ö½ÚÐò
+            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ÊµÖ»acceptÒ»ï¿½ï¿½
+            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
             client_port = *(UINT2 *) &g_ovsdb_addr.sin_port;
 
             LOG_PROC("INFO", "New OVSDB connected[%s:%d]", inet_htoa(ntohl(clientip)),ntohs(client_port));
@@ -1328,7 +1332,7 @@ void *ovsdb_recv_msg(void *para)
             {
                 if (FD_ISSET(g_ovsdb_clients[index], &recvmask))
                 {
-                    //Ò»´ÎÊÕÈ¡BUFF_LEN¸ö×Ö½Ú´æµ½¶ÔÓ¦½»»»»úµÄ»º´æÖÐ
+                    //Ò»ï¿½ï¿½ï¿½ï¿½È¡BUFF_LENï¿½ï¿½ï¿½Ö½Ú´æµ½ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä»ï¿½ï¿½ï¿½ï¿½ï¿½
                     do
                     {
                         recv_len += read(g_ovsdb_clients[index], ovsdb_buff + recv_len, OVSDB_BUFF_LEN - recv_len);
@@ -1381,9 +1385,10 @@ void *ovsdb_recv_msg(void *para)
 INT4 ovsdb_connect_init()
 {
     struct timeval wait;
+
     wait.tv_sec = 1;
     wait.tv_usec = 0;
-
+    char * value = NULL;
     INT4 tcp_serv_fd = 0;
     UINT4 ssize = sizeof(struct sockaddr_in);
 
@@ -1392,6 +1397,8 @@ INT4 ovsdb_connect_init()
     tcpsaddr.sin_family = AF_INET;
     tcpsaddr.sin_port = htons(g_ovsdb_port);    //htons(SERV_PORT);
     tcpsaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+    value = get_value(g_controller_configure, "[ovsdb_conf]", "ovsdb_tunnel_on");
+    g_ovsdb_turnel_on = (NULL == value)?1:atoi(value);
 
     tcp_serv_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (tcp_serv_fd == -1)
@@ -1422,14 +1429,14 @@ INT4 ovsdb_connect_init()
 
 INT4 init_ovsdb()
 {
-    //³õÊ¼»¯Á¬½Ó¹¤×÷
+    //ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½Ó¹ï¿½ï¿½ï¿½
     g_ovsdb_sockfd = ovsdb_connect_init();
     if (g_ovsdb_sockfd < 0)
     {
         return GN_ERR;
     }
 
-    //recvÏß³Ì
+    //recvï¿½ß³ï¿½
     if (pthread_create(&g_ovsdb_recv_tid, NULL, ovsdb_recv_msg, NULL))
     {
         ovsdb_connect_quit();

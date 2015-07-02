@@ -179,7 +179,7 @@ typedef  struct  st_ipv6
 typedef struct st_t802_1q
 {
     UINT2 proto;
-    UINT2 vlan;           //4,    12      сеох╪╤ + vlanid
+    UINT2 vlan;           //4,    12      О©╫О©╫О©╫х╪О©╫ + vlanid
     UINT1 data[0];
 }t802_1q_t;
 

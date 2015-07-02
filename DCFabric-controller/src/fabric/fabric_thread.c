@@ -150,7 +150,7 @@ void* fabric_arp_flood_thread(){
 	// initialize the flood queue
 	init_fabric_arp_flood_queue();
 
-	printf("fabric_flood_thread init \n");
+	LOG_PROC("INFO","fabric_flood_thread init!");
 	while(g_fabric_arp_flood_flag){
 		sem_wait(&fabric_arp_flood_sem);
 		while(is_fabric_arp_flood_queue_empty()){
@@ -165,7 +165,7 @@ void* fabric_arp_flood_thread(){
 	}
 	// Destroy the flood queue
 	destory_fabric_arp_flood_queue();
-	printf("fabric_flood_thread end! \n");
+	LOG_PROC("INFO","fabric_flood_thread end!");
 	return NULL;
 };
 
@@ -179,7 +179,7 @@ void* fabric_ip_flood_thread(){
 	// initialize the ip flood queue
 	init_fabric_ip_flood_queue();
 
-	printf("fabric_ip_flood_thread init \n");
+	LOG_PROC("INFO","fabric_ip_flood_thread init!");
 	while(g_fabric_ip_flood_flag){
 		sem_wait(&fabric_ip_flood_sem);
 		while(is_fabric_ip_flood_queue_empty()){
@@ -194,7 +194,7 @@ void* fabric_ip_flood_thread(){
 	}
 	// Destroy the ip flood queue
 	destory_fabric_ip_flood_queue();
-	printf("fabric_ip_flood_thread end! \n");
+	LOG_PROC("INFO","fabric_ip_flood_thread end!");
 	return NULL;
 };
 /*
@@ -206,7 +206,7 @@ void* fabric_flow_thread(){
 	// initialize the flood queue
 	init_fabric_flow_queue();
 
-	printf("fabric_flow_thread init \n");
+	LOG_PROC("INFO","fabric_flow_thread init!");
 	while(g_fabric_flow_flag){
 		sem_wait(&fabric_flow_sem);
 		while(is_fabric_flow_queue_empty()){
@@ -226,7 +226,7 @@ void* fabric_flow_thread(){
 	}
 	// Destroy the flood queue
 	destroy_fabric_flow_queue();
-	printf("fabric_flow_thread end! \n");
+	LOG_PROC("INFO","fabric_flow_thread end! ");
 	return NULL;
 };
 
@@ -237,12 +237,12 @@ void* fabric_host_thread(){
 	// initialize the host queue
 	init_fabric_host_queue();
 
-	printf("fabric_host_thread init \n");
+	LOG_PROC("INFO","fabric_host_thread init !");
 	while(g_fabric_host_flag){
 		sem_wait(&fabric_host_sem);
 
 		while(is_fabric_host_queue_empty()){
-			printf("%s : queue is :%d \n",FN,is_fabric_host_queue_empty());
+//			printf("%s : queue is :%d \n",FN,is_fabric_host_queue_empty());
 			host_queue_node = get_head_fabric_host_from_queue();
 			// download host flow
 			install_fabric_output_flow(host_queue_node->sw,host_queue_node->mac,host_queue_node->port);
@@ -267,12 +267,12 @@ void* fabric_host_thread(){
 			}
 			host_queue_node = pop_fabric_host_from_queue();
 			delete_fabric_host_queue_node(host_queue_node);
-			printf("%s end\n",FN);
+//			printf("%s end\n",FN);
 		}
 	}
 	// Destroy the host queue
 	destroy_fabric_host_queue();
-	printf("fabric_host_thread end! \n");
+	LOG_PROC("INFO","fabric_host_thread end!");
 	return NULL;
 };
 /*****************************
