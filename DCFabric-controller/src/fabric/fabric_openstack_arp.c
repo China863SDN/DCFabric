@@ -179,11 +179,15 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 			//flood
 			fabric_openstack_packet_flood(packet_in);
 		}else{
-			LOG_PROC("INFO","IP Handle : SETUP FLOWS!");
-//			fabric_openstack_show_port(src_port);
-//			fabric_openstack_show_port(dst_port);
+			LOG_PROC("INFO","IP Handle : SETUP FLOWS & PACKET OUT!");
+
 			//setup flow
-			fabric_openstack_install_fabric_flows(src_port,dst_port);
+			if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,src_subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,src_subnet)){
+				fabric_openstack_show_port(src_port);
+				fabric_openstack_show_port(dst_port);
+				fabric_openstack_install_fabric_flows(src_port,dst_port);
+			}
+
 			// packet out
 			fabric_openstack_packet_output(dst_port->sw,packet_in,dst_port->port);
 		}
@@ -250,16 +254,16 @@ void fabric_openstack_arp_request_handle(gn_switch_t *sw, packet_in_info_t *pack
 		// flood
 		fabric_openstack_packet_flood(packet_in);
 	}else{
-		LOG_PROC("INFO","ARP REQUEST Handle : SETUP FLOWS!");
-		// show & check
-		//fabric_openstack_show_port(src_port);
-		//fabric_openstack_show_port(dst_port);
+		LOG_PROC("INFO","ARP REQUEST Handle : SETUP FLOWS & PACKET OUT!");
 
 		//setup flow
 		// to gateway & dhcp flows is fobidden if necessary
-//		if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,subnet)){
-		fabric_openstack_install_fabric_flows(src_port,dst_port);
-//		}
+		if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,subnet)){
+			// show & check
+			fabric_openstack_show_port(src_port);
+			fabric_openstack_show_port(dst_port);
+			fabric_openstack_install_fabric_flows(src_port,dst_port);
+		}
 		// packet out
 		fabric_openstack_packet_output(dst_port->sw,packet_in,dst_port->port);
 	}
@@ -269,6 +273,7 @@ void fabric_openstack_arp_request_handle(gn_switch_t *sw, packet_in_info_t *pack
 void fabric_openstack_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	openstack_port_p src_port = NULL;
 	openstack_port_p dst_port = NULL;
+	openstack_subnet_p subnet = NULL;
 	arp_t *arp = (arp_t *)(packet_in->data);
 //	printf("%s\n", FN);
 //	printf("source ip  ");
@@ -303,13 +308,15 @@ void fabric_openstack_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet
 		// flood
 		fabric_openstack_packet_flood(packet_in);
 	}else{
-		LOG_PROC("INFO","ARP RPLAY Handle : SETUP FLOWS!");
-//		fabric_openstack_show_port(src_port);
-//		fabric_openstack_show_port(dst_port);
+		LOG_PROC("INFO","ARP RPLAY Handle : SETUP FLOWS & PACKET OUT!");
 
+		subnet =find_openstack_app_subnet_by_subnet_id(src_port->subnet_id);
 		// download flows
-		fabric_openstack_install_fabric_flows(src_port,dst_port);
-
+		if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,subnet)){
+			fabric_openstack_show_port(src_port);
+			fabric_openstack_show_port(dst_port);
+			fabric_openstack_install_fabric_flows(src_port,dst_port);
+		}
 		// packet out
 		fabric_openstack_packet_output(dst_port->sw,packet_in,dst_port->port);
 	}
