@@ -392,6 +392,22 @@ void add_openstack_host_port(openstack_port_p port){
 	return;
 };
 
+void set_openstack_host_port_portno(const UINT1 *mac, UINT4 ofport_no)
+{
+    openstack_port_p port = NULL;
+    openstack_node_p node_p = g_openstack_host_port_list;
+    while(node_p != NULL)
+    {
+        port = (openstack_port_p)node_p->data;
+        if(memcmp(port->mac, mac, 6) == 0)
+        {
+            port->ofport_no = ofport_no;
+            return;
+        }
+        node_p = node_p->next;
+    }
+}
+
 openstack_port_p find_openstack_host_port_by_port_id(char* port_id){
 	openstack_port_p port = NULL;
 	openstack_node_p node_p = g_openstack_host_port_list;

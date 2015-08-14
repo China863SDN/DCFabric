@@ -41,6 +41,7 @@
 #define FABRIC_ARP_FLOOD_QUEUE_MAX_NUM 20480
 #define FABRIC_IP_FLOOD_QUEUE_MAX_NUM 20480
 #define FABRIC_FLOW_QUEUE_MAX_NUM 20480
+#define FABRIC_HOST_IP_MAX_NUM 10
 /************************************
  * host node & functions
  * part 1: list part
@@ -58,7 +59,8 @@ typedef struct fabric_host_node{
 	gn_switch_t* sw;
 	UINT4 port;
 	UINT1 mac[6];
-	UINT4 ip;
+	UINT4 ip_list[FABRIC_HOST_IP_MAX_NUM];
+	UINT1 ip_count;
 	struct fabric_host_node* next;
 }t_fabric_host_node,* p_fabric_host_node;
 
@@ -91,6 +93,14 @@ void delete_fabric_host_from_list_by_sw(gn_switch_t* sw);
 void destroy_fabric_host_list();
 UINT4 is_fabric_host_list_empty();
 ////////////////////////////////////////////////////////////////////////
+//Multiple IPs for one host.   added by xuyanwei at 2015.8.13
+
+void add_fabric_host_ip(p_fabric_host_node node,UINT4 newIP);
+BOOL check_IP_in_fabric_host(p_fabric_host_node node,UINT4 IP);
+////////////////////////////////////////////////////////////////////////
+
+
+////////////////////////////////////////////////////////////////////////
 
 p_fabric_host_node create_fabric_host_queue_node(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip);
 void delete_fabric_host_queue_node(p_fabric_host_node node);
@@ -108,7 +118,8 @@ UINT4 is_fabric_host_queue_empty();
  * arp request node & functions
  ************************************/
 typedef struct fabric_arp_request_node{
-	UINT4 dst_ip;
+	UINT4 dst_IP;
+	UINT4 src_IP;
 	p_fabric_host_node src_req;
 	struct fabric_arp_request_node* next;
 }t_fabric_arp_request_node,* p_fabric_arp_request_node;
@@ -120,7 +131,7 @@ typedef struct fabric_arp_request_list{
 
 ////////////////////////////////////////////////////////////////////////
 
-p_fabric_arp_request_node create_fabric_arp_request_list_node(p_fabric_host_node src,UINT4 dst_ip);
+p_fabric_arp_request_node create_fabric_arp_request_list_node(p_fabric_host_node src,UINT4 src_IP,UINT4 dst_IP);
 p_fabric_arp_request_node delete_fabric_arp_request_list_node(p_fabric_arp_request_node node);
 
 ////////////////////////////////////////////////////////////////////////
@@ -137,7 +148,7 @@ void destroy_fabric_arp_request_list();
 typedef struct fabric_arp_flood_node{
 	UINT4 ip;
 	packet_in_info_t packet_in_info;
-	arp_t arp_data;
+//	arp_t arp_data;
 	struct fabric_arp_flood_node* next;
 }t_fabric_arp_flood_node,* p_fabric_arp_flood_node;
 typedef struct
@@ -193,8 +204,10 @@ UINT4 is_fabric_ip_flood_queue_empty();
  ************************************/
 typedef struct fabric_flow_node{
 	p_fabric_host_node src_host;
+	UINT4 src_IP;
 	UINT4 src_tag;
 	p_fabric_host_node dst_host;
+	UINT4 dst_IP;
 	UINT4 dst_tag;
 	struct fabric_flow_node* next;
 }t_fabric_flow_node,* p_fabric_flow_node;
@@ -206,15 +219,17 @@ typedef struct
 }t_fabric_flow_queue;
 ////////////////////////////////////////////////////////////////////////
 p_fabric_flow_node create_fabric_flow_node(p_fabric_host_node src_host,
+		UINT4 src_IP,
 		UINT4 src_tag,
 		p_fabric_host_node dst_host,
+		UINT4 dst_IP,
 		UINT4 dst_tag);
 void delete_fabric_flow_node(p_fabric_flow_node node);
 
 void init_fabric_flow_queue();
 void push_fabric_flow_into_queue(p_fabric_flow_node node);
 p_fabric_flow_node pop_fabric_flow_from_queue();
-p_fabric_flow_node get_fabric_flow_from_queue_by_ip(p_fabric_host_node src_host,p_fabric_host_node dst_host);
+p_fabric_flow_node get_fabric_flow_from_queue(p_fabric_host_node src_host, UINT4 src_IP , p_fabric_host_node dst_host,UINT4 dst_IP);
 p_fabric_flow_node get_head_fabric_flow_from_queue();
 void destroy_fabric_flow_queue();
 UINT4 is_fabric_flow_queue_empty();

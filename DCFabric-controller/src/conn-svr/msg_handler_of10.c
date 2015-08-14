@@ -36,6 +36,7 @@
 #include "../forward-mgr/forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../flow-mgr/flow-mgr.h"
+#include "openstack/openstack_host.h"
 
 convertter_t of10_convertter;
 msg_handler_t of10_message_handler[OFP10_MAX_MSG];
@@ -381,6 +382,8 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
     {
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of10_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
+
+        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
         //默认最大速率1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2

@@ -3,11 +3,12 @@
 sudo ovs-vsctl del-manager
 sudo ovs-vsctl del-br br-int
 sudo ovs-vsctl del-br br-tun
-sudo ovs-vsctl del-controller br-ex 
+sudo ovs-vsctl del-br br-ex 
 
 local_ip=""
 provider_mappings=""
 gnflush_ip=""
+external_provider=""
 
 function usage {
     local rc=$1
@@ -24,6 +25,7 @@ function usage {
     echo "  --local_ip IP                 IP address of the node, will be used as tunnel endpoint"
     echo "  --provider_mappings MAPPINGS  physical provider mappings, i.e physnet1:eth1,physnet2:eth2"
     echo "  --gnflush_ip IP               IP address of GNFlush controller"
+    echo "  --external_provider           physical provider, only for network node"
     echo
     echo "Help options:"
     echo "  -?, -h, --h, --help  Display this help and exit"
@@ -45,6 +47,10 @@ function parse_options {
 
          --gnflush_ip)
             shift; gnflush_ip="$1"; shift
+            ;;
+
+         --external_provider)
+            shift; external_provider="$1"; shift
             ;;
 
       -? | -h | --h | --help)
@@ -77,10 +83,17 @@ fi
 
 if [ -n "$gnflush_ip" ]; then
     echo "setting gnflush_ip=$gnflush_ip"
-    ovs-vsctl set-manager tcp:$gnflush_ip:6640
+    sudo ovs-vsctl set-manager tcp:$gnflush_ip:6640
+fi
+
+if [ -n "$external_provider" ]; then
+    echo "create external network through $external_provider"
+    sudo ifconfig $external_provider promisc
+    sudo ovs-vsctl add-br br-ex
+    sudo ovs-vsctl add-port br-ex $external_provider
 fi
 
 sleep 1
-ovs-vsctl show
+sudo ovs-vsctl show
 
 exit 0

@@ -57,6 +57,7 @@ typedef struct _openstack_port{
 	UINT4 port;
 	UINT4 ip;
 	UINT1 mac[6];
+	UINT4 ofport_no;
 	char tenant_id[OPENSTACK_TENANT_ID_LEN];
 	char network_id[OPENSTACK_NETWORK_ID_LEN];
 	char subnet_id[OPENSTACK_SUBNET_ID_LEN];
@@ -134,6 +135,7 @@ openstack_port_p create_openstack_host_port(
 		char* port_id);
 void destory_openstack_host_port(openstack_port_p port);
 void add_openstack_host_port(openstack_port_p port);
+void set_openstack_host_port_portno(const UINT1 *mac, UINT4 ofport_no);
 openstack_port_p find_openstack_host_port_by_port_id(char* port_id);
 openstack_port_p remove_openstack_host_port_by_port_id(char* port_id);
 openstack_port_p find_openstack_host_port_by_mac(UINT1* mac);

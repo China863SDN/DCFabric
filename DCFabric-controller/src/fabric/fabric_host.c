@@ -67,7 +67,9 @@ p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw,UINT4 port,UINT1
 	ret = (p_fabric_host_node)mem_get(g_fabric_host_list_mem_id);
 	ret->sw = sw;
 	ret->port = port;
-	ret->ip = ip;
+	ret->ip_count=0;
+	//ret->ip_list[ip_count]=ip
+	add_fabric_host_ip(ret,ip);
 	memcpy(ret->mac, mac, 6);
 
 	return ret;
@@ -118,8 +120,10 @@ void init_fabric_host_list(){
 p_fabric_host_node get_fabric_host_from_list_by_ip(UINT4 ip){
 	p_fabric_host_node ret = NULL;
 	ret = g_fabric_host_list.list;
-	while(ret != NULL){
-		if(ret->ip == ip){
+	while(ret != NULL)
+	{
+		if(check_IP_in_fabric_host(ret,ip))
+		{
 			return ret;
 		}
 		ret = ret->next;
@@ -188,7 +192,8 @@ p_fabric_host_node remove_fabric_host_from_list_by_ip(UINT4 ip){
 	pthread_mutex_lock(&g_fabric_host_thread_mutex);
 	p_sentinel->next = g_fabric_host_list.list;
 	while(p_sentinel->next != NULL){
-		if(p_sentinel->next->ip == ip){
+		if(check_IP_in_fabric_host( p_sentinel->next,ip))
+		{
 			ret = p_sentinel->next;
 			p_sentinel->next = ret->next;
 			ret->next = NULL;
@@ -274,7 +279,8 @@ p_fabric_host_node create_fabric_host_queue_node(gn_switch_t* sw,UINT4 port,UINT
 	ret = mem_get(g_fabric_host_queue_mem_id);
 	ret->sw = sw;
 	ret->port = port;
-	ret->ip = ip;
+	ret->ip_count=0;
+	add_fabric_host_ip(ret,ip);
 	memcpy(ret->mac, mac, 6);
 	return ret;
 };
@@ -348,12 +354,13 @@ UINT4 is_fabric_host_queue_empty(){
  * p_fabric_host_node src:	the host which send the request
  * UINT4 ip:				the arp request's ip address
  */
-p_fabric_arp_request_node create_fabric_arp_request_list_node(p_fabric_host_node src,UINT4 dst_ip){
+p_fabric_arp_request_node create_fabric_arp_request_list_node(p_fabric_host_node src,UINT4 src_IP,UINT4 dst_IP){
 
 	p_fabric_arp_request_node ret = NULL;
 	ret = (p_fabric_arp_request_node)mem_get(g_fabric_arp_request_list_mem_id);
 	ret->src_req = src;
-	ret->dst_ip = dst_ip;
+	ret->dst_IP = dst_IP;
+	ret->src_IP=src_IP;
 	return ret;
 };
 /*
@@ -415,7 +422,7 @@ p_fabric_arp_request_node remove_fabric_arp_request_from_list_by_dstip(UINT4 dst
 	p_sentinel->next = g_arp_request_list.list;
 	p_ret_sentinel->next = NULL;
 	while(p_sentinel->next != NULL){
-		if(p_sentinel->next->dst_ip == dst_ip){
+		if(p_sentinel->next->dst_IP == dst_ip){
 			p_ret_sentinel->next = p_sentinel->next;
 			p_sentinel->next = p_ret_sentinel->next->next;
 			p_ret_sentinel = p_ret_sentinel->next;
@@ -449,14 +456,14 @@ void destroy_fabric_arp_request_list(){
 p_fabric_arp_flood_node create_fabric_arp_flood_node(packet_in_info_t * packet_in_info,UINT4 ip){
 
 	p_fabric_arp_flood_node ret = NULL;
-	arp_t *arp_data = NULL;
+	//arp_t *arp_data = NULL;
 	if(packet_in_info != NULL){
 		ret = (p_fabric_arp_flood_node)mem_get(g_fabric_arp_flood_queue_mem_id);
-		arp_data =  (arp_t *)(packet_in_info->data);
+		//arp_data =  (arp_t *)(packet_in_info->data);
 		ret->ip = ip;
-		memcpy(&ret->arp_data,arp_data, sizeof(arp_t));
+		//memcpy(&ret->arp_data,arp_data, sizeof(arp_t));
 		memcpy(&ret->packet_in_info,packet_in_info, sizeof(packet_in_info_t));
-		ret->packet_in_info.data = (UINT1*)&ret->arp_data;
+		//ret->packet_in_info.data = (UINT1*)&ret->arp_data;
 	}
 	return ret;
 };
@@ -681,15 +688,19 @@ UINT4 is_fabric_ip_flood_queue_empty(){
  * create a flow node
  */
 p_fabric_flow_node create_fabric_flow_node(p_fabric_host_node src_host,
+		UINT4 src_IP,
 		UINT4 src_tag,
 		p_fabric_host_node dst_host,
+		UINT4 dst_IP,
 		UINT4 dst_tag){
 	p_fabric_flow_node ret = NULL;
 	ret = (p_fabric_flow_node)mem_get(g_fabric_flow_queue_mem_id);
 	ret->src_host = src_host;
 	ret->src_tag = src_tag;
+	ret->src_IP=src_IP;
 	ret->dst_host = dst_host;
 	ret->dst_tag = dst_tag;
+	ret->dst_IP=dst_IP;
 	return ret;
 
 };
@@ -760,11 +771,15 @@ p_fabric_flow_node pop_fabric_flow_from_queue(){
 /*
  * find the flow flood node by src & dst host
  */
-p_fabric_flow_node get_fabric_flow_from_queue_by_ip(p_fabric_host_node src_host,p_fabric_host_node dst_host){
+p_fabric_flow_node get_fabric_flow_from_queue(p_fabric_host_node src_host,UINT4 src_IP,p_fabric_host_node dst_host,UINT4 dst_IP){
 	p_fabric_flow_node ret = NULL;
 	ret = g_fabric_flow_queue.head;
 	while(ret != NULL){
-		if((ret->src_host == src_host && ret->dst_host == dst_host) || (ret->src_host == dst_host && ret->dst_host == src_host)){
+		if(  (ret->src_host == src_host && ret->src_IP == src_IP
+				&& ret->dst_host == dst_host && ret->dst_IP == dst_IP) ||
+				(ret->src_host == dst_host && ret->src_IP == dst_IP
+				 && ret->dst_host == src_host && ret->dst_IP == src_IP)  )
+		{
 			return ret;
 		}
 		ret = ret->next;
@@ -788,3 +803,24 @@ void destroy_fabric_flow_queue(){
 UINT4 is_fabric_flow_queue_empty(){
 	return g_fabric_flow_queue.queue_num;
 };
+
+
+/*add new ip*/
+void add_fabric_host_ip(p_fabric_host_node node,UINT4 newIP)
+{
+	if(node->ip_count<FABRIC_HOST_IP_MAX_NUM)
+	{
+		node->ip_list[node->ip_count++]=newIP;
+		//printf("%s : new ip:%s \n",FN,inet_htoa(ntohl(newIP)));
+	}
+};
+
+/*check IP in the host ip list*/
+BOOL check_IP_in_fabric_host(p_fabric_host_node node,UINT4 IP)
+{
+	int i;
+	for(i=0;i<node->ip_count;i++)
+	   if(node->ip_list[i]==IP)
+		   return TRUE;
+	return FALSE;
+}

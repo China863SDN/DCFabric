@@ -33,4 +33,5 @@
 
 void fabric_arp_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
 void fabric_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
+void fabric_vlan_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
 #endif /* INC_FABRIC_FABRIC_ARP_H_ */

@@ -230,51 +230,51 @@ void* fabric_flow_thread(){
 	return NULL;
 };
 
-void* fabric_host_thread(){
-	p_fabric_host_node host_queue_node = NULL;
-	p_fabric_host_node host_list_node = NULL;
-
-	// initialize the host queue
-	init_fabric_host_queue();
-
-	LOG_PROC("INFO","fabric_host_thread init !");
-	while(g_fabric_host_flag){
-		sem_wait(&fabric_host_sem);
-
-		while(is_fabric_host_queue_empty()){
-//			printf("%s : queue is :%d \n",FN,is_fabric_host_queue_empty());
-			host_queue_node = get_head_fabric_host_from_queue();
-			// download host flow
-			install_fabric_output_flow(host_queue_node->sw,host_queue_node->mac,host_queue_node->port);
-
-			// find host in list
-			host_list_node = get_fabric_host_from_list_by_ip(host_queue_node->ip);
-			if(host_list_node == NULL){
-				host_list_node = create_fabric_host_list_node(
-						host_list_node->sw,
-						host_list_node->port,
-						host_list_node->mac,
-						host_list_node->ip
-						);
-				insert_fabric_host_into_list(host_list_node);
-			}else{
-				// clear old host flow
-				// wait...
-				// update
-				host_list_node->port = host_queue_node->port;
-				host_list_node->sw = host_queue_node->sw;
-				memcpy(host_list_node->mac,host_queue_node->mac, 6);
-			}
-			host_queue_node = pop_fabric_host_from_queue();
-			delete_fabric_host_queue_node(host_queue_node);
-//			printf("%s end\n",FN);
-		}
-	}
-	// Destroy the host queue
-	destroy_fabric_host_queue();
-	LOG_PROC("INFO","fabric_host_thread end!");
-	return NULL;
-};
+//void* fabric_host_thread(){
+//	p_fabric_host_node host_queue_node = NULL;
+//	p_fabric_host_node host_list_node = NULL;
+//
+//	// initialize the host queue
+//	init_fabric_host_queue();
+//
+//	LOG_PROC("INFO","fabric_host_thread init !");
+//	while(g_fabric_host_flag){
+//		sem_wait(&fabric_host_sem);
+//
+//		while(is_fabric_host_queue_empty()){
+////			printf("%s : queue is :%d \n",FN,is_fabric_host_queue_empty());
+//			host_queue_node = get_head_fabric_host_from_queue();
+//			// download host flow
+//			install_fabric_output_flow(host_queue_node->sw,host_queue_node->mac,host_queue_node->port);
+//
+//			// find host in list
+//			host_list_node = get_fabric_host_from_list_by_ip(host_queue_node->ip);
+//			if(host_list_node == NULL){
+//				host_list_node = create_fabric_host_list_node(
+//						host_list_node->sw,
+//						host_list_node->port,
+//						host_list_node->mac,
+//						host_list_node->ip
+//						);
+//				insert_fabric_host_into_list(host_list_node);
+//			}else{
+//				// clear old host flow
+//				// wait...
+//				// update
+//				host_list_node->port = host_queue_node->port;
+//				host_list_node->sw = host_queue_node->sw;
+//				memcpy(host_list_node->mac,host_queue_node->mac, 6);
+//			}
+//			host_queue_node = pop_fabric_host_from_queue();
+//			delete_fabric_host_queue_node(host_queue_node);
+////			printf("%s end\n",FN);
+//		}
+//	}
+//	// Destroy the host queue
+//	destroy_fabric_host_queue();
+//	LOG_PROC("INFO","fabric_host_thread end!");
+//	return NULL;
+//};
 /*****************************
  * intern functions
  *****************************/

@@ -39,6 +39,7 @@
 #include "../forward-mgr/forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../event/event_service.h"
+#include "openstack/openstack_host.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
@@ -761,7 +762,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 //        LOG_PROC("INFO", "New port found: %s", ops->desc.name);
 //        of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 //
-//        //Ĭ���������1000Mbps
+//        //默锟斤拷锟斤拷锟斤拷锟斤拷锟�1000Mbps
 //        new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
 //        sw->ports[sw->n_ports] = new_sw_ports;
 //        sw->n_ports++;
@@ -777,10 +778,10 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 //        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
 //    }
 //
-//    //ɾ��Ŀ��ת����down��������
+//    //删锟斤拷目锟斤拷转锟斤拷锟斤拷down锟斤拷锟斤拷锟斤拷锟斤拷
 ////    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
 //
-//    //��������
+//    //锟斤拷锟斤拷锟斤拷锟斤拷
 //    for (port = 0; port < sw->n_ports; port++)
 //    {
 //        if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
@@ -825,6 +826,8 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
     {
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
+
+        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
         //1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
@@ -908,7 +911,7 @@ static INT4 of13_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
     struct ofp13_action_output *ofp13_act = (struct ofp13_action_output *)of13_out->actions;
     ofp13_act->type = htons(OFPAT13_OUTPUT);
     ofp13_act->len = htons(sizeof(struct ofp13_action_output));
-    ofp13_act->port = htonl(packout_req_info->outport);    //�Ӹ����˿ڷ���ȥ
+    ofp13_act->port = htonl(packout_req_info->outport);    //锟接革拷锟斤拷锟剿口凤拷锟斤拷去
     ofp13_act->max_len = htons(packout_req_info->max_len);
     memset(ofp13_act->pad, 0x0, 6);
 
@@ -1073,7 +1076,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
     {
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //������
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1101,7 +1104,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
-        else    //������
+        else    //锟斤拷锟斤拷锟斤拷
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_SRC << 1;
@@ -1118,7 +1121,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
     {
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //������
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1146,7 +1149,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
-        else  //������
+        else  //锟斤拷锟斤拷锟斤拷
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_DST << 1;
@@ -1447,7 +1450,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
             oxm_len += OFPXMT_OFB_IPV6_SZ;
         }
-        else   //������
+        else   //锟斤拷锟斤拷锟斤拷
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
@@ -1604,7 +1607,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
             oxm_len += OFPXMT_OFB_IPV6_SZ;
         }
-        else  //������
+        else  //锟斤拷锟斤拷锟斤拷
 
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_DST << 1;
@@ -1874,7 +1877,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //������
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1901,7 +1904,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
         }
-        else    //������
+        else    //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV4_SZ;
@@ -1921,7 +1924,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
 
-        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //������
+        if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
@@ -1948,7 +1951,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
         }
-        else  //������
+        else  //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV4_DST << 1;
             oxm->length = OFPXMT_OFB_IPV4_SZ;
@@ -2295,7 +2298,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
         }
-        else   //无掩�?
+        else   //鏃犳帺锟�?
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -2454,7 +2457,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             }
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
         }
-        else  //������
+        else  //锟斤拷锟斤拷锟斤拷
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_DST << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -2942,11 +2945,11 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
             loops = MAX_PORTS;
             UINT4 n_ports = 0;
 
-            while (body_len && (--loops > 0))     //ÿһ���˿�ѭ��һ��
+            while (body_len && (--loops > 0))     //每一锟斤拷锟剿匡拷循锟斤拷一锟斤拷
             {
                 memset(&new_sw_ports, 0x0, sizeof(new_sw_ports));
 
-                //Ĭ���������1000Mbps
+                //默锟斤拷锟斤拷锟斤拷锟斤拷锟�1000Mbps
                 (sw->msg_driver.convertter->port_convertter)((UINT1 *)port, &new_sw_ports);
                 new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
 
@@ -2963,7 +2966,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
                 n_ports++;
             }
 
-            sw->n_ports = n_ports;  //lo����
+            sw->n_ports = n_ports;  //lo锟斤拷锟斤拷
             break;
         }
 
