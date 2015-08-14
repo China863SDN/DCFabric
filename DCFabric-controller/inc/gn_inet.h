@@ -45,7 +45,7 @@ enum ether_type
     ETHER_ARP = 0x0806,
     ETHER_IP = 0x0800,
     ETHER_IPV6 = 0x86DD,
-    ETHER_VLAN = 0x8810,
+    ETHER_VLAN = 0x8100,
     ETHER_MPLS = 0x8847
 };
 

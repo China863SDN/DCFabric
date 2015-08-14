@@ -186,7 +186,7 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
     	}else{
     		fabric_openstack_ip_handle(sw,packet_in_info);
     	}
-    	return GN_ERR;
+    	return GN_OK;
     }
     if(0 == memcmp(p_ip->eth_head.dest, g_controller_mac, 6))   //如果目的MAC为控制器网关的MAC, 则为跨网段转发
     {
@@ -214,6 +214,15 @@ static INT4 ipv6_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_inf
 {
     return GN_OK;
 }
+///Added by Xu yanwei in 2015-08-13
+static INT4 vlan_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
+{
+	if(get_fabric_state()){
+			fabric_vlan_handle(sw, packet_in_info);
+			return GN_OK;
+	    }
+    return GN_OK;
+}
 
 INT4 packet_in_process(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
@@ -235,6 +244,10 @@ INT4 packet_in_process(gn_switch_t *sw, packet_in_info_t *packet_in_info)
     {
         return g_default_forward_handler.ipv6(sw, packet_in_info);
     }
+    else if(ether_header->proto == htons(ETHER_VLAN))
+    {
+        return g_default_forward_handler.vlan(sw, packet_in_info);
+    }
     else
     {
         LOG_PROC("ERROR", "%s: ether type [%d] has no handler!\n", FN, ether_header->proto);
@@ -247,7 +260,8 @@ forward_handler_t g_default_forward_handler =
     .lldp = lldp_packet_handler,
     .arp = arp_packet_handler,
     .ip = ip_packet_handler,
-    .ipv6 = ipv6_packet_handler
+    .ipv6 = ipv6_packet_handler,
+	.vlan= vlan_packet_handler
 };
 
 INT1 register_handler_ether_packets(UINT2 eth_type, packet_in_proc_t packet_handler)
@@ -267,6 +281,10 @@ INT1 register_handler_ether_packets(UINT2 eth_type, packet_in_proc_t packet_hand
     else if(eth_type == ETHER_IPV6)
     {
         g_default_forward_handler.ipv6 = packet_handler;
+    }
+    else if(eth_type == ETHER_VLAN)
+    {
+        g_default_forward_handler.vlan = packet_handler;
     }
     else
     {

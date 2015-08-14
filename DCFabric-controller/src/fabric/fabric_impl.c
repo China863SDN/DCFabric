@@ -289,6 +289,7 @@ UINT4 of131_fabric_impl_get_tag_sw(gn_switch_t *sw){
 			}
 		}
 	}
+	printf("Err in %s  dpid: %llu \n",FN,sw->dpid);
 	return 0;
 };
 /*

@@ -53,6 +53,7 @@ typedef struct forward_handler
     packet_in_proc_t arp;
     packet_in_proc_t ip;
     packet_in_proc_t ipv6;
+    packet_in_proc_t vlan;
 }forward_handler_t;
 #pragma pack()
 

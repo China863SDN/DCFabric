@@ -129,9 +129,24 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 		return;
 	}
 
+	// get subnet
+	src_subnet = find_openstack_app_subnet_by_subnet_id(src_port->subnet_id);
 	// if g_openstack_fobidden_ip
 	if(ip->dest == g_openstack_fobidden_ip){
-		LOG_PROC("INFO","IP Handle : Fobidden IP 169.254.169.254!");
+		LOG_PROC("INFO","IP Handle :  IP 169.254.169.254! DROP!");
+//		LOG_PROC("INFO","IP Handle :  IP 169.254.169.254! TO DCHP SERVER!");
+//		dst_port = src_subnet->dhcp_port;
+//		//change mac (out gateway)
+//		memcpy(ip->eth_head.dest,dst_port->mac,6);
+//
+//		if(dst_port != NULL && dst_port->sw != NULL && dst_port->port != 0){
+//			LOG_PROC("INFO","IP Handle :  IP 169.254.169.254! FOUND: SETUP FLOWS & PACKET OUT!");
+//			fabric_openstack_install_fabric_flows(src_port,dst_port);
+//			fabric_openstack_install_fabric_out_subnet_flows(dst_port->sw,packet_in,dst_port->port);
+//		}else{
+//			LOG_PROC("INFO","IP Handle :  IP 169.254.169.254! NOT FOUND:FLOOD!");
+//			fabric_openstack_packet_flood(packet_in);
+//		}
 		return;
 	}
 
@@ -142,7 +157,6 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 		return;
 	}
 	// dst_port is gateway?
-	src_subnet = find_openstack_app_subnet_by_subnet_id(src_port->subnet_id);
 	if(dst_port->ip == src_subnet->gateway_ip){
 		src_gateway = dst_port;
 		// find dst_port by ip
@@ -153,6 +167,18 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 		if(NULL == dst_port){
 			//flood
 			//fabric_openstack_packet_flood(packet_in);
+			return;
+		}
+
+		// if dst_port is source gateway packet out
+		if(	src_gateway->ip == dst_port->ip){
+			// packet out
+			LOG_PROC("INFO","IP Handle :  Destination is gate way! FOUND: PACKET OUT!");
+			if(src_gateway->sw != NULL && src_gateway->port != 0){
+				fabric_openstack_packet_output(src_gateway->sw,packet_in,src_gateway->port);
+			}else{
+				fabric_openstack_packet_flood(packet_in);
+			}
 			return;
 		}
 
@@ -170,7 +196,11 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 			fabric_openstack_packet_flood(packet_in);
 		}else{
 			//setup flow
-			fabric_openstack_install_fabric_out_subnet_flows(src_port,src_gateway,dst_port,dst_gateway);
+			// fobidden setup flows if it's gateway & dhcp port
+			dst_subnet = find_openstack_app_subnet_by_subnet_id(dst_port->subnet_id);
+			if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,src_subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,dst_subnet)){
+				fabric_openstack_install_fabric_out_subnet_flows(src_port,src_gateway,dst_port,dst_gateway);
+			}
 			//packet out
 			fabric_openstack_packet_output(dst_port->sw,packet_in,dst_port->port);
 		}
@@ -182,9 +212,8 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 			LOG_PROC("INFO","IP Handle : SETUP FLOWS & PACKET OUT!");
 
 			//setup flow
+			// fobidden setup flows if it's gateway & dhcp port
 			if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,src_subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,src_subnet)){
-				fabric_openstack_show_port(src_port);
-				fabric_openstack_show_port(dst_port);
 				fabric_openstack_install_fabric_flows(src_port,dst_port);
 			}
 
@@ -234,7 +263,7 @@ void fabric_openstack_arp_request_handle(gn_switch_t *sw, packet_in_info_t *pack
 		//fabric_openstack_packet_flood_in_subnet(packet_in,subnet->subnet_id,subnet->port_num);
 		// if gateway no flood
 		if(arp->targetip == subnet->gateway_ip){
-			LOG_PROC("INFO","NO gateway,dorp!");
+			LOG_PROC("INFO","NO gateway,drop!");
 			return;
 		}else{
 			LOG_PROC("INFO","Flood in subnet!");
@@ -257,11 +286,8 @@ void fabric_openstack_arp_request_handle(gn_switch_t *sw, packet_in_info_t *pack
 		LOG_PROC("INFO","ARP REQUEST Handle : SETUP FLOWS & PACKET OUT!");
 
 		//setup flow
-		// to gateway & dhcp flows is fobidden if necessary
+		// fobidden setup flows if it's gateway & dhcp port
 		if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,subnet)){
-			// show & check
-			fabric_openstack_show_port(src_port);
-			fabric_openstack_show_port(dst_port);
 			fabric_openstack_install_fabric_flows(src_port,dst_port);
 		}
 		// packet out
@@ -312,9 +338,8 @@ void fabric_openstack_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet
 
 		subnet =find_openstack_app_subnet_by_subnet_id(src_port->subnet_id);
 		// download flows
+		// fobidden setup flows if it's gateway & dhcp port
 		if( 0 == check_fabric_openstack_subnet_dhcp_gateway(src_port,subnet) && 0 == check_fabric_openstack_subnet_dhcp_gateway(dst_port,subnet)){
-			fabric_openstack_show_port(src_port);
-			fabric_openstack_show_port(dst_port);
 			fabric_openstack_install_fabric_flows(src_port,dst_port);
 		}
 		// packet out
@@ -331,7 +356,7 @@ void fabric_openstack_ip_broadcast_handle(gn_switch_t *sw, packet_in_info_t *pac
 //	printf("%s\n", FN);
 	if(ip->proto == IPPROTO_UDP){
 		udp = (udp_t*)(ip->data);
-//		printf("UDP! udp->sport : %u | udp->dport : %u \n",udp->sport,udp->dport);
+		LOG_PROC("INFO","UDP! udp->sport : %u | udp->dport : %u \n",udp->sport,udp->dport);
 		if(udp->sport == 68 && udp->dport == 67){
 			fabric_openstack_dhcp_request_handle(sw,packet_in,ip,udp,src_port);
 			return;
@@ -389,6 +414,11 @@ void fabric_openstack_dhcp_reply_handle(gn_switch_t *sw, packet_in_info_t *packe
 void fabric_openstack_install_fabric_flows(openstack_port_p src_port,openstack_port_p dst_port){
 	UINT4 src_tag = 0;
 	UINT4 dst_tag = 0;
+	// display port info
+	LOG_PROC("INFO","Sourt Port Info:");
+	fabric_openstack_show_port(src_port);
+	LOG_PROC("INFO","Destination Port Info:");
+	fabric_openstack_show_port(dst_port);
 	src_tag = of131_fabric_impl_get_tag_sw(src_port->sw);
 	dst_tag = of131_fabric_impl_get_tag_sw(dst_port->sw);
 	if(src_port->sw == dst_port->sw){
@@ -406,6 +436,12 @@ void fabric_openstack_install_fabric_flows(openstack_port_p src_port,openstack_p
 void fabric_openstack_install_fabric_out_subnet_flows(openstack_port_p src_port,openstack_port_p src_gateway,openstack_port_p dst_port,openstack_port_p dst_gateway){
 	UINT4 src_tag = 0;
 	UINT4 dst_tag = 0;
+	// display port info
+	LOG_PROC("INFO","Sourt Port Info:");
+	fabric_openstack_show_port(src_port);
+	LOG_PROC("INFO","Destination Port Info:");
+	fabric_openstack_show_port(dst_port);
+
 	src_tag = of131_fabric_impl_get_tag_sw(src_port->sw);
 	dst_tag = of131_fabric_impl_get_tag_sw(dst_port->sw);
 	if(src_port->sw == dst_port->sw){
