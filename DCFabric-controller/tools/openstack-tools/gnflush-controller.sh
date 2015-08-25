@@ -91,6 +91,7 @@ if [ -n "$external_provider" ]; then
     sudo ifconfig $external_provider promisc
     sudo ovs-vsctl add-br br-ex
     sudo ovs-vsctl add-port br-ex $external_provider
+    sudo ovs-vsctl set-controller br-ex tcp:$gnflush_ip:6633
 fi
 
 sleep 1

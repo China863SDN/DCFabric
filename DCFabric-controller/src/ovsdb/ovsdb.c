@@ -16,15 +16,15 @@ INT4 g_ovsdb_sockfd;
 fd_set g_ovsdb_recvmask;
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovs��openflow�汾
-UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstack�������� gre/vxlan
+UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovs锟斤拷openflow锟芥本
+UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstack锟斤拷锟斤拷锟斤拷锟斤拷 gre/vxlan
 
 UINT1 g_ovsdb_clients[OVSDB_MAX_CONNECTION] = { 0 };
-UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clients�ı���  ����ɾ��˿����ӵĽ�����
+UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clients锟侥憋拷锟斤拷  锟斤拷锟斤拷删锟斤拷丝锟斤拷锟斤拷拥慕锟斤拷锟斤拷锟�
 UINT4 g_ovsdb_clients_ip[OVSDB_MAX_CONNECTION] = { 0 };
 
 ovsdb_server_t g_ovsdb_nodes[OVSDB_MAX_CONNECTION];
-UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdb�ӿڣ�Ĭ�϶˿�6640
+UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    //ovsdb锟接口ｏ拷默锟较端匡拷6640
 UINT4 g_ovsdb_turnel_on = 1;
 
 INT4 ovsdb_connect_quit()
@@ -682,57 +682,54 @@ void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
     {
         if (g_ovsdb_clients[index])
         {
-            if (g_ovsdb_nodes[index].bridge[0].is_using)
+            remote_node = &g_ovsdb_nodes[index];
+            remote_ip = strdup(inet_htoa(ntohl(remote_node->node_ip)));
+            compute_ip = strdup(inet_htoa(ntohl(compute_node->node_ip)));
+
+            if (g_tunnel_type == NETWORK_TYPE_GRE)
             {
-                remote_node = &g_ovsdb_nodes[index];
-                remote_ip = strdup(inet_htoa(ntohl(remote_node->node_ip)));
-                compute_ip = strdup(inet_htoa(ntohl(compute_node->node_ip)));
-
-                if (g_tunnel_type == NETWORK_TYPE_GRE)
-                {
-                    sprintf(control_tunnel_port_name, "gre-%s", inet_htoa(ntohl(compute_node->node_ip)));
-                    sprintf(compute_tunnel_port_name, "gre-%s", inet_htoa(ntohl(remote_node->node_ip)));
-                }
-                else if(g_tunnel_type == NETWORK_TYPE_VXLAN)
-                {
-                    sprintf(control_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(compute_node->node_ip)));
-                    sprintf(compute_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(remote_node->node_ip)));
-                }
-
-                //control---->compute
-                for (index_br = 0; index_br < NEUTRON_BRIDGE_MAX_NUM; index_br++)
-                {
-                    if (strncmp(remote_node->bridge[index_br].name, "br-int", 6) == 0)
-                    {
-                        if (g_tunnel_type == NETWORK_TYPE_GRE)
-                        {
-                            add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
-                                    control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_GRE);
-                        }
-                        else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
-                        {
-                            add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
-                                    control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_VXLAN);
-                        }
-                        break;
-                    }
-                }
-
-                //compute---->control
-                if (g_tunnel_type == NETWORK_TYPE_GRE)
-                {
-                    add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
-                            compute_ip, remote_ip, "key", INTERFACE_TYPE_GRE);
-                }
-                else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
-                {
-                    add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
-                            compute_ip, remote_ip, "key", INTERFACE_TYPE_VXLAN);
-                }
-
-                free(remote_ip);
-                free(compute_ip);
+                sprintf(control_tunnel_port_name, "gre-%s", inet_htoa(ntohl(compute_node->node_ip)));
+                sprintf(compute_tunnel_port_name, "gre-%s", inet_htoa(ntohl(remote_node->node_ip)));
             }
+            else if(g_tunnel_type == NETWORK_TYPE_VXLAN)
+            {
+                sprintf(control_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(compute_node->node_ip)));
+                sprintf(compute_tunnel_port_name, "vxlan-%s", inet_htoa(ntohl(remote_node->node_ip)));
+            }
+
+            //control---->compute
+            for (index_br = 0; index_br < NEUTRON_BRIDGE_MAX_NUM; index_br++)
+            {
+                if ((g_ovsdb_nodes[index].bridge[index_br].is_using) && (strcmp(remote_node->bridge[index_br].name, "br-int") == 0))
+                {
+                    if (g_tunnel_type == NETWORK_TYPE_GRE)
+                    {
+                        add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
+                                control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_GRE);
+                    }
+                    else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
+                    {
+                        add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
+                                control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_VXLAN);
+                    }
+                    break;
+                }
+            }
+
+            //compute---->control
+            if (g_tunnel_type == NETWORK_TYPE_GRE)
+            {
+                add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
+                        compute_ip, remote_ip, "key", INTERFACE_TYPE_GRE);
+            }
+            else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
+            {
+                add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
+                        compute_ip, remote_ip, "key", INTERFACE_TYPE_VXLAN);
+            }
+
+            free(remote_ip);
+            free(compute_ip);
         }
     }
 }
@@ -989,7 +986,7 @@ BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
 {
     json_t *controller = NULL;
 
-    //����Controller
+    //锟斤拷锟斤拷Controller
     controller = json_find_first_label(result->child, "Controller");
     if (controller)
     {
@@ -1020,86 +1017,55 @@ void handle_openvswitch_table(INT4 client_fd, INT4 seq, json_t *result)
 
 void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_controller)
 {
+    UINT4 br_idx = 0;
+    BOOL has_br_int = FALSE;
     json_t *br = NULL;
-    json_t *br1_uuid = NULL;
-    json_t *br2_uuid = NULL;
-    json_t *br1_name = NULL;
-    json_t *br2_name = NULL;
+    json_t *br_uuid = NULL;
+    json_t *br_name = NULL;
+//    json_t *br_ctrl = NULL;
+
     INT1 controller_ip[128];
 
     //Bridge
     br = json_find_first_label(result->child, "Bridge");
     if (br)
     {
-        br1_uuid = br->child->child;
-        if (br1_uuid)
+        br_uuid = br->child->child;
+        while(br_uuid)
         {
-            memcpy(g_ovsdb_nodes[seq].bridge[0]._uuid, br1_uuid->text,
-                    strlen(br1_uuid->text));
-
-            br1_name = br1_uuid->child->child->child->child->child;
-            if (br1_name)
+            memcpy(g_ovsdb_nodes[seq].bridge[br_idx]._uuid, br_uuid->text, strlen(br_uuid->text));
+            br_name = json_find_first_label(br_uuid->child->child->child->child, "name");
+            if(br_name)
             {
-                if (g_ovsdb_nodes[seq].bridge[0].is_using)
+                if(0 == strcmp("br_int", br_name->text))
                 {
-                    return;
+                    has_br_int = TRUE;
                 }
 
-                memcpy(g_ovsdb_nodes[seq].bridge[0].name, br1_name->text, strlen(br1_name->text));
-                LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[0].name, g_ovsdb_nodes[seq].bridge[0]._uuid);
-                if (g_ovsdb_of_version == OFP10_VERSION)
-                {
-                    set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, FAIL_MODE_SECURE, OFP_10);
-                }
-                else if (g_ovsdb_of_version == OFP13_VERSION)
-                {
-                    set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, FAIL_MODE_SECURE, OFP_13);
-                }
+                memcpy(g_ovsdb_nodes[seq].bridge[br_idx].name, br_name->text, strlen(br_name->text));
+            }
+            json_free_value(&br_name);
 
-                if (have_controller)
-                {
-                    sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
-                    set_controller(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, controller_ip);
-                }
-                g_ovsdb_nodes[seq].bridge[0].is_using = TRUE;
+            if (g_ovsdb_of_version == OFP10_VERSION)
+            {
+                set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, FAIL_MODE_SECURE, OFP_10);
+            }
+            else if (g_ovsdb_of_version == OFP13_VERSION)
+            {
+                set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, FAIL_MODE_SECURE, OFP_13);
             }
 
-            br2_uuid = br1_uuid->next;
-            if (br2_uuid)
+            //br_ctrl = json_find_first_label(br_uuid->child->child->child->child, "controller");
+            if (have_controller)
             {
-                memcpy(g_ovsdb_nodes[seq].bridge[1]._uuid, br2_uuid->text, strlen(br2_uuid->text));
-                br2_name = br2_uuid->child->child->child->child->child;
-                if (br2_name)
-                {
-                    if (g_ovsdb_nodes[seq].bridge[1].is_using)
-                    {
-                        return;
-                    }
-
-                    memcpy(g_ovsdb_nodes[seq].bridge[1].name, br2_name->text, strlen(br2_name->text));
-                    LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[0].name, g_ovsdb_nodes[seq].bridge[0]._uuid);
-
-
-                    if (g_ovsdb_of_version == OFP10_VERSION)
-                    {
-                        set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[1]._uuid, FAIL_MODE_SECURE, OFP_10);
-                    }
-                    else if (g_ovsdb_of_version == OFP13_VERSION)
-                    {
-                        set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[1]._uuid, FAIL_MODE_SECURE, OFP_13);
-                    }
-
-                    if (have_controller)
-                    {
-                        sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
-                        set_controller(client_fd, g_ovsdb_nodes[seq].bridge[1]._uuid, controller_ip);
-                    }
-                    g_ovsdb_nodes[seq].bridge[1].is_using = TRUE;
-                }
+                sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
+                set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
             }
+            g_ovsdb_nodes[seq].bridge[br_idx].is_using = TRUE;
         }
     }
-    else    //add br-int
+
+    if(!has_br_int)    //add br-int
     {
         if (g_ovsdb_of_version == OFP10_VERSION)
         {
@@ -1121,6 +1087,7 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
     json_t *br = NULL;
     json_t *root = NULL;
     INT1* test = NULL;
+    UINT4 br_idx = 0;
     INT4 parse_type = 0;
     INT1 controller_ip[128];
     BOOL have_controller = TRUE;
@@ -1154,23 +1121,27 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                         br = json_find_first_label(params->child->child->next, "Bridge");
                         if (br)
                         {
-                            if (g_ovsdb_nodes[seq].bridge[0].is_using)
+                            while(br_idx < NEUTRON_BRIDGE_MAX_NUM)
                             {
-                                return;
+                                if (g_ovsdb_nodes[seq].bridge[br_idx].is_using == FALSE)
+                                {
+                                    memcpy(g_ovsdb_nodes[seq].bridge[br_idx].name, INTERNAL_BR, strlen(INTERNAL_BR));
+                                    memcpy(g_ovsdb_nodes[seq].bridge[br_idx]._uuid, br->child->child->text, strlen(br->child->child->text));
+                                    LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[br_idx].name, g_ovsdb_nodes[seq].bridge[br_idx]._uuid);
+                                    sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
+
+                                    //设置控制器
+                                    set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
+
+                                    //新增port: br-int
+                                    add_port(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, g_ovsdb_nodes[seq].bridge[br_idx].name);
+                                    add_tunnel(&g_ovsdb_nodes[seq], &g_ovsdb_nodes[seq].bridge[br_idx]);
+                                    g_ovsdb_nodes[seq].bridge[br_idx].is_using = TRUE;
+                                    break;
+                                }
                             }
 
-                            memcpy(g_ovsdb_nodes[seq].bridge[0].name, INTERNAL_BR, strlen(INTERNAL_BR));
-                            memcpy(g_ovsdb_nodes[seq].bridge[0]._uuid, br->child->child->text, strlen(br->child->child->text));
-                            LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[0].name, g_ovsdb_nodes[seq].bridge[0]._uuid);
-                            sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
-
-                            //���ÿ�����
-                            set_controller(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, controller_ip);
-
-                            //�½�port: br-int
-                            add_port(client_fd, g_ovsdb_nodes[seq].bridge[0]._uuid, g_ovsdb_nodes[seq].bridge[0].name);
-                            add_tunnel(&g_ovsdb_nodes[seq], &g_ovsdb_nodes[seq].bridge[0]);
-                            g_ovsdb_nodes[seq].bridge[0].is_using = TRUE;
+                            return;
                         }
                     }
                 }
@@ -1258,7 +1229,7 @@ void *ovsdb_recv_msg(void *para)
     struct timeval wait;
     wait.tv_sec = 5;
     wait.tv_usec = 0;
-    UINT4 clientip = 0;    //�����ֽ���
+    UINT4 clientip = 0;    //锟斤拷锟斤拷锟街斤拷锟斤拷
     UINT2 client_port = 0;
     INT1 *p_str = NULL;
     INT4 len = 0;
@@ -1288,8 +1259,8 @@ void *ovsdb_recv_msg(void *para)
             memset(&g_ovsdb_addr, 0, sizeof(struct sockaddr_in));
             socklen_t size = sizeof(struct sockaddr);
 
-            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //��������ʵֻacceptһ��
-            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //�����ֽ���
+            conn_fd = accept(g_ovsdb_sockfd, (struct sockaddr *) &g_ovsdb_addr, &size);    //锟斤拷锟斤拷锟斤拷锟斤拷实只accept一锟斤拷
+            clientip = *(UINT4 *) &g_ovsdb_addr.sin_addr;    //锟斤拷锟斤拷锟街斤拷锟斤拷
             client_port = *(UINT2 *) &g_ovsdb_addr.sin_port;
 
             LOG_PROC("INFO", "New OVSDB connected[%s:%d]", inet_htoa(ntohl(clientip)),ntohs(client_port));
@@ -1306,6 +1277,8 @@ void *ovsdb_recv_msg(void *para)
                     g_ovsdb_nodes[index].bridge[0].is_using = FALSE;
                     g_ovsdb_nodes[index].bridge[1].is_using = FALSE;
                     g_ovsdb_nodes[index].bridge[2].is_using = FALSE;
+                    g_ovsdb_nodes[index].bridge[3].is_using = FALSE;
+                    g_ovsdb_nodes[index].bridge[4].is_using = FALSE;
 
                     g_ovsdb_nodes[index].node_ip = clientip;
                     g_ovsdb_nodes[index].node_fd = conn_fd;
@@ -1332,7 +1305,7 @@ void *ovsdb_recv_msg(void *para)
             {
                 if (FD_ISSET(g_ovsdb_clients[index], &recvmask))
                 {
-                    //һ����ȡBUFF_LEN���ֽڴ浽��Ӧ������Ļ�����
+                    //一锟斤拷锟斤拷取BUFF_LEN锟斤拷锟街节存到锟斤拷应锟斤拷锟斤拷锟斤拷幕锟斤拷锟斤拷锟�
                     do
                     {
                         recv_len += read(g_ovsdb_clients[index], ovsdb_buff + recv_len, OVSDB_BUFF_LEN - recv_len);
@@ -1429,14 +1402,14 @@ INT4 ovsdb_connect_init()
 
 INT4 init_ovsdb()
 {
-    //��ʼ�����ӹ���
+    //锟斤拷始锟斤拷锟斤拷锟接癸拷锟斤拷
     g_ovsdb_sockfd = ovsdb_connect_init();
     if (g_ovsdb_sockfd < 0)
     {
         return GN_ERR;
     }
 
-    //recv�߳�
+    //recv锟竭筹拷
     if (pthread_create(&g_ovsdb_recv_tid, NULL, ovsdb_recv_msg, NULL))
     {
         ovsdb_connect_quit();

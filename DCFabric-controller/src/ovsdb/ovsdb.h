@@ -47,7 +47,7 @@
 
 #define  NODE_TYPE_CONTROL          1
 #define  NODE_TYPE_COMPUTE          2
-#define  NEUTRON_BRIDGE_MAX_NUM     3
+#define  NEUTRON_BRIDGE_MAX_NUM     5
 
 
 typedef struct openvswitch
@@ -73,7 +73,6 @@ typedef struct ovsdb_server
     openvswitch_t open_vswitch;
     ovs_bridge_t bridge[NEUTRON_BRIDGE_MAX_NUM];
 }ovsdb_server_t;
-
 
 pthread_t g_ovsdb_recv_tid;
 
