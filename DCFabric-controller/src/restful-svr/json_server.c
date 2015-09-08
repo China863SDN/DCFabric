@@ -41,6 +41,7 @@
 #include "../group-mgr/group-mgr.h"
 #include "../topo-mgr/topo-mgr.h"
 #include "../user-mgr/user-mgr.h"
+#include "../ovsdb/ovsdb.h"
 #include "error_info.h"
 #include "openflow-common.h"
 #include "openflow-10.h"
@@ -3492,6 +3493,49 @@ static INT1 *del_tenant_member(const INT1 *url, json_t *root)
 /*****************************************************
  * fabrics
  *****************************************************/
+static INT1 *get_switch_name(const INT1 *url, json_t *root)
+{
+    UINT4 i_svr, i_br;
+    UINT1 dpid_bin[8];
+    INT1 tmp_str[32] = { 0 };
+    json_t *obj, *array, *key, *value, *entry;
+
+    obj = json_new_object();
+    array = json_new_array();
+    for(i_svr = 0; i_svr < OVSDB_MAX_CONNECTION; i_svr++)
+    {
+        for(i_br = 0; i_br < NEUTRON_BRIDGE_MAX_NUM; i_br++)
+        {
+            if(g_ovsdb_nodes[i_svr].bridge[i_br].is_using && g_ovsdb_nodes[i_svr].bridge[i_br].dpid)
+            {
+                entry = json_new_object();
+
+                key = json_new_string("DPID");
+                ulli64_to_uc8(g_ovsdb_nodes[i_svr].bridge[i_br].dpid, dpid_bin);
+                sprintf(tmp_str, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x",
+                        dpid_bin[0], dpid_bin[1], dpid_bin[2],
+                        dpid_bin[3], dpid_bin[4], dpid_bin[5],
+                        dpid_bin[6], dpid_bin[7]);
+                value = json_new_string(tmp_str);
+                json_insert_child(key, value);
+                json_insert_child(entry, key);
+
+                key = json_new_string("name");
+                value = json_new_string(g_ovsdb_nodes[i_svr].bridge[i_br].name);
+                json_insert_child(key, value);
+                json_insert_child(entry, key);
+
+                json_insert_child(array, entry);
+            }
+        }
+    }
+
+    key = json_new_string("switchName");
+    json_insert_child(key, array);
+    json_insert_child(obj, key);
+    return json_to_reply(obj, GN_OK);
+}
+
 static INT1 *setup_fabric_entries(const INT1 *url, json_t *root){
 
 	of131_fabric_impl_setup();
@@ -4077,6 +4121,7 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/ports", del_neutron_port);
 
     // fabric
+    ret += register_restful_handler(HTTP_GET, "/gn/fabric/switchname/json",get_switch_name);
     ret += register_restful_handler(HTTP_DELETE, "/gn/fabric/delete/json", del_fabric_entries);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/setup/json", setup_fabric_entries);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/getpath/json", get_fabric_path);

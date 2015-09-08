@@ -59,7 +59,7 @@ typedef struct ovs_bridge
 {
     BOOL is_using;
     char _uuid[63];
-    char dpid[32];
+    UINT8 dpid;
     char name[15];
     UINT1 of_proto;
 }ovs_bridge_t;
@@ -80,6 +80,7 @@ UINT1 g_tunnel_type;        //openstack网络类型 gre/vxlan
 UINT1 g_ovsdb_of_version;   //openstack ovs的openflow版本
 UINT4 g_ovsdb_port;         //ovsdb接口，默认端口6640
 
+extern ovsdb_server_t g_ovsdb_nodes[];
 
 INT4 init_ovsdb();
 

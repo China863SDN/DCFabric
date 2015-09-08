@@ -700,7 +700,7 @@ void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
             //control---->compute
             for (index_br = 0; index_br < NEUTRON_BRIDGE_MAX_NUM; index_br++)
             {
-                if ((g_ovsdb_nodes[index].bridge[index_br].is_using) && (strcmp(remote_node->bridge[index_br].name, "br-int") == 0))
+                if ((g_ovsdb_nodes[index].bridge[index_br].is_using) && (strcmp(remote_node->bridge[index_br].name, INTERNAL_BR) == 0))
                 {
                     if (g_tunnel_type == NETWORK_TYPE_GRE)
                     {
@@ -1022,7 +1022,8 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
     json_t *br = NULL;
     json_t *br_uuid = NULL;
     json_t *br_name = NULL;
-//    json_t *br_ctrl = NULL;
+    json_t *br_dpid = NULL;
+    json_t *br_ctrl = NULL;
 
     INT1 controller_ip[128];
 
@@ -1034,17 +1035,39 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
         while(br_uuid)
         {
             memcpy(g_ovsdb_nodes[seq].bridge[br_idx]._uuid, br_uuid->text, strlen(br_uuid->text));
-            br_name = json_find_first_label(br_uuid->child->child->child->child, "name");
+            br_name = json_find_first_label(br_uuid->child->child->child, "name");
             if(br_name)
             {
-                if(0 == strcmp("br_int", br_name->text))
+                if(0 == strcmp(INTERNAL_BR, br_name->child->text))
                 {
                     has_br_int = TRUE;
                 }
 
-                memcpy(g_ovsdb_nodes[seq].bridge[br_idx].name, br_name->text, strlen(br_name->text));
+                memcpy(g_ovsdb_nodes[seq].bridge[br_idx].name, br_name->child->text, strlen(br_name->child->text));
+                json_free_value(&br_name);
             }
-            json_free_value(&br_name);
+
+            g_ovsdb_nodes[seq].bridge[br_idx].dpid = 0;
+            br_dpid = json_find_first_label(br_uuid->child->child->child, "datapath_id");
+            if(br_dpid)
+            {
+                INT1 *e = NULL;
+
+                g_ovsdb_nodes[seq].bridge[br_idx].dpid = strtoul (br_dpid->child->text, &e, 16);
+                json_free_value(&br_dpid);
+            }
+
+            br_ctrl = json_find_first_label(br_uuid->child->child->child, "controller");
+            if(br_ctrl)
+            {
+                if(0 != strcmp(br_ctrl->child->child->text, "uuid"))
+                {
+                    sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
+                    set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
+                }
+
+                json_free_value(&br_ctrl);
+            }
 
             if (g_ovsdb_of_version == OFP10_VERSION)
             {
@@ -1055,13 +1078,10 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
                 set_failmod_and_ofver(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, FAIL_MODE_SECURE, OFP_13);
             }
 
-            //br_ctrl = json_find_first_label(br_uuid->child->child->child->child, "controller");
-            if (have_controller)
-            {
-                sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
-                set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
-            }
             g_ovsdb_nodes[seq].bridge[br_idx].is_using = TRUE;
+
+            br_idx++;
+            br_uuid = br_uuid->next;
         }
     }
 
@@ -1086,6 +1106,8 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
     json_t *params = NULL;
     json_t *br = NULL;
     json_t *root = NULL;
+    json_t *br_dpid = NULL;
+    json_t *br_ctrl = NULL;
     INT1* test = NULL;
     UINT4 br_idx = 0;
     INT4 parse_type = 0;
@@ -1121,6 +1143,7 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                         br = json_find_first_label(params->child->child->next, "Bridge");
                         if (br)
                         {
+                            printf("%s\n", ovsdb_msg);
                             while(br_idx < NEUTRON_BRIDGE_MAX_NUM)
                             {
                                 if (g_ovsdb_nodes[seq].bridge[br_idx].is_using == FALSE)
@@ -1130,8 +1153,28 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                                     LOG_PROC("INFO", "Switch info: name[%s], uuid[%s]", g_ovsdb_nodes[seq].bridge[br_idx].name, g_ovsdb_nodes[seq].bridge[br_idx]._uuid);
                                     sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
 
+                                    g_ovsdb_nodes[seq].bridge[br_idx].dpid = 0;
+                                    br_dpid = json_find_first_label(br->child->child->child->child->child, "datapath_id");
+                                    if(br_dpid)
+                                    {
+                                        UINT1 _dpid[8];
+                                        memcpy(_dpid, br_dpid->text, 16);
+                                        uc8_to_ulli64(_dpid, &g_ovsdb_nodes[seq].bridge[br_idx].dpid);
+                                        json_free_value(&br_dpid);
+                                    }
+
                                     //设置控制器
-                                    set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
+                                    br_ctrl = json_find_first_label(br->child->child->child->child->child, "controller");
+                                    if(br_ctrl)
+                                    {
+                                        if(0 != strcmp(br_ctrl->child->child->text, "uuid"))
+                                        {
+                                            sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
+                                            set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
+                                        }
+
+                                        json_free_value(&br_ctrl);
+                                    }
 
                                     //新增port: br-int
                                     add_port(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, g_ovsdb_nodes[seq].bridge[br_idx].name);
