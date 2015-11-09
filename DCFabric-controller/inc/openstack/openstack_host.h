@@ -45,12 +45,12 @@
 #define OPENSTACK_PORT_ID_LEN 48
 #define OPENSTACK_PORT_MAX_NUM 10240
 
+
+
 // node
 #define OPENSTACK_NODE_MAX_NUM (OPENSTACK_NETWORK_MAX_NUM+OPENSTACK_SUBNET_MAX_NUM+OPENSTACK_PORT_MAX_NUM)
 
 ////////////////////////////////////////////////////////////////////////
-
-
 typedef struct _openstack_port{
 	gn_switch_t* sw;
 	UINT8 dpid;
@@ -119,6 +119,7 @@ void add_openstack_host_subnet(openstack_subnet_p subnet);
 openstack_subnet_p find_openstack_host_subnet_by_subnet_id(char* subnet_id);
 openstack_subnet_p remove_openstack_host_subnet_by_subnet_id(char* subnet_id);
 openstack_subnet_p find_openstack_host_subnet_by_geteway_ip(UINT4 gateway_ip);
+void find_openstack_network_by_floating_ip(UINT4 floating_ip,char* network_id);
 
 void delete_openstack_host_subnet_by_tenant_id(char* tenant_id);
 void delete_openstack_host_subnet_by_network_id(char* network_id);
@@ -154,4 +155,8 @@ void delete_openstack_host_port_by_port_id(char* port_id);
 
 openstack_node_p create_openstack_host_node(UINT1* data);
 void destory_openstack_host_node(openstack_node_p node);
+
 #endif /* INC_OPENSTACK_OPENSTACK_HOST_H_ */
+
+
+

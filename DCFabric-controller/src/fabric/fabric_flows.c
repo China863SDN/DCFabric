@@ -765,3 +765,50 @@ gn_flow_t * install_add_fabric_impl_middle_flow(gn_switch_t * sw,UINT4 port,UINT
 	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 	return NULL;
 };
+
+void install_fabric_openstack_external_output_flow(gn_switch_t * sw,UINT4 port,UINT1* gateway_mac,UINT4 outer_interface_ip,UINT1 type){
+	flow_mod_req_info_t flow_mod_req;
+	gn_flow_t flow;
+	gn_instruction_actions_t instruction;
+	gn_action_output_t action;
+
+	memset(&flow, 0, sizeof(gn_flow_t));
+	flow.create_time = g_cur_sys_time.tv_sec;
+	flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
+	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
+	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
+	flow.table_id = FABRIC_OUTPUT_TABLE;
+	flow.match.type = OFPMT_OXM;
+
+	if(type==1){
+	    memcpy(flow.match.oxm_fields.eth_dst, gateway_mac, 6);
+	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
+	}else if(type==2){
+		flow.match.oxm_fields.ipv4_src = ntohl(outer_interface_ip);
+		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
+		flow.match.oxm_fields.eth_type = ETHER_IP;
+		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
+	}
+	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
+	instruction.type = OFPIT_APPLY_ACTIONS;
+	instruction.next = flow.instructions;
+	flow.instructions = (gn_instruction_t *)&instruction;
+
+	memset(&action, 0, sizeof(gn_action_t));
+	action.port = port;
+	action.type = OFPAT13_OUTPUT;
+	action.next = instruction.actions;
+	action.max_len = 0xffff;
+	instruction.actions = (gn_action_t *)&action;
+
+	flow_mod_req.xid = 0;
+	flow_mod_req.buffer_id = 0xffffffff;
+	flow_mod_req.out_port = 0xffffffff;
+	flow_mod_req.out_group = 0xffffffff;
+	flow_mod_req.command = OFPFC_ADD;
+	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
+	flow_mod_req.flow = &flow;
+
+	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
+	return;
+}

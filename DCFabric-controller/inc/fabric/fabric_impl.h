@@ -54,5 +54,7 @@ UINT1 get_fabric_state();
 
 p_fabric_path of131_fabric_get_path(UINT8 src_dpid,UINT8 dst_dpid);
 
+UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid);
+
 void of131_test_update();
 #endif /* INC_FABRIC_FABRIC_IMPL_H_ */

@@ -47,7 +47,6 @@ public class TopologyServlet extends HttpServlet {
         String action = request.getPathInfo();
         String ip = request.getParameter("ip");
         String port = request.getParameter("port");
-       // System.out.println("action:"+action);
         try {
             if ("/link".equals(action)) {
                 JSONObject links = new TopologyService().getSwitchLink(ip, port);

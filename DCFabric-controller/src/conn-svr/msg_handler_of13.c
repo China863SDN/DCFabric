@@ -40,9 +40,13 @@
 #include "../stats-mgr/stats-mgr.h"
 #include "../event/event_service.h"
 #include "openstack/openstack_host.h"
+#include "fabric_impl.h"
+#include "fabric_flows.h"
+#include "openstack/fabric_openstack_nat.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
+extern UINT4 g_openstack_on;
 
 void of13_delete_line(gn_switch_t* sw,UINT4 port_index){
 	gn_switch_t* n_sw = NULL;
@@ -696,6 +700,7 @@ UINT1 *of13_get_pkt_data(struct ofp13_packet_in *of_pkt_in)
 
 static INT4 of13_msg_packet_in(gn_switch_t *sw, UINT1 *of_msg)
 {
+	// printf("%s\n", FN);
     packet_in_info_t packet_in_info;
     struct ofp13_packet_in *of_pkt = (struct ofp13_packet_in *)of_msg;
     struct ofp_oxm_header *oxm_ptr = (void *)(of_pkt->match.oxm_fields);
@@ -731,16 +736,62 @@ static void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match)
     }
 }
 
+static void of13_parse_match_nat(struct ofpx_match *of_match, gn_match_t *gn_match)
+{
+    UINT2 oxm_tot_len = ntohs(of_match->length);
+    UINT2 oxm_len = 4;
+    UINT1 field_len = 0;
+    UINT1 *oxm = of_match->oxm_fields;
+
+    memset(gn_match, 0, sizeof(gn_match_t));
+
+    while(oxm_len < ALIGN_8(oxm_tot_len))
+    {
+        field_len = of13_oxm_convertter((UINT1 *)oxm, &(gn_match->oxm_fields));
+        oxm += sizeof(struct ofp_oxm_header) + field_len;
+        oxm_len += sizeof(struct ofp_oxm_header) + field_len;
+    }
+}
+
 static INT4 of13_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 {
     struct ofp13_flow_removed *ofp_fr = (struct ofp13_flow_removed *)of_msg;
+    UINT4 flow_priority = ntohs(ofp_fr->priority);
+    UINT2 flow_port = 0;
 
     gn_flow_t flow;
     flow.priority = ntohl(ofp_fr->priority);
     flow.table_id = ofp_fr->table_id;
 
     memset(&flow, 0, sizeof(gn_flow_t));
-    of13_parse_match(&(ofp_fr->match), &(flow.match));
+
+    if (FABRIC_PRIORITY_NAT_FLOW != flow_priority) {
+    	of13_parse_match(&(ofp_fr->match), &(flow.match));
+
+    }
+    else {
+    	// LOG_PROC("INFO", "NAT: flow timeout is %d!", flow_priority);
+    	of13_parse_match_nat(&(ofp_fr->match), &(flow.match));
+
+    	// if open stack on
+		if ((get_fabric_state()) && (0 != g_openstack_on)) {
+			if (IPPROTO_TCP == flow.match.oxm_fields.ip_proto) {
+				flow_port = flow.match.oxm_fields.tcp_src;
+
+			}
+			else if (IPPROTO_UDP == flow.match.oxm_fields.ip_proto) {
+				flow_port = flow.match.oxm_fields.udp_src;
+			}
+			else {
+				// do nothing
+			}
+
+			if (0 != flow_port) {
+				destroy_nat_connect_by_mac_and_port(ntohl(flow.match.oxm_fields.ipv4_dst), flow.match.oxm_fields.eth_src, ntohs(flow_port), flow.match.oxm_fields.ip_proto);
+			}
+		}
+
+    }
 
     return flow_entry_timeout(sw, &flow);
 }

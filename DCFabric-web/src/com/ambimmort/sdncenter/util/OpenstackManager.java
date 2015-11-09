@@ -34,6 +34,12 @@ public class OpenstackManager {
     private final static String NETWORKSURL=":9696/v2.0/networks";
     private final static String SUBNETSURL=":9696/v2.0/subnets";
     private final static String PORTSURL=":9696/v2.0/ports";
+    private static final String bangRoutePortUrl = "/gn/fabric/external/json";
+    private static final String UPDATEEXTERNALURL = "/gn/fabric/external/update/json";
+    private static final String GETALLCONFIG = "/gn/config/getall/json";
+    private static final String SETALLCONFIG = "/gn/config/setall/json";
+    private static Map<String,List<String>> externalBandInfo;
+    private static List<ExternalNet> externalNets;
     private OpenstackManager() {
         this.controller = new ArrayList<String>();
     }
@@ -197,4 +203,185 @@ public class OpenstackManager {
         }
         return subnets;
     }
+    public List getAllExternal() throws Exception{
+    	if(null==controller || controller.size()==0){
+    		return null;
+    	}
+    	Map<String,String> header = new HashMap<String,String>();
+    	Map<String,String> macs = getMacProperties();
+    	getNewToken();
+    	header.put("X-Auth-Token", tokenId);
+    	String resp = RestClient.getInstance().get("http://" + controller.get(0)+NETWORKSURL,  header);
+    	JSONObject o = JSONObject.fromObject(resp);
+    	Iterator it = o.keys();
+    	if(null==externalNets){
+    		externalNets =  new ArrayList<ExternalNet>();
+    	}else{
+    		externalNets.clear();
+    	}
+        while (it.hasNext()) {
+        	String key = (String) it.next();
+        	JSONArray  jb = o.getJSONArray(key);
+        	Iterator netit = jb.iterator();
+        	while(netit.hasNext()){
+        		JSONObject jbb = (JSONObject)netit.next();
+        		if(!jbb.getString("router:external").equals("true")){
+        			continue;
+        		}
+        		ExternalNet en = new ExternalNet();
+            	en.setNetworkid(jbb.getString("id"));
+            	JSONArray allsubnet = jbb.getJSONArray("subnets");
+            	Iterator itt = allsubnet.iterator();
+            	if(itt.hasNext()){
+            		String subnetid = (String)itt.next();
+            		en.setSubnetid(subnetid);
+            	}
+            	externalNets.add(en);
+        	}	
+        }
+        for(ExternalNet en :externalNets ){
+        	resp = RestClient.getInstance().get("http://" + controller.get(0)+SUBNETSURL+"/"+en.getSubnetid(), header);
+        	o = JSONObject.fromObject(resp);
+            it = o.keys();
+            if(it.hasNext()){
+            	String key = (String) it.next();
+            	JSONObject jb = o.getJSONObject(key);
+            	String gateway_ip = jb.getString("gateway_ip");
+            	String cidr = jb.getString("cidr");
+            	en.setGatwayip(gateway_ip);
+            	en.setGatewaymac(macs.get(gateway_ip));
+            	en.setCidr(cidr);
+            }
+        }
+        resp = RestClient.getInstance().get("http://" + controller.get(0)+PORTSURL, header);
+        o = JSONObject.fromObject(resp);
+        it = o.keys();
+		while(it.hasNext()){
+			String key = (String) it.next();
+        	JSONArray allport = o.getJSONArray(key);
+			Iterator itt = allport.iterator();
+			while(itt.hasNext()){
+				JSONObject jb =(JSONObject)itt.next();
+				String check_network_id = jb.getString("network_id");
+				String device_owner =  jb.getString("device_owner");
+				if(device_owner.equals("network:router_gateway")){
+					for(ExternalNet en : externalNets){
+						if(en.getNetworkid().equals(check_network_id)){
+							JSONArray fixed_ip = jb.getJSONArray("fixed_ips");
+							String mac = jb.getString("mac_address");
+							en.setMac(mac);
+							Iterator ittt = fixed_ip.iterator();
+							while(ittt.hasNext()){
+								JSONObject jbb =(JSONObject)ittt.next();
+								String outer_interface = jbb.getString("ip_address");
+								en.setOuter_interface_ip(outer_interface);
+								if(null!=externalBandInfo && null!=externalBandInfo.get(outer_interface)){
+									en.setBandDpid(externalBandInfo.get(outer_interface).get(0));
+									en.setBandPort(externalBandInfo.get(outer_interface).get(1));
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+        return externalNets;
+    }
+    private Map<String, String> getMacProperties() {
+    	Map<String,String> macs = new HashMap<String,String>();
+    	Properties pps = new Properties();
+    	try {
+			pps.load(new FileInputStream(contextPath+"phy-route.properties"));
+			macs.put("192.168.50.129",pps.getProperty("192.168.50.129"));
+			macs.put("192.168.52.129",pps.getProperty("192.168.52.129"));
+			macs.put("192.168.53.129",pps.getProperty("192.168.53.129"));
+			macs.put("192.168.50.1",pps.getProperty("192.168.50.1"));
+			macs.put("192.168.52.1",pps.getProperty("192.168.52.1"));
+			macs.put("192.168.53.1",pps.getProperty("192.168.53.1"));
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+    	return macs;
+	}
+ 
+    public String updateConfig(String dcfabricip,String port, String ipflow, 
+    		String fabricon, String openstackon, String physupport, 
+    		String maxswitch, String maxbuff, String maxlength)throws Exception{
+    	JSONObject obj = new JSONObject();
+    	obj.put("ipflow", ipflow);
+    	obj.put("fabricon", fabricon);
+    	obj.put("openstackon", openstackon);
+    	obj.put("physupport", physupport);
+    	obj.put("maxswitch", maxswitch);
+    	obj.put("maxbuff", maxbuff);
+    	obj.put("maxlength", maxlength);
+    	System.out.println(obj.toString());
+    	String resp = RestClient.getInstance().post("http://" + dcfabricip + ":" + port + SETALLCONFIG,obj.toString());
+    	if (resp != null) {
+            JSONObject objj = JSONObject.fromObject(resp);
+            if(objj.getInt("retCode")==0){
+            	return "success";
+            }
+        }
+		return "failed";
+    }
+    public JSONObject searchConfig(String dcfabricip,String port)throws Exception{
+    	String resp = RestClient.getInstance().get("http://" + dcfabricip + ":" + port + GETALLCONFIG );
+    	JSONObject o = JSONObject.fromObject(resp);
+    	JSONObject obj = new JSONObject();
+    	obj.put("ip_match_flows", o.getString("ip_match_flows"));
+    	obj.put("auto_fabric", o.getString("auto_fabric"));
+    	obj.put("openvstack_on", o.getString("openvstack_on"));
+    	obj.put("use_phy", o.getString("use_phy"));
+    	obj.put("max_switch", o.getString("max_switch"));
+    	obj.put("buff_num", o.getString("buff_num"));
+    	obj.put("buff_len", o.getString("buff_len"));
+    	return obj;
+    }
+	public String bandPort(String dcfabricip,String port,String dpid,String bandport,String outip) throws Exception{
+    	if(null==externalNets){
+    		return " data is empty";
+    	}
+    	if(null==externalBandInfo ){
+    		externalBandInfo = new HashMap<String,List<String>>();
+    	}
+    	if(null== externalBandInfo.get(outip)){
+    		List<String> bandInfo = new ArrayList<String>();
+    		bandInfo.add(dpid);
+    		bandInfo.add(bandport);
+    		externalBandInfo.put(outip, bandInfo);
+    	}else{
+    		externalBandInfo.get(outip).clear();
+    		externalBandInfo.get(outip).add(dpid);
+    		externalBandInfo.get(outip).add(bandport);
+    	}
+    	for(ExternalNet en : externalNets){
+    		if(en.getOuter_interface_ip().equals(outip)){
+    			en.setBandDpid(dpid);
+    			en.setBandPort(bandport);
+    			String resp = RestClient.getInstance().post("http://" + dcfabricip + ":" + port + bangRoutePortUrl,JSONObject.fromObject(en).toString() );
+    			if (resp != null) {
+    	            JSONObject obj = JSONObject.fromObject(resp);
+    	            if(obj.getInt("retCode")==0){
+    	            	return "success";
+    	            }
+    	        }
+    			return "failed";
+    		}
+    	}
+    	return "failed";
+    }
+	
+	public String  updateExternal(String dcfabricip,String port)  throws Exception{
+		String resp = RestClient.getInstance().post("http://" + dcfabricip + ":" + port + UPDATEEXTERNALURL,"{}");
+		if (resp != null) {
+            JSONObject obj = JSONObject.fromObject(resp);
+            if(obj.getInt("retCode")==0){
+            	return "success";
+            }
+        }
+		return "failed";
+	}
 }

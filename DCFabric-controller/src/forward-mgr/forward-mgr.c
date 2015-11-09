@@ -48,7 +48,19 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
     arp_t *arp = (arp_t *)(packet_in_info->data);
     UINT4 host_ip = ntohl(arp->sendip);
     mac_user_t *p_user_dst = NULL;
+    // printf("####arp_packet_handler  src ip:[%s]\n", inet_htoa(host_ip));
+    if(get_fabric_state()){
+		if(	g_openstack_on == 0 ){
+			fabric_arp_handle(sw, packet_in_info);
+		}else{
+			fabric_openstack_arp_handle(sw,packet_in_info);
+		}
+		return GN_OK;
+	}
 
+    if (0 != g_openstack_on) {
+    	return GN_OK;
+    }
     //记录源MAC到MAC端口表中
     mac_user_t *p_user_src = search_mac_user(arp->eth_head.src);
     if (NULL == p_user_src)
@@ -78,14 +90,7 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
         }
     }
 
-    if(get_fabric_state()){
-    	if(	g_openstack_on == 0 ){
-    		fabric_arp_handle(sw, packet_in_info);
-    	}else{
-    		fabric_openstack_arp_handle(sw,packet_in_info);
-    	}
-		return GN_OK;
-    }
+
     if(arp->opcode == htons(1))         //arp request
     {
         if (arp->targetip == 0)
@@ -149,8 +154,22 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
     ip_t *p_ip = (ip_t *)(packet_in_info->data);
     UINT4 host_ip = ntohl(p_ip->src);
+    // printf("####ip_packet_handler  src ip:[%s]\n", inet_htoa(host_ip));
     mac_user_t *p_user_src = NULL;
     mac_user_t *p_user_dst = NULL;
+
+    if(get_fabric_state()){
+		if(	g_openstack_on == 0 ){
+			fabric_ip_handle(sw,packet_in_info);
+		}else{
+			fabric_openstack_ip_handle(sw,packet_in_info);
+		}
+		return GN_OK;
+	}
+
+    if (0 != g_openstack_on) {
+    	return GN_OK;
+    }
 
     //记录源MAC到MAC端口表中
     p_user_src = search_mac_user(p_ip->eth_head.src);
@@ -180,14 +199,7 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
             p_user_src->ipv4 = host_ip;
         }
     }
-    if(get_fabric_state()){
-    	if(	g_openstack_on == 0 ){
-    		fabric_ip_handle(sw,packet_in_info);
-    	}else{
-    		fabric_openstack_ip_handle(sw,packet_in_info);
-    	}
-    	return GN_OK;
-    }
+
     if(0 == memcmp(p_ip->eth_head.dest, g_controller_mac, 6))   //如果目的MAC为控制器网关的MAC, 则为跨网段转发
     {
         UINT4 gw_ip = find_gateway_ip(p_ip->dest);                 //查找目的ip对应的网关
@@ -227,7 +239,7 @@ static INT4 vlan_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_inf
 INT4 packet_in_process(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
     ether_t *ether_header = (ether_t *)packet_in_info->data;
-
+    // printf("####eth header ip type:[%d]\n", ether_header->proto);
     if(ether_header->proto == htons(ETHER_LLDP))
     {
         return g_default_forward_handler.lldp(sw, packet_in_info);
@@ -250,7 +262,7 @@ INT4 packet_in_process(gn_switch_t *sw, packet_in_info_t *packet_in_info)
     }
     else
     {
-        LOG_PROC("ERROR", "%s: ether type [%d] has no handler!\n", FN, ether_header->proto);
+        // LOG_PROC("ERROR", "%s: ether type [%d] has no handler!\n", FN, ether_header->proto);
         return GN_ERR;
     }
 }
@@ -288,7 +300,7 @@ INT1 register_handler_ether_packets(UINT2 eth_type, packet_in_proc_t packet_hand
     }
     else
     {
-        printf("%s: ether type [0x%x] has no handler!\n", FN, eth_type);
+        // printf("%s: ether type [0x%x] has no handler!\n", FN, eth_type);
         return GN_ERR;
     }
 

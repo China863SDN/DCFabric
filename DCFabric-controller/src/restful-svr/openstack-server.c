@@ -1,3 +1,32 @@
+/*
+ * DCFabric GPL Source Code
+ * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
+ *
+ * This file is part of the DCFabric SDN Controller. DCFabric SDN
+ * Controller is a free software; you can redistribute it and/or
+ * modify it under the terms of the GNU General Public License
+ * as published by the Free Software Foundation; either version 2
+ * of the License, or (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, , see <http://www.gnu.org/licenses/>.
+ */
+
+/*
+ * fabric_openstack_external.h
+ *
+ *  Created on: sep 11, 2015
+ *  Author: yanglei
+ *  E-mail: DCFabric-admin@bnc.org.cn
+ *
+ *  Modified on: sep 11, 2015
+ */
+
 #include "openstack-server.h"
 #include <stdio.h>
 #include <sys/socket.h>
@@ -16,6 +45,8 @@
 #include "gnflush-types.h"
 #include "openstack_host.h"
 #include "openstack_app.h"
+#include "fabric_openstack_external.h"
+#include "fabric_openstack_nat.h"
 
 void createPortFabric(char* jsonString,const char* stringType);
 static char * g_openstack_server_name;
@@ -23,6 +54,7 @@ UINT4 g_openstack_port = 9696;
 char g_openstack_ip[16] = {0};
 UINT4 g_openstack_on = 0;
 UINT4 g_openstack_fobidden_ip = 0;
+INT4 numm = 0;
 //获取token id
 void getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 {
@@ -238,7 +270,6 @@ void initOpenstackFabric(){
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
 	g_openstack_on = (NULL == value)?0:atoi(value);
 	if( 1 == g_openstack_on){
-		LOG_PROC("INFO", "Init Openstack service finished");
 		// get openstack ip
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
 		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
@@ -249,24 +280,54 @@ void initOpenstackFabric(){
 		g_openstack_fobidden_ip = inet_addr("169.254.169.254");
 
 		init_openstack_host();
+		init_openstack_external();
+		read_external_port_config();
+		init_nat_mem_pool();
+		init_nat_host();
 		getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/ports",g_openstack_port,"port");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
+		LOG_PROC("INFO", "Init Openstack service finished");
 	}else{
 		LOG_PROC("INFO", "Init Openstack service Failed");
 	}
 //	show_openstack_total();
 }
+void updateOpenstackFloating(){
+	// config
+	INT1 *value = NULL;
+
+	// config & check openstack
+	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
+	g_openstack_on = (NULL == value)?0:atoi(value);
+	if( 1 == g_openstack_on){
+		// get openstack ip
+		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
+		(NULL == value)?strncpy(g_openstack_ip, "192.168.53.51", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
+		// get port;
+		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
+		g_openstack_port = ((NULL == value) ? 9696 : atoi(value));
+		//
+		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
+		LOG_PROC("INFO", "Openstack Floating Info Updated");
+	}else{
+		LOG_PROC("INFO", "Openstack Floating Info Update Failed");
+	}
+}
+
 void createPortFabric( char *jsonString,const char *stringType){
     const char *tempString = jsonString;
 	INT4 parse_type = 0;
+	UINT2 totalNum = 0;
 	json_t *json=NULL,*temp=NULL;
-	char* networkType="network",*subnetType="subnet",*portType="port";
+	char* networkType="network",*subnetType="subnet",*portType="port",*floatingType="floating";
 	char tenant_id[48] ={0};
 	char network_id[48] = {0};
 	char subnet_id[48] = {0};
 	char port_id[48] = {0};
 	char cidr[30] = {0};
+	char router_id[48]={0};
 	parse_type = json_parse_document(&json,tempString);
 	if (parse_type != JSON_OK)
 	{
@@ -305,8 +366,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 						}
 						update_openstack_app_network(tenant_id,network_id,shared);
 						network=network->next;
+						totalNum ++;
 					}
 					json_free_value(&networks);
+					LOG_PROC("INFO","OPENSTACK NETWORK  UPDATE!   [%d] updated!",totalNum);
+					totalNum=0;
 				}
 			}else if(strcmp(stringType,subnetType)==0){
 //				char *tenant_id,*network_id,*subnet_id,*cidr;
@@ -364,8 +428,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 						}
 						update_openstack_app_subnet(tenant_id,network_id,subnet_id,gateway_ip,start_ip,end_ip,cidr);
 						subnet=subnet->next;
+						totalNum++;
 					}
 					json_free_value(&subnets);
+					LOG_PROC("INFO","OPENSTACK SUBNETS  UPDATE!   [%d] updated!",totalNum);
+					totalNum=0;
 				}
 
 			}else if(strcmp(stringType,portType)==0){
@@ -373,6 +440,7 @@ void createPortFabric( char *jsonString,const char *stringType){
 				char port_type[40] = {0};
 				char* computer="compute:nova";
 				char* dhcp="network:dhcp";
+				char* floating = "network:floatingip";
 				INT4 ip = 0;
 				UINT1 mac[6]={0};
 				UINT4 port_number = 0;
@@ -426,7 +494,7 @@ void createPortFabric( char *jsonString,const char *stringType){
 							}
 							json_free_value(&fix_ips);
 						}
-						if(strcmp(port_type,computer)==0){
+						if(strcmp(port_type,computer)==0|| strcmp(port_type,floating)==0){
 //							LOG_PROC("INFO","PORT UPDATE!");
 							update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
 						}else if(strcmp(port_type,dhcp)==0){
@@ -437,9 +505,55 @@ void createPortFabric( char *jsonString,const char *stringType){
 							update_openstack_app_gateway_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
 						}
 						port=port->next;
+						totalNum++;
 					}
-
 					json_free_value(&ports);
+					LOG_PROC("INFO","OPENSTACK PORTS  UPDATE!   [%d] updated!",totalNum);
+					totalNum=0;
+				}
+			}
+			else if(strcmp(stringType,floatingType)==0){
+				json_t *floatings = json_find_first_label(json, "floatingips");
+				UINT4 fixed_ip;//inner ip
+				UINT4 floating_ip;//outer ip
+				if(floatings){
+					json_t *floating_ip_one  = floatings->child->child;
+					while(floating_ip_one){
+						temp = json_find_first_label(floating_ip_one, "router_id");
+						if(temp){
+							if(temp->child->text){
+								strcpy(router_id,temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						temp = json_find_first_label(floating_ip_one, "port_id");
+						if(temp){
+							if(temp->child->text){
+								strcpy(port_id,temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						temp = json_find_first_label(floating_ip_one, "fixed_ip_address");
+						if(temp){
+							if(temp->child->text){
+								fixed_ip = inet_addr(temp->child->text);
+							}
+							json_free_value(&temp);
+						}
+						temp = json_find_first_label(floating_ip_one, "floating_ip_address");
+						if(temp){
+							if(temp->child->text){
+								floating_ip = inet_addr(temp->child->text);
+							}
+							json_free_value(&temp);
+						}
+						create_floatting_ip_by_rest(fixed_ip,floating_ip,port_id,router_id);
+						floating_ip_one=floating_ip_one->next;
+						totalNum++;
+					}
+					json_free_value(&floatings);
+					LOG_PROC("INFO","OPENSTACK FLOATINGIP  UPDATE!   [%d] updated!",totalNum);
+					totalNum=0;
 				}
 			}
 		}

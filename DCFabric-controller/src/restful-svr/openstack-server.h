@@ -29,7 +29,8 @@
 
 
 
-
+#ifndef INC_OPENSTACK_SERVER_H_
+#define INC_OPENSTACK_SERVER_H_
 
 
 
@@ -37,5 +38,5 @@
 void getNewTokenId(char *ip,char *tenantName,char *username,char *password);
 void getOpenstackInfo(char *ip,char *url,int port,char *string);
 void initOpenstackFabric();
-
-
+void updateOpenstackFloating();
+#endif

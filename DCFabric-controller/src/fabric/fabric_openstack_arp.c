@@ -33,6 +33,13 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "common.h"
+#include "fabric_floating_ip.h"
+#include "fabric_openstack_nat.h"
+#include "fabric_openstack_external.h"
+#include "../conn-svr/conn-svr.h"
+
+UINT4 g_openstack_dns_ip = 0x8080808;
+
 /*****************************
  * local function
  *****************************/
@@ -55,6 +62,9 @@ void fabric_openstack_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in
 void fabric_openstack_packet_flood(packet_in_info_t *packet_in_info);
 void fabric_openstack_packet_flood_in_subnet(packet_in_info_t *packet_in_info,char* subnet_id,UINT4 subnet_port_num);
 void fabric_openstack_create_arp_reply(openstack_port_p src_port,openstack_port_p dst_port,packet_in_info_t *packet_in_info);
+void fabric_openstack_create_arp_reply_public(UINT1* srcMac, UINT4 srcIP, UINT1* dstMac, UINT4 dstIP, gn_switch_t* sw,
+											UINT4 outPort, packet_in_info_t *packet_in_info);
+void fabric_openstack_external_arp_mac();
 
 void fabric_openstack_show_port(openstack_port_p port){
 	struct in_addr addr;
@@ -84,6 +94,20 @@ extern UINT4 g_openstack_fobidden_ip;
  *****************************/
 void fabric_openstack_arp_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	arp_t *arp = (arp_t *)(packet_in->data);
+
+	//printf("%s\n", FN);
+	//printf("arp source ip  ");
+	//fabric_openstack_show_ip(arp->sendip);
+	//printf("arp destination ip  ");
+	//fabric_openstack_show_ip(arp->targetip);
+	//printf("arp source mac  ");
+	//fabric_openstack_show_mac(arp->eth_head.src);
+	//printf("arp destination mac  ");
+	//fabric_openstack_show_mac(arp->eth_head.dest);
+	//printf("\n");
+
+
+
 	if(arp->opcode == htons(1)){
 		fabric_openstack_arp_request_handle(sw,packet_in);
 	}else{
@@ -98,23 +122,39 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	openstack_port_p dst_gateway = NULL;
 	openstack_subnet_p src_subnet = NULL;
 	openstack_subnet_p dst_subnet = NULL;
+	external_floating_ip_p fip = NULL;
 
 	ip_t *ip = (ip_t *)(packet_in->data);
-//	printf("%s\n", FN);
-//	printf("source ip  ");
-//	fabric_openstack_show_ip(ip->src);
-//	printf("destination ip  ");
-//	fabric_openstack_show_ip(ip->dest);
-//	printf("source mac  ");
-//	fabric_openstack_show_mac(ip->eth_head.src);
-//	printf("destination mac  ");
-//	fabric_openstack_show_mac(ip->eth_head.dest);
-//	printf("\n");
+	//printf("%s\n", FN);
+	//printf("packet in sw ip ");
+	//fabric_openstack_show_ip(sw->sw_ip);
+	//printf("source ip  ");
+	//fabric_openstack_show_ip(ip->src);
+	//printf("destination ip  ");
+	//fabric_openstack_show_ip(ip->dest);
+	//printf("source mac  ");
+	//fabric_openstack_show_mac(ip->eth_head.src);
+	//printf("destination mac  ");
+	//fabric_openstack_show_mac(ip->eth_head.dest);
+	//printf("\n");
 
 	// find the source host
 	src_port = find_openstack_app_host_by_mac(ip->eth_head.src);
 	if(src_port == NULL){
-		LOG_PROC("INFO","IP Handle : Can't find source host!");
+		fip = get_external_floating_ip_by_floating_ip(ip->dest);
+		external_port_p epp = get_external_port_by_floatip(ip->dest);
+		if(fip != NULL && epp!=NULL)
+		{
+			fabric_openstack_floating_ip_packet_in_handle(epp, packet_in, fip);
+		}
+		else if (NULL != epp)
+		{
+			fabric_openstack_ip_nat_handle(sw, packet_in, FALSE);
+		}
+		else {
+			// do nothing
+		}
+
 		return;
 	}
 
@@ -122,7 +162,8 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	src_port->ip = ip->src;
 	src_port->port = packet_in->inport;
 	src_port->sw = sw;
-
+	// printf("%s update sw(%s) to ", FN, inet_ntoa(*(struct in_addr*)&sw->sw_ip));
+	// printf(" ip(%s); port is %d\n", inet_ntoa(*(struct in_addr*)&ip->src), packet_in->inport);
 	// is broadcast?
 	if(/*0 ==memcmp(g_broad_mac,ip->eth_head.dest,6) || */g_broad_ip == ip->dest){
 		fabric_openstack_ip_broadcast_handle(sw,packet_in,ip,src_port);
@@ -165,8 +206,20 @@ void fabric_openstack_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 			dst_port = find_openstack_app_host_by_ip_network(ip->dest,src_port->network_id);
 		}
 		if(NULL == dst_port){
-			//flood
-			//fabric_openstack_packet_flood(packet_in);
+			//check ip is in openstack intranet or not.
+			fip = get_external_floating_ip_by_fixed_ip(ip->src);
+			if(fip != NULL)
+			{
+				fabric_openstack_floating_ip_packet_out_handle(src_port, packet_in, fip);
+			}else
+			{
+				if (ip->dest == g_openstack_dns_ip)
+				{
+					// printf("NAT: dns ip! do nothing!");
+					return ;
+				}
+				fabric_openstack_ip_nat_handle(sw, packet_in, TRUE);
+			}
 			return;
 		}
 
@@ -231,20 +284,70 @@ void fabric_openstack_arp_request_handle(gn_switch_t *sw, packet_in_info_t *pack
 	openstack_port_p dst_port = NULL;
 	openstack_subnet_p subnet = NULL;
 	arp_t *arp = (arp_t *)(packet_in->data);
-//	printf("%s\n", FN);
-//	printf("source ip  ");
-//	fabric_openstack_show_ip(arp->sendip);
-//	printf("destination ip  ");
-//	fabric_openstack_show_ip(arp->targetip);
-//	printf("source mac  ");
-//	fabric_openstack_show_mac(arp->sendmac);
-//	printf("destination mac  ");
-//	fabric_openstack_show_mac(arp->targetmac);
-//	printf("\n");
+
+	//printf("%s\n", FN);
+	//printf("source ip  ");
+	//fabric_openstack_show_ip(arp->sendip);
+	//printf("destination ip  ");
+	//fabric_openstack_show_ip(arp->targetip);
+	//printf("source mac  ");
+	////fabric_openstack_show_mac(arp->sendmac);
+	//printf("destination mac  ");
+	//fabric_openstack_show_mac(arp->targetmac);
+	//LOG_PROC("TEST", "%d| %d| ", sw->dpid, packet_in->inport);
+
+	//printf("\n");
+
 
 	src_port = find_openstack_app_host_by_mac(arp->sendmac);
 	if(src_port == NULL){
-		LOG_PROC("INFO","ARP Request Handle : Can't find source host!");
+
+		external_floating_ip_p fip = find_external_floating_ip_by_floating_ip(arp->targetip);
+		if(fip != NULL)
+		{
+			fabric_openstack_floating_ip_arp_request_handle(sw, fip, packet_in);
+		}else{
+			external_port_p epp = get_external_port_by_out_interface_ip(arp->targetip);
+			//ques
+			if(epp==NULL){
+//				LOG_PROC("INFO","ARP Request Handle : Can't find destination host!");
+//				fabric_openstack_show_ip(arp->targetip);
+				return;
+			}
+			printf("Nat IP Arp Request Handle Start \n");
+
+			gn_switch_t * ext_sw = NULL;
+			ext_sw = find_sw_by_dpid(epp->external_dpid);
+			if (NULL == ext_sw) {
+				LOG_PROC("INFO", "NAT IP: gateway sw is NULL!");
+				return;
+			}
+
+			fabric_openstack_create_arp_reply_public( epp->external_outer_interface_mac, epp->external_outer_interface_ip,
+								arp->sendmac, arp->sendip, ext_sw, epp->external_port, packet_in);
+//			packout_req_info_t packout_req_info;
+//			arp_t new_arp_pkt;
+//
+//			packout_req_info.buffer_id = 0xffffffff;
+//			packout_req_info.inport = OFPP13_CONTROLLER;
+//			packout_req_info.outport = packet_in->inport;
+//			packout_req_info.max_len = 0xff;
+//			packout_req_info.xid = packet_in->xid;
+//			packout_req_info.data_len = sizeof(arp_t);
+//			packout_req_info.data = (UINT1 *)&new_arp_pkt;
+//
+//			memcpy(&new_arp_pkt, arp, sizeof(arp_t));
+//			memcpy(new_arp_pkt.eth_head.src, epp->external_outer_interface_mac, 6);
+//			memcpy(new_arp_pkt.eth_head.dest, arp->sendmac, 6);
+//			new_arp_pkt.eth_head.proto = htons(ETHER_ARP);
+//			new_arp_pkt.opcode = htons(2);
+//			new_arp_pkt.sendip = arp->targetip;
+//			new_arp_pkt.targetip = arp->sendip;
+//			memcpy(new_arp_pkt.sendmac, epp->external_outer_interface_mac, 6);
+//			memcpy(new_arp_pkt.targetmac, arp->sendmac, 6);
+//
+//			sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
+		}
 		return;
 	}
 	// update
@@ -320,15 +423,24 @@ void fabric_openstack_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet
 	// update
 	src_port->ip = arp->sendip;
 	src_port->port = packet_in->inport;
+	src_port->ofport_no = packet_in->inport;
 	src_port->sw = sw;
+	// printf("%s update sw(%s) to ", FN, inet_ntoa(*(struct in_addr*)&sw->sw_ip));
+	// printf(" ip(%s); port is %d\n", inet_ntoa(*(struct in_addr*)&arp->sendip), packet_in->inport);
 
 	// find dst_port (because mac maybe is the gateway)
 	dst_port = find_openstack_app_host_by_ip_subnet(arp->targetip,src_port->subnet_id);
 	if(NULL == dst_port){
+		external_floating_ip_p fip = find_external_floating_ip_by_fixed_ip(arp->sendip);
+		if(fip != NULL)
+		{
+			fabric_openstack_floating_ip_arp_reply_handle(sw, fip, packet_in);
+		}
 		// drop
 		LOG_PROC("INFO","ARP Rply Handle : Can't find destination host!");
 		return;
 	}
+
 
 	if(dst_port->sw == NULL){
 		// flood
@@ -415,10 +527,10 @@ void fabric_openstack_install_fabric_flows(openstack_port_p src_port,openstack_p
 	UINT4 src_tag = 0;
 	UINT4 dst_tag = 0;
 	// display port info
-	LOG_PROC("INFO","Sourt Port Info:");
-	fabric_openstack_show_port(src_port);
-	LOG_PROC("INFO","Destination Port Info:");
-	fabric_openstack_show_port(dst_port);
+//	LOG_PROC("INFO","Sourt Port Info:");
+//	fabric_openstack_show_port(src_port);
+//	LOG_PROC("INFO","Destination Port Info:");
+//	fabric_openstack_show_port(dst_port);
 	src_tag = of131_fabric_impl_get_tag_sw(src_port->sw);
 	dst_tag = of131_fabric_impl_get_tag_sw(dst_port->sw);
 	if(src_port->sw == dst_port->sw){
@@ -437,10 +549,10 @@ void fabric_openstack_install_fabric_out_subnet_flows(openstack_port_p src_port,
 	UINT4 src_tag = 0;
 	UINT4 dst_tag = 0;
 	// display port info
-	LOG_PROC("INFO","Sourt Port Info:");
-	fabric_openstack_show_port(src_port);
-	LOG_PROC("INFO","Destination Port Info:");
-	fabric_openstack_show_port(dst_port);
+//	LOG_PROC("INFO","Sourt Port Info:");
+//	fabric_openstack_show_port(src_port);
+//	LOG_PROC("INFO","Destination Port Info:");
+//	fabric_openstack_show_port(dst_port);
 
 	src_tag = of131_fabric_impl_get_tag_sw(src_port->sw);
 	dst_tag = of131_fabric_impl_get_tag_sw(dst_port->sw);
@@ -561,4 +673,70 @@ void fabric_openstack_create_arp_reply(openstack_port_p src_port,openstack_port_
     memcpy(new_arp_pkt.targetmac, src_port->mac, 6);
 
     src_port->sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](src_port->sw, (UINT1 *)&packout_req_info);
+};
+
+void fabric_openstack_create_arp_reply_public(UINT1* srcMac,UINT4 srcIP, UINT1* dstMac,UINT4 dstIP,
+		gn_switch_t* sw, UINT4 outPort,packet_in_info_t *packet_in_info){
+//	LOG_PROC("TEST", "fabric_openstack_create_arp_reply_public srcMac| srcIP| dstMac| dstIP| sw dpid| outPort|");
+//	fabric_openstack_show_mac(srcMac);
+//	fabric_openstack_show_ip(srcIP);
+//	fabric_openstack_show_mac(dstMac);
+//	fabric_openstack_show_ip(dstIP);
+//	LOG_PROC("TEST", "%d| %d| ", sw->dpid, outPort);
+
+
+    packout_req_info_t packout_req_info;
+    arp_t new_arp_pkt;
+    arp_t *arp = (arp_t *)(packet_in_info->data);
+
+    packout_req_info.buffer_id = 0xffffffff;
+    packout_req_info.inport = OFPP13_CONTROLLER;
+    packout_req_info.outport = outPort;
+    packout_req_info.max_len = 0xff;
+    packout_req_info.xid = packet_in_info->xid;
+    packout_req_info.data_len = sizeof(arp_t);
+    packout_req_info.data = (UINT1 *)&new_arp_pkt;
+
+    memcpy(&new_arp_pkt, arp, sizeof(arp_t));
+    memcpy(new_arp_pkt.eth_head.src,srcMac , 6);
+    memcpy(new_arp_pkt.eth_head.dest,dstMac , 6);
+    new_arp_pkt.eth_head.proto = htons(ETHER_ARP);
+    new_arp_pkt.opcode = htons(2);
+    new_arp_pkt.sendip = srcIP;
+    new_arp_pkt.targetip = dstIP;
+    memcpy(new_arp_pkt.sendmac, srcMac, 6);
+    memcpy(new_arp_pkt.targetmac,dstMac , 6);
+
+    sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
+};
+
+void fabric_openstack_external_arp_mac(){
+//	packout_req_info_t packout_req_info;
+//    arp_t new_arp_pkt;
+//    packout_req_info.buffer_id = 0xffffffff;
+//	packout_req_info.inport = 0xfffffffd;
+//	packout_req_info.outport = 0;
+//	packout_req_info.max_len = 0xff;
+//	packout_req_info.xid = 0;
+//	packout_req_info.data_len = sizeof(arp_t);
+//	packout_req_info.data = (UINT1 *)&new_arp_pkt;
+//
+//	memcpy(&new_arp_pkt, arp, sizeof(arp_t));
+//	memcpy(new_arp_pkt.eth_head.src, g_controller_mac, 6);
+//	memcpy(new_arp_pkt.eth_head.dest, arp->eth_head.src, 6);
+//	new_arp_pkt.eth_head.proto = htons(ETHER_ARP);
+//	new_arp_pkt.opcode = htons(2);
+//	new_arp_pkt.sendip = arp->targetip;
+//	new_arp_pkt.targetip = arp->sendip;
+//	memcpy(new_arp_pkt.sendmac, g_controller_mac, 6);
+//	memcpy(new_arp_pkt.targetmac, arp->sendmac, 6);
+//
+//	if(sw->ofp_version == OFP10_VERSION)
+//	{
+//		sw->msg_driver.msg_handler[OFPT_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
+//	}
+//	else if(sw->ofp_version == OFP13_VERSION)
+//	{
+//		sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
+//	}
 };

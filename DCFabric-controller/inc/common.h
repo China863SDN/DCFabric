@@ -170,7 +170,7 @@ typedef unsigned long long int UINT8;
     printf("\n");
 /*
 // 2
-UINT1 g_log_level;   //ÉèÖÃÈÕÖ¾ÏÔÊ¾¼¶±ğ
+UINT1 g_log_level;   //è®¾ç½®æ—¥å¿—æ˜¾ç¤ºçº§åˆ«
 #define GN_LOG(log_level, format, arguments...) \
 {                                       \
     if(log_level >= g_log_level)        \
@@ -240,7 +240,7 @@ typedef struct key_value
 
 typedef struct net_mask
 {
-    UINT4 ip;       //ÍøÂç×Ö½ÚĞò
+    UINT4 ip;       //ç½‘ç»œå­—èŠ‚åº
     UINT4 prefix;
     UINT4 minip;
     UINT4 maxip;
@@ -290,5 +290,11 @@ INT4 get_total_cpu();
 
 //set the cpu affinity of the current thread
 INT4 set_cpu_affinity(UINT4 cpu_id);
+
+// convert ip to number
+UINT4 ip2number(const INT1* ip);
+
+// convert number to ip
+INT1* number2ip(INT4 ip_num, INT1* ip);
 
 #endif /* COMMON_H_ */

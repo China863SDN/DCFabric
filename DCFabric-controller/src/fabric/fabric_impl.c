@@ -993,3 +993,31 @@ void of131_test_update(){
 ////	printf("===============================\n");
 //	return i;
 //}
+
+// get the output port of dpids
+UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid)
+{
+
+	p_fabric_path path = NULL;
+	p_fabric_path_node path_node = NULL;
+
+	path = of131_fabric_get_path(src_dpid, dst_dpid);
+	if (NULL == path) {
+		LOG_PROC("INFO", "The path from %llu to %llu is not exist", src_dpid, dst_dpid);
+		return 0;
+	}
+
+	path_node = path->node_list;
+	if (NULL == path_node) {
+		LOG_PROC("INFO", "The path from %llu to %llu has no node", src_dpid, dst_dpid);
+		return 0;
+	}
+
+	if (NULL == path_node->port) {
+		LOG_PROC("INFO", "The path from %llu to %llu has no port", src_dpid, dst_dpid);
+		return 0;
+	}
+
+	// LOG_PROC("INFO", "The port of path from %llu to %llu is %d", src_dpid, dst_dpid, path_node->port->port_no);
+	return path_node->port->port_no;
+}

@@ -252,7 +252,7 @@ void masked_ip_parser(INT1 *masked_ip, net_mask_t *net_mask)
 
 char *mac2str(UINT1 *hex, char *result)
 {
-    sprintf(result, "%2x:%2x:%2x:%2x:%2x:%2x",hex[0], hex[1],\
+    sprintf(result, "%02x:%02x:%02x:%02x:%02x:%02x",hex[0], hex[1],\
             hex[2],hex[3],hex[4],hex[5]);
 
     return result;
@@ -293,3 +293,15 @@ INT4 set_cpu_affinity(UINT4 cpu_id)
     CPU_SET(cpu_id, &cpu_set);
     return pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpu_set);
 }
+
+UINT4 ip2number(const INT1* ip)
+{
+   return inet_addr(ip);
+}
+
+INT1* number2ip(INT4 ip_num, INT1* ip)
+{
+   strcpy(ip, inet_ntoa(*(struct in_addr*)&ip_num));
+   return ip;
+}
+

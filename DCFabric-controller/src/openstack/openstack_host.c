@@ -100,6 +100,7 @@ void init_openstack_host(){
 	}
 	g_openstack_host_port_id = mem_create(sizeof(openstack_port), OPENSTACK_PORT_MAX_NUM);
 
+
 	if(g_openstack_host_node_id != NULL){
 		mem_destroy(g_openstack_host_node_id);
 	}
@@ -453,6 +454,7 @@ openstack_port_p find_openstack_host_port_by_mac(UINT1* mac){
 	return NULL;
 };
 
+
 openstack_port_p remove_openstack_host_port_by_mac(UINT1* mac){
 	openstack_port_p port = NULL;
 	openstack_node node;
@@ -498,6 +500,19 @@ openstack_port_p find_openstack_host_port_by_ip_network(UINT4 ip,char* network_i
 	}
 	return NULL;
 };
+void find_openstack_network_by_floating_ip(UINT4 floating_ip,char* network_id){
+	openstack_port_p port = NULL;
+	openstack_node_p node_p = g_openstack_host_port_list;
+	while(node_p != NULL){
+		port = (openstack_port_p)node_p->data;
+		if(port->ip==floating_ip){
+			strcpy(network_id,port->network_id);
+			return;
+		}
+		node_p = node_p->next;
+	}
+}
+
 
 openstack_port_p find_openstack_host_port_by_ip_subnet(UINT4 ip,char* subnet_id){
 	openstack_port_p port = NULL;

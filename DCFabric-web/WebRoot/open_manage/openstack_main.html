@@ -32,10 +32,10 @@
         <li class='accordion-group'>
             <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
         </li>
-        <li class='accordion-group active'>
+        <li class='accordion-group'>
             <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
         </li>
-        <li class='accordion-group'>
+     <!--   <li class='accordion-group'>
             <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
         </li>
         <li class="accordion-group">
@@ -52,8 +52,8 @@
         </li>
         <li class='accordion-group'>
             <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
-        </li>
-        <li class='accordion-group'>
+        </li>-->
+        <li class='accordion-group active'>
             <a href="../open_manage/openstack_main.html"><i class="icon-desktop"></i> <span class="name">openstack</span></a>
         </li>
 </nav>
@@ -104,6 +104,7 @@
                 <h4 class="page-title">Openstack <small></small></h4>
             </div>
         </div>
+        <select id="control" style='display:none;width:160px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'></select>
         <div class="row-fluid">
             <div class="span12">
                 <div id="middle-left" class=''>
@@ -151,6 +152,57 @@
                     </div>
                         </section>
                     </div>
+                   
+                   
+                   <div class="row-fluid">
+                        <section class="widget">
+                            <header style="padding-bottom: 20px;">
+                                <h4 style="display: block;float: left;">
+                                    <i class="icon-file-alt"></i>
+                                  基本设置
+                                </h4>
+                                <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="updateConfig()">保存</button></div>
+                                <div style="display: block;float: right;"><button type="button" class="btn btn-success btn-small" onclick="searchConfig()">查询</button></div>
+                                <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog" style="background-color: rgba(61, 66, 68, 1);color:#fff">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" >×</button>
+                            </div>
+                            <div class="modal-body">
+                                <form id="user-form" class="form-horizontal label-right">
+                                    <div class="control-group">
+                                        <label class="control-label" for="ip">IP地址</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="ip" name="ip" class="span6">
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                            </div>
+                        </div>
+                            </header>
+                            <div class="body">
+                        <table id="datatable-table8" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th style="width:30%">功能列表</th>
+                                
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                             <tr><td>是否允许下发ip匹配流表</td><td><input type=radio id="ipflow1" name="ipflow" value="1"/>是<input type=radio id="ipflow0" name="ipflow" value="0"/>否</td></tr>
+                             <tr><td>是否允许启动初始化sFabric</td><td><input type=radio id="fabricon1" name="fabricon" value="1"/>是<input type=radio id="fabricon0" name="fabricon" value="0"/>否</td></tr>
+                             <tr><td>是否开启对接openstack</td><td><input type=radio id="openstackon1" name="openstackon" value="1"/>是<input type=radio id="openstackon0" name="openstackon" value="0"/>否</td></tr>
+                             <tr><td>是否支持物理openflow交换机</td><td><input type=radio id="physupport1" name="physupport" value="1"/>是<input type=radio id="physupport0" name="physupport" value="0"/>否</td></tr>
+                             <tr><td>最大交换机连接数</td><td><input type=text value="" id="maxswitch"/></td></tr>
+                             <tr><td>每台交换机允许最大数据包池</td><td><input type=text value="" id="maxbuff"/></td></tr>
+                             <tr><td>每个数据包最大长度分割点</td><td><input type=text value="" id="maxlength"/></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                        </section>
+                    </div>
+                   
                    
                     <div class="row-fluid">
                         <section class="widget">
@@ -223,7 +275,7 @@
                                             <th>网关ip</th>
                                             <th>mac地址</th>
                                             <th>子网id</th>
-                                            <th>网络id</th>
+                                            <th>port id</th>
                                             <th>租户id</th>
                                         </tr>
                                     </thead>
@@ -232,6 +284,35 @@
                             </div>
                                     </section>
                                     </div>
+                                    
+                                     <div class="row-fluid">
+                        <section class="widget">
+                            <header style="padding-bottom: 20px;">
+                                <h4 style="display: block;float: left;">
+                                    <i class="icon-file-alt"></i>
+                                                                                                                                      外网列表
+                                    </h4>
+                                    <div style="display: block;float: right;">
+                                    <button type="button" class="btn btn-success btn-small" onclick="updateExternal()">更新端口信息</button>
+                                    <button type="button" class="btn btn-primary btn-small" onclick="searchExternal()">查询</button></div>
+                                    </header>
+                                     <div class="body">
+                                <table id="datatable-table7" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>外部接口ip</th>
+                                            <th>外部接口mac地址</th>
+                                            <th>外网网关</th>
+                                             <th>外网网关mac</th>
+                                            <th>操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                                    </section>
+                                    </div>
+                                    
                 </div>
                 
             </div>
@@ -358,14 +439,14 @@
         $.post("../openstack/add",{ip:ip},function(data){
             if(data.status=="0"||data.status==0){
                 if(data.data){
-                    alert("添加成功！")
+                    alert("添加成功！");
                     $("#myModal2").hide();
-                    search();
+                    searchConfig();
                 }else{
-                    alert("添加失败！")
+                    alert("添加失败！");
                 }
             }
-        },'json')
+        },'json');
     }
     function searchController(){
         $("#datatable-table3").hide();
@@ -373,11 +454,22 @@
             if(data.status=="0"||data.status==0){
                 data = data.data;
                 for(var i in data){
-                    var oper = "<button type='button' class='btn btn-danger btn-small' onclick='del(" + JSON.stringify(data[i]) + ")''>删除</button>"+
-                            "<button type='button' class='btn btn-primary btn-small' onclick='viewSwitchesInfo(" + JSON.stringify(data[i]) + ")'>查看交换机信息</button>";
+                    var oper = "<button type='button' class='btn btn-danger btn-small' onclick='delController(" + JSON.stringify(data[i]) + ")''>删除</button>";
                     $("#datatable-table3 tbody").append("<tr><td>"+data[i]+"</td><td>"+oper+"</td></tr>");
                 }
                 $("#datatable-table3").show();
+            }
+        },"json");
+    }
+    function delController(controller){
+        $.post("../openstack/delController",{controller:controller},function(data){
+        	if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("删除成功！");
+                    searchConfig();
+                }else{
+                    alert("删除失败！");
+                }
             }
         },"json");
     }
@@ -414,9 +506,131 @@
                 data = data.data;
                 $("#datatable-table6 tbody").html("");
                 for(var i in data){
-                   $("#datatable-table6 tbody").append("<tr><td>"+data[i]["fixed_ips"][0]["ip_address"]+"</td><td>"+data[i]["mac_address"]+"</td><td>"+data[i]["fixed_ips"][0]["subnet_id"]+"</td><td>"+data[i]["network_id"]+"</td><td>"+data[i]["tenant_id"]+"</td></tr>");
+                   $("#datatable-table6 tbody").append("<tr><td>"+data[i]["fixed_ips"][0]["ip_address"]+"</td><td>"+data[i]["mac_address"]+"</td><td>"+data[i]["fixed_ips"][0]["subnet_id"]+"</td><td>"+data[i]["id"]+"</td><td>"+data[i]["tenant_id"]+"</td></tr>");
                 }
                 $("#datatable-table6").show();
+            }
+        },"json");
+    }
+    function showNetCommand(str,bandDpid,bandPort){
+       var ip = $("#control").val().split("|")[0];
+       var port = $("#control").val().split("|")[1];
+       $.post("../switchinfo",{ip:ip,port:port},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                var firstobj;
+                $("#selectone"+str).html("<option></option>");
+                $("#selecttwo"+str).html("<option></option>");
+                for(var i in data){
+                    var checked="";
+                    if(data[i].dpid==bandDpid){
+                      checked = "selected=selected";
+                      firstobj = data[i].netport;
+                    }
+                    var obj = JSON.stringify(data[i].netport);
+                    $("#selectone"+str).append("<option  value='"+obj+"' rel='"+data[i].dpid+"' "+checked+">"+data[i].ip+"("+data[i].dpid+")</option>");               
+                }
+                if(firstobj){
+	                for(var i in firstobj){
+	                    var checked="";
+	                    if(firstobj[i].portNumber == bandPort){
+	                       checked="selected=selected";
+	                    }
+	                    var strr = "<option value='"+firstobj[i].portNumber+"'  "+checked+">网口号："+firstobj[i].portNumber+"</option>";
+	                   $("#selecttwo"+str).append(strr);
+	                }
+                }
+            }
+        },"json");
+       $("#divone"+str).show();
+       $("#btone"+str).hide();
+    }
+    function hideNetCommand(str){
+       $("#divone"+str).hide();
+       $("#btone"+str).show();
+    }
+    function showRoutePort(str){
+       var obj =  JSON.parse($("#selectone"+str).val()) ;
+        $("#selecttwo"+str).html("");
+       for(var i in obj){
+          var strr = "<option value='"+obj[i].portNumber+"'>网口号："+obj[i].portNumber+"</option>";
+          $("#selecttwo"+str).append(strr);
+       }
+    }
+    function submitRoutePort(str){
+       var ip = $("#control").val().split("|")[0];
+       var port = $("#control").val().split("|")[1];
+       var dpid = $("#selectone"+str).find("option:selected").attr("rel");
+       var bandport = $("#selecttwo"+str).val();
+       var out_interface = $("#tdone"+str).html();
+       $.post("../openstack/bandPort",{ip:ip,port:port,dpid:dpid,bandport:bandport,outip:out_interface},function(data){
+            if(data.status=="0"||data.status==0){
+             alert(data.data);   
+            }
+        },"json");
+    }
+    function searchExternal(){
+        $("#datatable-table7").hide();
+        $.post("../openstack/allExternal",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                $("#datatable-table7 tbody").html("");
+                for(var i in data){
+                   $("#datatable-table7 tbody").append("<tr><td id='tdone"+i+"' >"+data[i]["outer_interface_ip"]+
+                   "</td><td>"+data[i]["mac"]+"</td><td>"+
+                   data[i]["gatwayip"]+"</td><td>"+
+                   data[i]["gatewaymac"]+"</td><td>"+
+                   "<button id='btone"+i+"' type='button' class='btn btn-success btn-small' onclick=showNetCommand("+i+",'"+data[i]["bandDpid"]+"','"+data[i]["bandPort"]+"')>绑定交换机端口</button>"+
+                   "<div id='divone"+i+"' style='display:none'>"+
+                   "<select id='selectone"+i+"' onchange='showRoutePort("+i+")'></select>"+
+                   "<select id='selecttwo"+i+"'></select>"+
+                   "<button id='bttwo"+i+"'type='button' class='btn btn-primary btn-small' onclick='submitRoutePort("+i+")'>绑定</button>"+
+                   "<button type='button' class='btn btn-success btn-small' onclick='hideNetCommand("+i+")'>取消</button></div>"+
+                   "</td></tr>");
+                }
+                $("#datatable-table7").show();
+            }
+        },"json");
+    }
+    function updateExternal(){
+        var ip = $("#control").val().split("|")[0];
+        var port = $("#control").val().split("|")[1];
+        $.post("../openstack/updateExternal",{ip:ip,port:port},function(data){
+            if(data.status=="0"||data.status==0){
+                alert(data.data);   
+            }
+        },"json");
+    }
+     function updateConfig(){
+        var ip = $("#control").val().split("|")[0];
+        var port = $("#control").val().split("|")[1];
+        var ipflow = $("input:radio[name='ipflow']:checked").val(); 
+        var fabricon = $("input:radio[name='fabricon']:checked").val(); 
+        var openstackon = $("input:radio[name='openstackon']:checked").val(); 
+        var physupport = $("input:radio[name='physupport']:checked").val(); 
+        var maxswitch = $("#maxswitch").val(); 
+        var maxbuff = $("#maxbuff").val();
+        var maxlength = $("#maxlength").val();
+        
+        $.post("../openstack/updateConfig",{ip:ip,port:port,ipflow:ipflow,fabricon:fabricon,openstackon:openstackon,physupport:physupport,maxswitch:maxswitch,maxbuff:maxbuff,maxlength:maxlength},function(data){
+            if(data.status=="0"||data.status==0){
+                alert("success!");
+            }
+        },"json");
+    }
+    function searchConfig(){
+        var ip = $("#control").val().split("|")[0];
+        var port = $("#control").val().split("|")[1];
+        $.post("../openstack/searchConfig",{ip:ip,port:port},function(data){
+            if(data.status=="0"||data.status==0){
+                var allconfig = data.data;
+                $("#ipflow"+allconfig["ip_match_flows"]+"").attr("checked","checked");
+                $("#fabricon"+allconfig["auto_fabric"]+"").attr("checked","checked"); 
+                $("#openstackon"+allconfig["openvstack_on"]+"").attr("checked","checked"); 
+                $("#physupport"+allconfig["use_phy"]+"").attr("checked","checked"); 
+                $("#maxswitch").val(allconfig["max_switch"]);
+                $("#maxbuff").val(allconfig["buff_num"]);
+                $("#maxlength").val(allconfig["buff_len"]);
             }
         },"json");
     }

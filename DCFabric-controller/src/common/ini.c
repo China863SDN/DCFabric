@@ -30,6 +30,7 @@
 #include "../inc/ini.h"
 #include <stdlib.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 #define ADD_ELEMENT_TO_LIST(list, element_type, element)    \
 do                                                          \
@@ -286,14 +287,141 @@ char *get_value(const ini_file_t *ini_file, const char *selection, const char *i
     return NULL;
 }
 
+// set the value of the configure item
+int set_value(const ini_file_t *ini_file, const char *selection, const char *item, char* save_value)
+{
+    ini_selection_t *sec_tmp = NULL;
+    ini_item_t *item_tmp = NULL;
+    ini_selection_t *sec_new = NULL;
+    ini_file_t *doc = (ini_file_t *)ini_file;
+    ini_item_t *item_new = NULL;
+
+    if((NULL == ini_file) || (NULL == selection) || (NULL == item))
+    {
+        return 0;
+    }
+
+    // judge the selection exists
+    if (ini_file->selections) {
+    	sec_tmp = ini_file->selections;
+    	while (sec_tmp) {
+    		if(0 == strcmp(selection, sec_tmp->selection))
+			{
+				break;
+			}
+			sec_tmp = sec_tmp->next;
+    	}
+    }
+
+    if (NULL == sec_tmp) {
+    	// add selections to list
+    	sec_new = (ini_selection_t*)gn_malloc(sizeof(ini_selection_t));
+		if(NULL == sec_new)
+		{
+			return 0;
+		}
+
+		sec_new->selection = strdup(selection);
+		ADD_ELEMENT_TO_LIST(doc->selections, ini_selection_t, sec_new);
+    }
+
+    if(ini_file->selections)
+    {
+        sec_tmp = ini_file->selections;
+        while(sec_tmp)
+        {
+            if(0 == strcmp(selection, sec_tmp->selection))
+            {
+                item_tmp = sec_tmp->ini_items;
+                while(item_tmp)
+                {
+                    if(0 == strcmp(item, item_tmp->name))
+                    {
+                        strcpy(item_tmp->value, save_value);
+                        return 1;
+                    }
+
+                    item_tmp = item_tmp->next;
+                }
+
+                // add item
+                if (NULL == item_tmp) {
+
+                	item_new = (ini_item_t *)gn_malloc(sizeof(ini_item_t));
+					if(NULL == item_new)
+					{
+						return 0;
+					}
+
+					item_new->name = strdup(item);
+					item_new->value = strdup(save_value);
+					item_new->comments = NULL;
+
+					ADD_ELEMENT_TO_LIST(sec_tmp->ini_items, ini_item_t, item_new);
+                }
+            }
+
+            sec_tmp = sec_tmp->next;
+        }
+    }
+
+    return 0;
+}
+
+// set_value_by_int
+int set_value_int(const ini_file_t *ini_file, const char *selection, const char *item, unsigned long long int save_value)
+{
+	int return_value = 0;
+	char temp_value[64];
+	sprintf(temp_value, "%llu", save_value);
+	return_value = set_value(ini_file, selection, item, temp_value);
+	return return_value;
+}
+
+// set value ip
+int set_value_ip(const ini_file_t *ini_file, const char *selection, const char *item, unsigned long int save_value)
+{
+	int return_value = 0;
+	struct in_addr addr;
+	memcpy(&addr, &save_value, 4);
+	return_value = set_value(ini_file, selection, item, inet_ntoa(addr));
+	return return_value;
+}
+
+// set value mac
+int set_value_mac(const ini_file_t *ini_file, const char *selection, const char *item, unsigned char* save_value)
+{
+	int return_value = 0;
+	char temp[16] = {0};
+	sprintf(temp, "%02x:%02x:%02x:%02x:%02x:%02x",save_value[0], save_value[1],\
+			save_value[2],save_value[3],save_value[4],save_value[5]);
+	return_value = set_value(ini_file, selection, item, temp);
+	return return_value;
+}
+
 //write ini_file to the file
-int save_ini(const ini_file_t *ini_file, const char *path)
+ini_file_t* save_ini(ini_file_t *ini_file, const char *path)
 {
     ini_file_t *doc = (ini_file_t *)ini_file;
     ini_selection_t *sec_tmp = NULL;
     ini_comment_t *comm_tmp = NULL;
     ini_item_t *item_tmp = NULL;
     char buf[1024] = {0};
+
+    if((NULL == ini_file) || (NULL == ini_file->fd) || (NULL == path))
+    {
+    	printf("Ini save file error! The parameter is empty or configure file is wrong!\n");
+        return NULL;
+    }
+
+    fclose(ini_file->fd);
+
+    FILE *fp = fopen(path, "w");
+	if (NULL == fp)
+	{
+		return NULL;
+	}
+	ini_file->fd = fp;
 
     if(doc->selections)
     {
@@ -317,7 +445,6 @@ int save_ini(const ini_file_t *ini_file, const char *path)
             {
                 item_tmp = sec_tmp->ini_items;
                 sec_tmp->ini_items = sec_tmp->ini_items->next;
-
                 while(NULL != item_tmp->comments)
                 {
                     comm_tmp = item_tmp->comments;
@@ -327,6 +454,10 @@ int save_ini(const ini_file_t *ini_file, const char *path)
                     fputs("\n", ini_file->fd);
                 }
 
+                strcpy(buf,item_tmp->name);
+                strcat(buf,"=");
+                strcat(buf,item_tmp->value);
+                strcat(buf,"\n");
                 fputs(buf , ini_file->fd);
             }
 
@@ -335,5 +466,9 @@ int save_ini(const ini_file_t *ini_file, const char *path)
     }
 
     fflush(ini_file->fd);
-    return 0;
+    close_ini(&doc);
+
+    ini_file_t *new_doc = read_ini(path);
+    ini_file = new_doc;
+    return new_doc;
 }

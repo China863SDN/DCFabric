@@ -4,10 +4,12 @@
  */
 package com.ambimmort.sdncenter.servlet;
 
+import com.ambimmort.sdncenter.util.ExternalNet;
 import com.ambimmort.sdncenter.util.OpenstackManager;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
@@ -49,8 +51,9 @@ public class OpenstackServlet extends HttpServlet {
             if ("/add".equals(action)) {
                 OpenstackManager.getInstance().addController(ip);
                 printInfo(0, true, out);
-            } else if ("/del".equals(action)) {
-            	OpenstackManager.getInstance().removeController(ip);
+            } else if ("/delController".equals(action)) {
+            	String openstackip = request.getParameter("controller");
+            	OpenstackManager.getInstance().removeController(openstackip);
                 printInfo(0, true, out);
             }else if("/allnetwork".equals(action)){
             	JSONArray o = OpenstackManager.getInstance().getAllNetwork();
@@ -61,6 +64,40 @@ public class OpenstackServlet extends HttpServlet {
         	}else if("/allports".equals(action)){
             	JSONArray o = OpenstackManager.getInstance().getAllPorts();
             	printInfo(0, o, out);
+        	}else if("/allExternal".equals(action)){
+            	List<ExternalNet> o = OpenstackManager.getInstance().getAllExternal();
+            	printInfo(0, o, out);
+        	}else if("/updateExternal".equals(action)){
+        		String dcfabricip = request.getParameter("ip");
+        		String port = request.getParameter("port");
+        		String result = OpenstackManager.getInstance().updateExternal(dcfabricip,port);
+            	printInfo(0, result, out);
+        	}else if("/updateConfig".equals(action)){
+        		String dcfabricip = request.getParameter("ip");
+        		String port = request.getParameter("port");
+        		String ipflow = request.getParameter("ipflow");
+        		String fabricon = request.getParameter("fabricon");
+        		String openstackon = request.getParameter("openstackon");
+        		String physupport = request.getParameter("physupport");
+        		String maxswitch = request.getParameter("maxswitch");
+        		String maxbuff = request.getParameter("maxbuff");
+        		String maxlength = request.getParameter("maxlength");
+        		String result = OpenstackManager.getInstance().updateConfig(dcfabricip,port,ipflow,fabricon,openstackon,physupport,maxswitch,maxbuff,maxlength);
+            	printInfo(0, result, out);
+        	}else if("/searchConfig".equals(action)){
+        		String dcfabricip = request.getParameter("ip");
+        		String port = request.getParameter("port");
+        		JSONObject result = OpenstackManager.getInstance().searchConfig(dcfabricip,port);
+        		System.out.println(result);
+            	printInfo(0, result, out);
+        	}else if("/bandPort".equals(action)){
+        		String dcfabricip = request.getParameter("ip");
+        		String port = request.getParameter("port");
+        		String dpid = request.getParameter("dpid");
+        	    String bandport = request.getParameter("bandport");
+        	    String outip = request.getParameter("outip");
+            	String result = OpenstackManager.getInstance().bandPort(dcfabricip,port,dpid,bandport,outip);
+            	printInfo(0, result, out);
         	}else {
                 JSONArray controllers = OpenstackManager.getInstance().getControllers();
                 printInfo(0, controllers, out);

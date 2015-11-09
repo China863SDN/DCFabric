@@ -48,6 +48,9 @@
 #include "openflow-13.h"
 #include "fabric_impl.h"
 #include "openstack_app.h"
+#include "fabric_openstack_external.h"
+#include "fabric_openstack_nat.h"
+
 //从url中解析附带的参数
 static void get_url_argument(const char *url, key_value_t *arg)
 {
@@ -3541,10 +3544,210 @@ static INT1 *setup_fabric_entries(const INT1 *url, json_t *root){
 	of131_fabric_impl_setup();
     return json_to_reply(NULL, GN_OK);
 }
+
+static INT1 *setup_fabric_nat_switch(const INT1 *url, json_t *root)
+{
+	UINT1 nat_physical_switch_flag = 0;
+	json_t *item = NULL;
+	item = json_find_first_label(root, "physical");
+	if (item) {
+		if (item->child->text) {
+			nat_physical_switch_flag =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+
+	// modify the flag value
+	update_nat_physical_switch_flag(nat_physical_switch_flag);
+
+	return json_to_reply(NULL, GN_OK);
+}
+static INT1 *get_all_config_info(const INT1 *url, json_t *root){
+	json_t *obj = json_new_object();
+	json_t *key = NULL;
+	json_t *value = NULL;
+
+
+	key = json_new_string("ip_match_flows");
+	value = json_new_number(get_value(g_controller_configure, "[openvstack_conf]", "ip_match_flows"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+	key = json_new_string("auto_fabric");
+	value = json_new_number(get_value(g_controller_configure, "[openvstack_conf]", "auto_fabric"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+	key = json_new_string("openvstack_on");
+	value = json_new_number(get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+	key = json_new_string("use_phy");
+	value = json_new_number(get_value(g_controller_configure, "[openvstack_conf]", "use_physical_switch_modify_nat"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+	key = json_new_string("max_switch");
+	value = json_new_number(get_value(g_controller_configure, "[controller]", "max_switch"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+	key = json_new_string("buff_num");
+	value = json_new_number(get_value(g_controller_configure, "[controller]", "buff_num"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+	key = json_new_string("buff_len");
+	value = json_new_number(get_value(g_controller_configure, "[controller]", "buff_len"));
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+	return json_to_reply(obj, GN_OK);
+}
+static INT1 *set_all_config_info(const INT1 *url, json_t *root){
+	json_t *item = NULL;
+	UINT1 ipflow = 0;
+	UINT1 fabricon = 0;
+	UINT1 openstackon = 0;
+	UINT1 physupport = 0;
+	UINT4 maxswitch = 0;
+	UINT4 maxbuff = 0;
+	UINT4 maxlength =0;
+	item = json_find_first_label(root, "ipflow");
+	if(item){
+		if(item->child->text){
+			ipflow =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "fabricon");
+	if(item){
+		if(item->child->text){
+			fabricon =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "openstackon");
+	if(item){
+		if(item->child->text){
+			openstackon =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "physupport");
+	if(item){
+		if(item->child->text){
+			physupport =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "maxlength");
+	if(item){
+		if(item->child->text){
+			maxlength =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "maxswitch");
+	if(item){
+		if(item->child->text){
+			maxswitch =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "maxbuff");
+	if(item){
+		if(item->child->text){
+			maxbuff =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	set_value_int(g_controller_configure, "[openvstack_conf]", "ip_match_flows",ipflow);
+	set_value_int(g_controller_configure, "[openvstack_conf]", "auto_fabric",fabricon);
+	set_value_int(g_controller_configure, "[openvstack_conf]", "openvstack_on",openstackon);
+	set_value_int(g_controller_configure, "[openvstack_conf]", "use_physical_switch_modify_nat",physupport);
+	set_value_int(g_controller_configure, "[controller]", "max_switch",maxswitch);
+	set_value_int(g_controller_configure, "[controller]", "buff_num",maxbuff);
+	set_value_int(g_controller_configure, "[controller]", "buff_len",maxlength);
+	g_controller_configure = save_ini(g_controller_configure,CONFIGURE_FILE);
+	return json_to_reply(NULL, GN_OK);
+}
+static INT1 *setup_fabric_external(const INT1 *url, json_t *root){
+	UINT4 gatwayip=0;
+	UINT1 gateway_mac[6]={0};
+	UINT4 outip=0;
+	UINT1 outer_mac[6]={0};
+	UINT8 dpid = 0;
+	UINT4 port=0;
+	char network_id[48] = {0};
+	json_t *item = NULL;
+	item = json_find_first_label(root, "bandDpid");
+	if(item){
+	    if(item->child->text){
+	    	UINT1 dpid_tmp[8] = { 0 };
+			mac_str_to_bin(item->child->text, dpid_tmp);
+			uc8_to_ulli64 (dpid_tmp,&dpid);
+			json_free_value(&item);
+	    }
+	}
+	item = json_find_first_label(root, "bandPort");
+	if(item){
+		if(item->child->text){
+			port =  atoi(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "gatwayip");
+	if(item){
+		if(item->child->text){
+			gatwayip = inet_addr(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "outer_interface_ip");
+	if(item){
+		if(item->child->text){
+			outip = inet_addr(item->child->text);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "gatewaymac");
+	if(item){
+		if(item->child->text){
+			macstr2hex(item->child->text,gateway_mac);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "mac");
+	if(item){
+		if(item->child->text){
+			macstr2hex(item->child->text,outer_mac);
+			json_free_value(&item);
+		}
+	}
+	item = json_find_first_label(root, "networkid");
+		if(item){
+			if(item->child->text){
+				strcpy(network_id,item->child->text);
+				json_free_value(&item);
+			}
+		}
+	create_external_port_by_rest(gatwayip,gateway_mac,outip,outer_mac,dpid,port,network_id);
+    return json_to_reply(NULL, GN_OK);
+}
+static INT1  *update_fabric_external(const INT1 *url, json_t *root)
+{
+	update_floating_ip_mem_info();
+	return json_to_reply(NULL, GN_OK);
+}
+
 static INT1 *del_fabric_entries(const INT1 *url, json_t *root)
 {
 	of131_fabric_impl_delete();
     return json_to_reply(NULL, GN_OK);
+}
+static INT1 *ip_match_flows_fabric(const INT1 *url, json_t *root){
+	return json_to_reply(NULL, GN_OK);
 }
 static INT1 *setup_fabric_entries_parts(const INT1 *url, json_t *root){
 	UINT8 dpids[100] = {0};
@@ -3829,6 +4032,7 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 	char port_type[40] = {0};
 	char* computer = "compute:nova";
 	char* dhcp="network:dhcp";
+	char* floatip="network:floatingip";
 	INT4 ip = 0;
 	UINT1 mac[6]={0};
 	UINT4 port_number = 0;
@@ -3895,6 +4099,9 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 			update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
 		}else if(strcmp(port_type,dhcp)==0){
 			update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+		}else if(strcmp(port_type,floatip)==0){
+			update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+			create_floatting_ip_by_rest(0,ip,NULL,NULL);
 		}else{
 			update_openstack_app_gateway_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
 		}
@@ -4105,27 +4312,36 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_POST, "/gn/tenant/member/json", post_tenant_member);
     ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/member/json", del_tenant_member);
 
-    ret += register_restful_handler(HTTP_GET, "/controller/nb/v2/neutron/networks", get_neutron_network);
+    ret += register_restful_handler(HTTP_GET, "/gn/neutron/networks", get_neutron_network);
     ret += register_restful_handler(HTTP_POST, "/gn/neutron/networks", post_neutron_network);
-    ret += register_restful_handler(HTTP_PUT, "/controller/nb/v2/neutron/networks", put_neutron_network);
-    ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/networks", del_neutron_network);
+    ret += register_restful_handler(HTTP_PUT, "/gn/neutron/neutron/networks", put_neutron_network);
+    ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/networks", del_neutron_network);
 
-    ret += register_restful_handler(HTTP_GET, "/controller/nb/v2/neutron/subnets", get_neutron_subnet);
+    ret += register_restful_handler(HTTP_GET, "/gn/neutron/subnets", get_neutron_subnet);
     ret += register_restful_handler(HTTP_POST, "/gn/neutron/subnets", post_neutron_subnet);
-    ret += register_restful_handler(HTTP_PUT, "/controller/nb/v2/neutron/subnets", put_neutron_subnet);
-    ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/networks", del_neutron_subnet);
+    ret += register_restful_handler(HTTP_PUT, "/gn/neutron/subnets", put_neutron_subnet);
+    ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/subnets", del_neutron_subnet);
 
-    ret += register_restful_handler(HTTP_GET, "/controller/nb/v2/neutron/ports", get_neutron_port);
+    ret += register_restful_handler(HTTP_GET, "/gn/neutron/ports", get_neutron_port);
     ret += register_restful_handler(HTTP_POST, "/gn/neutron/ports", post_neutron_port);
-    ret += register_restful_handler(HTTP_PUT, "/controller/nb/v2/neutron/ports", put_neutron_port);
-    ret += register_restful_handler(HTTP_DELETE, "/controller/nb/v2/neutron/ports", del_neutron_port);
+    ret += register_restful_handler(HTTP_PUT, "/gn/neutron/ports", put_neutron_port);
+    ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/ports", del_neutron_port);
 
     // fabric
     ret += register_restful_handler(HTTP_GET, "/gn/fabric/switchname/json",get_switch_name);
     ret += register_restful_handler(HTTP_DELETE, "/gn/fabric/delete/json", del_fabric_entries);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/setup/json", setup_fabric_entries);
+    ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/json", setup_fabric_external);
+    ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/update/json", update_fabric_external);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/getpath/json", get_fabric_path);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/setupparts/json", setup_fabric_entries_parts);
+
+    // nat
+    ret += register_restful_handler(HTTP_POST, "/gn/fabric/nat/switch", setup_fabric_nat_switch);
+
+    //config
+    ret += register_restful_handler(HTTP_GET, "/gn/config/getall/json", get_all_config_info);
+    ret += register_restful_handler(HTTP_POST, "/gn/config/setall/json", set_all_config_info);
     if(GN_OK != ret)
     {
         ret = GN_ERR;

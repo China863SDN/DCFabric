@@ -43,6 +43,8 @@
 #define FABRIC_PRIORITY_MISSMATCH_PUSHTAG_FLOW 0
 #define FABRIC_PRIORITY_SWAPTAG_FLOW 20
 #define FABRIC_PRIORITY_ARP_FLOW 15
+#define FABRIC_PRIORITY_FLOATING_FLOW 16
+#define FABRIC_PRIORITY_NAT_FLOW 17
 
 #define FABRIC_INPUT_TABLE 0
 #define FABRIC_PUSHTAG_TABLE 1
@@ -61,6 +63,7 @@ void install_fabric_base_flows(gn_switch_t * sw);
 void install_fabric_last_flow(gn_switch_t * sw,UINT4 tag);
 void install_fabric_first_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 void install_fabric_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
+void install_fabric_openstack_external_output_flow(gn_switch_t * sw,UINT4 port,UINT1* gateway_mac,UINT4 outer_interface_ip,UINT1 type);
 
 void install_fabric_same_switch_flow(gn_switch_t * sw,UINT1* mac, UINT4 port);
 void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 port);

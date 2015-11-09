@@ -47,6 +47,7 @@
 #include "../ovsdb/ovsdb.h"
 #include "../event/event_service.h"
 #include "../restful-svr/openstack-server.h"
+#include "../fabric/fabric_impl.h"
 
 #define START_DATE __DATE__  // compile date.
 #define START_TIME __TIME__  // compile time.
@@ -54,6 +55,7 @@
 ini_file_t *g_controller_configure;
 UINT1 g_controller_mac[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 UINT4 g_controller_ip = 0;
+UINT1 g_fabric_start_flag = 0;
 
 void show_copy_right()
 {
@@ -107,6 +109,21 @@ INT4 read_configuration()
     }
 
     return GN_OK;
+}
+
+void init_openstack_fabric_auto_start()
+{
+	INT1* value = NULL;
+	int return_value = 0;
+	value = get_value(g_controller_configure, "[openvstack_conf]", "auto_fabric");
+	return_value = (NULL == value) ? 0: atoi(value);
+	if (0 != return_value) {
+		if (0 == g_fabric_start_flag) {
+			LOG_PROC("INFO", "Setup fabric impl");
+			of131_fabric_impl_setup();
+		}
+		g_fabric_start_flag = 1;
+	}
 }
 
 INT4 get_controller_inet_info()
@@ -403,6 +420,7 @@ int main(int argc, char **argv)
     {
         LOG_PROC("INFO", "***** All modules initialized succeed *****\n");
     }
+
 
     // event thread start
     thread_topo_change_start();
