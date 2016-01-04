@@ -33,6 +33,9 @@
 #include "fabric_host.h"
 #include "../event/event_service.h"
 #include <stdio.h>
+#include "forward-mgr.h"
+
+extern UINT4 g_openstack_on;
 /*****************************
  * intern functions
  *****************************/
@@ -142,11 +145,15 @@ void of131_fabric_impl_setup(){
 	// initialize fabric swap flows
 	init_fabric_swap_flows();
 
-	// start fabric threads
-	start_fabric_thread();
+	if (0 == g_openstack_on) {
+		// start fabric threads
+		start_fabric_thread();
+	}
 
 	// set the state is available
 	g_fabric_state = 1;
+
+	init_handler();
 
 	// register event
 	register_fabric_functions_into_event();
@@ -289,7 +296,7 @@ UINT4 of131_fabric_impl_get_tag_sw(gn_switch_t *sw){
 			}
 		}
 	}
-	printf("Err in %s  dpid: %llu \n",FN,sw->dpid);
+	//printf("Err in %s  dpid: %llu \n",FN,sw->dpid);
 	return 0;
 };
 /*

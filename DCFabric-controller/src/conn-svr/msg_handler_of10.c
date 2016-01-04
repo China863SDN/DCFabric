@@ -33,7 +33,7 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "gn_inet.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "openstack/openstack_host.h"
@@ -297,7 +297,7 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     {
         (sw->msg_driver.convertter->port_convertter)((UINT1 *)&osf->ports[i], &new_sw_ports);
 
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //é»˜è®¤æœ€å¤§é€ŸçŽ‡1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         if (new_sw_ports.port_no == OFPP_LOCAL)
         {
@@ -309,7 +309,7 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
         port++;
     }
 
-    sw->n_ports = port; //²»°üÀ¨lo
+    sw->n_ports = port; //ä¸åŒ…æ‹¬lo
 
     {
         UINT1 dpid[8];
@@ -383,9 +383,9 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of10_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
+        set_fabric_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //é»˜è®¤æœ€å¤§é€ŸçŽ‡1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
@@ -401,10 +401,10 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
     }
 
-    //É¾³ýÄ¿µÄ×ª·¢¿ÚdownµôµÄÁ÷±í
+    //åˆ é™¤ç›®çš„è½¬å‘å£downæŽ‰çš„æµè¡¨
 //    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
 
-    //¸üÐÂÍØÆË
+    //æ›´æ–°æ‹“æ‰‘
     for (port = 0; port < sw->n_ports; port++)
     {
         if (sw->ports[port].port_no == ntohl(ops->desc.port_no))

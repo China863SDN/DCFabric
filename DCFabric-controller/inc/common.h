@@ -297,4 +297,12 @@ UINT4 ip2number(const INT1* ip);
 // convert number to ip
 INT1* number2ip(INT4 ip_num, INT1* ip);
 
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+//convert str dpid to uint8
+INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret);
+BOOL is_digit(const INT1 *str, INT4 base);
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
+
+
 #endif /* COMMON_H_ */

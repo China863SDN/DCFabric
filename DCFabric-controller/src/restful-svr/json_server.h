@@ -33,6 +33,14 @@
 #include "restful-svr.h"
 #include "app_impl.h"
 
+
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+//max length of param that pasted by rest client
+#define REST_MAX_PARAM_LEN 1024
+//max flow number send by rest client
+#define REST_MAX_FLOW_NUM 1024
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
 INT4 init_json_server();
 INT1 *json_to_reply(json_t *obj, INT4 code);
 INT1 *proc_restful_request(UINT1 type, const INT1 *url, json_t *root);

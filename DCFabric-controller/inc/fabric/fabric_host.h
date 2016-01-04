@@ -31,6 +31,8 @@
 #define INC_FABRIC_FABRIC_HOST_H_
 #include "gnflush-types.h"
 #include "gn_inet.h"
+//#include "openstack_host.h"
+
 
 /************************************
  * mem pool num
@@ -57,11 +59,14 @@
  ************************************/
 typedef struct fabric_host_node{
 	gn_switch_t* sw;
+	UINT8 dpid;
 	UINT4 port;
 	UINT1 mac[6];
 	UINT4 ip_list[FABRIC_HOST_IP_MAX_NUM];
 	UINT1 ip_count;
+	void* data;
 	struct fabric_host_node* next;
+	UINT1 type;
 }t_fabric_host_node,* p_fabric_host_node;
 
 typedef struct fabric_host_list{
@@ -79,6 +84,7 @@ typedef struct fabric_host_queue{
 
 p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip);
 void delete_fabric_host_list_node(p_fabric_host_node node);
+p_fabric_host_node copy_fabric_host_node(p_fabric_host_node node_p);
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -86,7 +92,7 @@ void init_fabric_host_list();
 p_fabric_host_node get_fabric_host_from_list_by_ip(UINT4 ip);
 p_fabric_host_node get_fabric_host_from_list_by_mac(UINT1* mac);
 void insert_fabric_host_into_list(p_fabric_host_node node);
-void insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip);
+p_fabric_host_node insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT8 dpid,UINT4 port,UINT1* mac,UINT4 ip);
 p_fabric_host_node remove_fabric_host_from_list_by_ip(UINT4 ip);
 p_fabric_host_node remove_fabric_host_from_list_by_mac(UINT1* mac);
 void delete_fabric_host_from_list_by_sw(gn_switch_t* sw);
@@ -235,4 +241,6 @@ void destroy_fabric_flow_queue();
 UINT4 is_fabric_flow_queue_empty();
 ////////////////////////////////////////////////////////////////////////
 
+void set_fabric_host_port_portno(const UINT1 *mac, UINT4 ofport_no);
+p_fabric_host_node get_fabric_host_from_list_by_sw_port(UINT8 dpid, UINT4 port);
 #endif /* INC_FABRIC_FABRIC_HOST_H_ */

@@ -44,10 +44,13 @@
 #include "../stats-mgr/stats-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
 #include "../flow-mgr/flow-mgr.h"
+#include "forward-mgr.h"
 #include "../ovsdb/ovsdb.h"
 #include "../event/event_service.h"
 #include "../restful-svr/openstack-server.h"
 #include "../fabric/fabric_impl.h"
+#include "../openstack/fabric_openstack_external.h"
+#include "../fabric/fabric_floating_ip.h"
 
 #define START_DATE __DATE__  // compile date.
 #define START_TIME __TIME__  // compile time.
@@ -56,6 +59,10 @@ ini_file_t *g_controller_configure;
 UINT1 g_controller_mac[] = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
 UINT4 g_controller_ip = 0;
 UINT1 g_fabric_start_flag = 0;
+
+void *g_auto_timer = NULL;
+UINT1 g_auto_init_flag = 0;
+void* auto_test_p = NULL;
 
 void show_copy_right()
 {
@@ -113,6 +120,7 @@ INT4 read_configuration()
 
 void init_openstack_fabric_auto_start()
 {
+	// get auto start fllag
 	INT1* value = NULL;
 	int return_value = 0;
 	value = get_value(g_controller_configure, "[openvstack_conf]", "auto_fabric");
@@ -124,7 +132,37 @@ void init_openstack_fabric_auto_start()
 		}
 		g_fabric_start_flag = 1;
 	}
+
+	// set external flow
+	init_external_flows();
+
+	// set floating flood
+	init_floating_mgr();
+
+	// kill timer
+    timer_kill(auto_test_p, &g_auto_timer);
+
+    // openstack_show_all_port_security();
 }
+
+
+void init_openstack_fabric_auto_start_delay()
+{
+	if (1 == g_auto_init_flag) {
+		return ;
+	}
+
+	// set the flag
+	g_auto_init_flag = 1;
+
+	void *g_auto_timerid = NULL;
+	UINT4 g_auto_interval = 10;
+
+	// set the timer
+    g_auto_timerid = timer_init(1);
+    auto_test_p = timer_creat(g_auto_timerid, g_auto_interval, NULL, &g_auto_timer, init_openstack_fabric_auto_start);
+}
+
 
 INT4 get_controller_inet_info()
 {
@@ -421,7 +459,7 @@ int main(int argc, char **argv)
         LOG_PROC("INFO", "***** All modules initialized succeed *****\n");
     }
 
-
+    init_handler();
     // event thread start
     thread_topo_change_start();
     // event end

@@ -40,498 +40,340 @@
 #include "../conn-svr/conn-svr.h"
 #include "fabric_impl.h"
 #include "fabric_openstack_nat.h"
+#include "openstack_app.h"
+#include "fabric_openstack_arp.h"
 
-const UINT1 nat_zero_mac[] = {0x0,0x0,0x0,0x0,0x0,0x0};
-const UINT1 nat_broadcat_mac[] = {0xff,0xff,0xff,0xff,0xff,0xff};
-extern void fabric_openstack_packet_flood(packet_in_info_t *packet_in_info);
+void *g_floating_timerid = NULL;
+UINT4 g_floating_interval = 300;
+void *g_floating_timer = NULL;
 
-extern void fabric_openstack_create_arp_reply_public(UINT1* srcMac, UINT4 srcIP, UINT1* dstMac, UINT4 dstIP, gn_switch_t* sw,
-		UINT4 outPort, packet_in_info_t *packet_in_info);
+// const UINT1 nat_zero_mac[] = {0x0,0x0,0x0,0x0,0x0,0x0};
+// const UINT1 nat_broadcat_mac[] = {0xff,0xff,0xff,0xff,0xff,0xff};
 
-extern void fabric_openstack_show_ip(UINT4 ip);
+// extern void fabric_openstack_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport);
 
-extern void fabric_openstack_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport);
 
-extern UINT4 of131_fabric_impl_get_tag_sw(gn_switch_t *sw);
-
-extern void fabric_openstack_packet_flood(packet_in_info_t *packet_in_info);
-
-extern openstack_port_p find_openstack_app_gateway_by_host(openstack_port_p host);
-
-void fabric_openstack_floating_ip_install_set_vlan_out_flow(gn_switch_t * sw, UINT4 match_ip, UINT1* match_mac, UINT4 mod_src_ip, UINT1* mod_dst_mac, UINT4 vlan_id)
+INT4 fabric_openstack_floating_ip_packet_out_handle(p_fabric_host_node src_port, packet_in_info_t *packet_in, external_floating_ip_p fip, param_set_p param_set)
 {
-	//printf("%s : sw ip is %s; vlan_id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sw->sw_ip), vlan_id);
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction_act;
-	gn_action_set_field_t act_set_field_mac;
-	gn_action_set_field_t act_set_field_ip;
-	gn_action_set_field_t act_set_field_vlan;
-	gn_action_t act_pushVlan;
-	gn_instruction_goto_table_t instruction_goto;
-
-	//match rule
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_FLOATING_FLOW;
-	flow.table_id = FABRIC_PUSHTAG_TABLE;
-	flow.match.type = OFPMT_OXM;
-	flow.match.oxm_fields.eth_type = ETHER_IP;
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-	flow.match.oxm_fields.ipv4_dst = ntohl(match_ip);
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-	memcpy(flow.match.oxm_fields.eth_src, match_mac, 6);
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
-
-	//set go-to-table
-	memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-	instruction_goto.type = OFPIT_GOTO_TABLE;
-	instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
-	instruction_goto.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction_goto;
-
-	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-	instruction_act.type = OFPIT_APPLY_ACTIONS;
-	instruction_act.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction_act;
-
-	//set dest mac
-	memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
-	act_set_field_mac.type = OFPAT13_SET_FIELD;
-	memcpy(act_set_field_mac.oxm_fields.eth_dst, mod_dst_mac, 6);
-	act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-	act_set_field_mac.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_set_field_mac;
-
-	//set src ip
-	memset(&act_set_field_ip, 0, sizeof(gn_action_set_field_t));
-	act_set_field_ip.type = OFPAT13_SET_FIELD;
-	act_set_field_ip.oxm_fields.ipv4_src = ntohl(mod_src_ip);
-	act_set_field_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-	act_set_field_ip.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_set_field_ip;
-
-	//set vlan
-	memset(&act_set_field_vlan, 0, sizeof(gn_action_set_field_t));
-	act_set_field_vlan.type = OFPAT13_SET_FIELD;
-	act_set_field_vlan.oxm_fields.vlan_vid = vlan_id;
-	act_set_field_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-	act_set_field_vlan.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_set_field_vlan;
-
-	memset(&act_pushVlan, 0, sizeof(gn_action_t));
-	act_pushVlan.type = OFPAT13_PUSH_VLAN;
-	act_pushVlan.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_pushVlan;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_ADD;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-}
-void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
-{
-	//printf("%s : sw ip is %s; vlan_id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sw->sw_ip), vlan_id);
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction_act;
-	gn_action_set_field_t act_set_field_mac;
-	gn_action_set_field_t act_set_field_ip;
-	gn_action_set_field_t act_set_field_vlan;
-	gn_action_t act_pushVlan;
-	gn_instruction_goto_table_t instruction_goto;
-	gn_action_output_t output_action;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_FLOATING_FLOW;
-	flow.table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-	flow.match.oxm_fields.eth_type = ETHER_IP;
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-	flow.match.oxm_fields.ipv4_dst = ntohl(match_ip);
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-
-	
-	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-	instruction_act.type = OFPIT_APPLY_ACTIONS;
-	instruction_act.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction_act;
-
-	if (0 == get_nat_physical_switch_flag()) {
-		memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-		instruction_goto.type = OFPIT_GOTO_TABLE;
-		instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
-		instruction_goto.next = flow.instructions;
-		flow.instructions = (gn_instruction_t *)&instruction_goto;
-	}
-	else {
-		memset(&output_action, 0, sizeof(gn_action_output_t));
-		output_action.port = out_port;
-		output_action.type = OFPAT13_OUTPUT;
-		output_action.max_len = 0xffff;
-		output_action.next = instruction_act.actions;
-		instruction_act.actions = (gn_action_t *)&output_action;
-	}
-
-	memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
-	act_set_field_mac.type = OFPAT13_SET_FIELD;
-	memcpy(act_set_field_mac.oxm_fields.eth_dst, mod_dst_mac, 6);
-	act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-	act_set_field_mac.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_set_field_mac;
-
-	memset(&act_set_field_ip, 0, sizeof(gn_action_set_field_t));
-	act_set_field_ip.type = OFPAT13_SET_FIELD;
-	act_set_field_ip.oxm_fields.ipv4_dst = ntohl(mod_dst_ip);
-	act_set_field_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-	act_set_field_ip.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_set_field_ip;
-
-	memset(&act_set_field_vlan, 0, sizeof(gn_action_set_field_t));
-	act_set_field_vlan.type = OFPAT13_SET_FIELD;
-	act_set_field_vlan.oxm_fields.vlan_vid = vlan_id;
-	act_set_field_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-	act_set_field_vlan.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_set_field_vlan;
-
-	memset(&act_pushVlan, 0, sizeof(gn_action_t));
-	act_pushVlan.type = OFPAT13_PUSH_VLAN;
-	act_pushVlan.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&act_pushVlan;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_ADD;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-}
-void fabric_openstack_floating_ip_install_table_3_flow(gn_switch_t * sw, UINT1* match_mac, UINT4 out_port)
-{
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction_act;
-	gn_action_output_t output_action;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_FIND_HOST_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_FLOATING_FLOW;
-	flow.table_id = FABRIC_OUTPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-	memcpy(flow.match.oxm_fields.eth_dst, match_mac, 6);
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-
-	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-	instruction_act.type = OFPIT_APPLY_ACTIONS;
-	instruction_act.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction_act;
-
-	memset(&output_action, 0, sizeof(gn_action_output_t));
-	output_action.port = out_port;
-	output_action.type = OFPAT13_OUTPUT;
-	output_action.max_len = 0xffff;
-	output_action.next = instruction_act.actions;
-	instruction_act.actions = (gn_action_t *)&output_action;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_ADD;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-}
-
-void fabric_openstack_floating_ip_packet_out_handle(openstack_port_p src_port, packet_in_info_t *packet_in, external_floating_ip_p fip)
-{
+	// printf("%s\n", FN);
 	ip_t *ip = (ip_t *)(packet_in->data);
-	//printf("%s\n", FN);
-	//printf("source ip  ");
-	//fabric_openstack_show_ip(ip->src);
-	//printf("destination ip  ");
-	//fabric_openstack_show_ip(ip->dest);
-	//printf("source mac  ");
-	//fabric_openstack_show_mac(ip->eth_head.src);
-	//printf("destination mac  ");
-	//fabric_openstack_show_mac(ip->eth_head.dest);
-	//printf("\n");
-	external_port_p ext_port = NULL;
 
+	external_port_p ext_port = NULL;
 	ext_port = get_external_port_by_floatip(fip->floating_ip);
 
-	if(src_port == NULL || ext_port == NULL)
+	if ((src_port == NULL || ext_port == NULL) || (src_port->sw == NULL))
 	{
-		return;
+		return IP_DROP;
 	}
 
 	//write flow table
 	//packet out rule
 	gn_switch_t * switch_gw = find_sw_by_dpid(ext_port->external_dpid);
+	if (NULL == switch_gw) {
+		LOG_PROC("INFO", "Floating: External switch is NULL!");
+		return IP_DROP;
+	}
+
 	UINT4 vlan_id = of131_fabric_impl_get_tag_sw(switch_gw);
-	//printf("%s packet out rule : sw ip is %s ;vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&switch_gw->sw_ip), vlan_id);
-	fabric_openstack_floating_ip_install_set_vlan_out_flow(src_port->sw, ip->dest, src_port->mac, fip->floating_ip, ext_port->external_gateway_mac, vlan_id);
+	param_set->src_sw = src_port->sw;
+	param_set->dst_ip = ip->dest;
+	memcpy(param_set->src_mac, src_port->mac, 6);
+	param_set->mod_src_ip = fip->floating_ip;
+	memcpy(param_set->dst_gateway_mac, ext_port->external_gateway_mac, 6);
+	param_set->src_vlanid = vlan_id;
 
 	//response rule
 	vlan_id = of131_fabric_impl_get_tag_sw(src_port->sw);
-	//printf("%s response rule : sw ip is %s ;vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&src_port->sw->sw_ip), vlan_id);
 
 	UINT4 out_port = get_out_port_between_switch(ext_port->external_dpid, src_port->sw->dpid);
 	if (0 != out_port) {
-		fabric_openstack_floating_ip_install_set_vlan_in_flow(switch_gw, fip->floating_ip, ip->src, ip->eth_head.src, vlan_id, out_port);
+		//fabric_openstack_floating_ip_install_set_vlan_in_flow(switch_gw, fip->floating_ip, ip->src, ip->eth_head.src, vlan_id, out_port);
+		param_set->dst_sw = switch_gw;
+		param_set->src_ip = ip->src;
+		memcpy(param_set->packet_src_mac, ip->eth_head.src, 6);
+		param_set->dst_vlanid = vlan_id;
+		param_set->dst_inport = out_port;
+		param_set->src_inport = packet_in->inport;
+
+		return Floating_ip_flow;
 	}
-	//write table 3
-	fabric_openstack_floating_ip_install_table_3_flow(src_port->sw, src_port->mac, packet_in->inport);
 
-	//pack back
-	fabric_openstack_packet_output(src_port->sw, packet_in, OFPP13_TABLE);
-
+	return IP_DROP;
 }
-void fabric_openstack_floating_ip_packet_in_handle(external_port_p epp, packet_in_info_t *packet_in, external_floating_ip_p fip)
+//
+//void fabric_openstack_floating_ip_packet_in_handle(external_port_p epp, packet_in_info_t *packet_in, external_floating_ip_p fip)
+//{
+//	ip_t *ip = (ip_t *)(packet_in->data);
+//	//printf("%s\n", FN);
+//	/*
+//	//printf("source ip  ");
+//	fabric_openstack_show_ip(ip->src);
+//	//printf("destination ip  ");
+//	fabric_openstack_show_ip(ip->dest);
+//	printf("source mac  ");
+//	fabric_openstack_show_mac(ip->eth_head.src);
+//	printf("destination mac  ");
+//	fabric_openstack_show_mac(ip->eth_head.dest);
+//	*/
+//	//printf("\n");
+//	//printf("sw ip is ");
+//	// fabric_openstack_show_ip(fip->floating_ip);
+//
+//	p_fabric_host_node dst_port = NULL;
+//	gn_switch_t * sww = find_sw_by_dpid(epp->external_dpid);
+//	dst_port = get_fabric_host_from_list_by_mac(ip->eth_head.dest);
+//	//printf("dest ip is ");
+//	// fabric_openstack_show_ip(dst_port->ip);
+//	if(dst_port == NULL || epp == NULL)
+//	{
+//		return ;
+//	}
+//
+//	if  (dst_port->sw == NULL) {
+//		//printf("fabric_openstack_floating_ip_packet_in_handle dst_port : %d | dst_port->sw : %d | ext_port : %d\n",(int)dst_port, (int)dst_port->sw, epp->external_dpid);
+//
+//		p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(dst_port);
+//
+//		if (NULL != gateway_p) {
+//			fabric_opnestack_floating_flood_inside(gateway_p->ip_list[0], dst_port->ip_list[0], gateway_p->mac, epp->external_dpid);
+//		}
+//		else {
+//			LOG_PROC("ERROR", "Can't find gateway of dest ip");
+//		}
+//
+//		// fabric_openstack_packet_output(sww, packet_in, OFPP13_TABLE);
+//		return ;
+//	}
+//
+//	//packet in rule
+//	UINT4 vlan_id = of131_fabric_impl_get_tag_sw(dst_port->sw);
+//	//printf("%s packet in rule : sw ip is %s ;vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&dst_port->sw->sw_ip), vlan_id);
+//	UINT4 out_port = get_out_port_between_switch(epp->external_dpid, dst_port->sw->dpid);
+//	if (0 != out_port) {
+//		fabric_openstack_floating_ip_install_set_vlan_in_flow(sww, ip->dest, dst_port->ip_list[0], dst_port->mac, vlan_id, out_port);
+//	}
+//	else {
+//		// start flood
+//		p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(dst_port);
+//
+//		if (NULL != gateway_p) {
+//			fabric_opnestack_floating_flood_inside(gateway_p->ip_list[0], dst_port->ip_list[0], gateway_p->mac, epp->external_dpid);
+//		}
+//		else {
+//			LOG_PROC("ERROR", "Can't find gateway of dest ip");
+//		}
+//		return;
+//	}
+//	//write table 3
+//	install_fabric_output_flow(dst_port->sw, dst_port->mac, dst_port->port);
+//
+//	//response rule
+//	vlan_id = of131_fabric_impl_get_tag_sw(sww);
+//	//printf("%s response rule : sw ip is %s ; vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sww->sw_ip), vlan_id);
+//	fabric_openstack_floating_ip_install_set_vlan_out_flow(dst_port->sw, ip->src, dst_port->mac, fip->floating_ip, epp->external_gateway_mac, vlan_id);
+//
+//	//pack back
+//	fabric_openstack_packet_output(sww, packet_in, OFPP13_TABLE);
+//}
+
+//void fabric_openstack_floating_ip_arp_request_handle(gn_switch_t *sw, external_floating_ip_p fip, packet_in_info_t *packet_in)
+//{
+//	arp_t *arp = (arp_t *)(packet_in->data);
+//	//printf("%s\n", FN);
+//	//printf("source ip  ");
+//	//fabric_openstack_show_ip(arp->sendip);
+//	//printf("destination ip  ");
+//	//fabric_openstack_show_ip(arp->targetip);
+//	//printf("source mac  ");
+//	//fabric_openstack_show_mac(arp->sendmac);
+//	//printf("destination mac  ");
+//	//fabric_openstack_show_mac(arp->targetmac);
+//	p_fabric_host_node float_port = find_fabric_host_port_by_port_id(fip->port_id);
+//	if(float_port != NULL)
+//	{
+//		p_fabric_host_node dst_port = float_port;
+//
+//		// get external port
+//		external_port_p ext_port = get_external_port_by_floatip(fip->floating_ip);
+//		if (NULL == ext_port) {
+//			LOG_PROC("INFO", "Floating IP: external port is NULL!");
+//			return;
+//		}
+//
+//		// get external sw
+//		gn_switch_t * ext_sw = NULL;
+//		ext_sw = find_sw_by_dpid(ext_port->external_dpid);
+//		if (NULL == ext_sw) {
+//			LOG_PROC("INFO", "Floating IP: gateway sw is NULL!");
+//			return;
+//		}
+//
+//		if(dst_port->sw != NULL)
+//		{
+//			//printf("%s packet out \n", FN);
+//			fabric_openstack_create_arp_reply_public(float_port->mac, arp->targetip, arp->sendmac,
+//					arp->sendip, ext_sw, ext_port->external_port, packet_in);
+//		}else
+//		{
+//			//printf("%s : arp target ip is %s ", FN, inet_ntoa(*(struct in_addr*)&arp->targetip));
+//			//printf(";fip fixed ip is %s \n", inet_ntoa(*(struct in_addr*)&fip->fixed_ip));
+//			arp->targetip = fip->fixed_ip;
+//			fabric_openstack_packet_flood_inside(packet_in, ext_port->external_dpid);
+//			//printf("%s flood \n", FN);
+//		}
+//	}
+//}
+
+
+
+//void fabric_openstack_floating_ip_arp_reply_handle(gn_switch_t *sw, external_floating_ip_p fip, packet_in_info_t *packet_in)
+//{
+//	external_port_p ext_port = get_external_port_by_floatip(fip->floating_ip);
+//	arp_t *arp = (arp_t *)(packet_in->data);
+//	//printf("%s\n", FN);
+//	//printf("source ip  ");
+//	//fabric_openstack_show_ip(arp->sendip);
+//	//printf("destination ip  ");
+//	//fabric_openstack_show_ip(arp->targetip);
+//	//printf("source mac  ");
+//	//fabric_openstack_show_mac(arp->sendmac);
+//	//printf("destination mac  ");
+//	//fabric_openstack_show_mac(arp->targetmac);
+//	if(ext_port != NULL)
+//	{
+//		gn_switch_t * dest_sw = find_sw_by_dpid(ext_port->external_dpid);
+//		if(dest_sw != NULL)
+//		{
+//			arp->sendip = fip->floating_ip;
+//			memcpy(arp->targetmac, ext_port->external_gateway_mac, 6);
+//			fabric_openstack_packet_output(dest_sw, packet_in, ext_port->external_port);
+//		}
+//	}
+//}
+//
+//void fabric_opnestack_floating_flood_inside(UINT4 src_ip, UINT4 dst_ip, UINT1* src_mac, UINT8 ext_dpid)
+//{
+//	// LOG_PROC("INFO", "External: Can't find the dest: start flood!");
+//	packout_req_info_t packout_req_info;
+//	arp_t new_arp_pkt;
+//
+//	packout_req_info.buffer_id = 0xffffffff;
+//	packout_req_info.inport = OFPP13_CONTROLLER;
+//	packout_req_info.max_len = 0xff;
+//	packout_req_info.xid = 0;
+//	packout_req_info.data_len = sizeof(arp_t);
+//	packout_req_info.data = (UINT1 *)&new_arp_pkt;
+//
+//	memcpy(new_arp_pkt.eth_head.src, src_mac, 6);
+//	memcpy(new_arp_pkt.eth_head.dest, nat_broadcat_mac, 6);
+//	new_arp_pkt.eth_head.proto = htons(ETHER_ARP);
+//	new_arp_pkt.hardwaretype = htons(1);
+//	new_arp_pkt.prototype = htons(ETHER_IP);
+//	new_arp_pkt.hardwaresize = 0x6;
+//	new_arp_pkt.protocolsize = 0x4;
+//	new_arp_pkt.opcode = htons(1);
+//	new_arp_pkt.sendip = src_ip;
+//	new_arp_pkt.targetip=dst_ip;
+//
+//	memcpy(new_arp_pkt.sendmac, src_mac, 6);
+//	memcpy(new_arp_pkt.targetmac, nat_zero_mac, 6);
+//
+//	gn_switch_t *sw = NULL;
+//	UINT2 i = 0,j=0;
+//
+//	for(i = 0; i < g_server.max_switch; i++) {
+//		if (g_server.switches[i].state) {
+//			sw = &g_server.switches[i];
+//			if (sw->dpid == ext_dpid) {
+//				continue;
+//			}
+//
+//			for(j=0; j<sw->n_ports; j++){
+//				// check port state is ok and also not connect other switch(neighbor)
+//				if(sw->neighbor[j] == NULL){
+//					packout_req_info.outport = sw->ports[j].port_no;
+//					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
+//				}
+//			}
+//		}
+//	}
+//}
+//
+//void fabric_openstack_packet_flood_inside(packet_in_info_t *packet_in_info, UINT8 ext_dpid)
+//{
+//	LOG_PROC("INFO", "External: Can't find the dest: start flood!");
+//	packout_req_info_t pakout_req;
+//	gn_switch_t *sw = NULL;
+//	UINT2 i = 0,j=0;
+//	pakout_req.buffer_id = 0xffffffff;
+//	pakout_req.inport = OFPP13_CONTROLLER;
+//	pakout_req.max_len = 0xff;
+//	pakout_req.xid = packet_in_info->xid;
+//	pakout_req.data_len = packet_in_info->data_len;
+//	pakout_req.data = packet_in_info->data;
+//
+//	// find all switch
+//	for(i = 0; i < g_server.max_switch; i++){
+//		if (g_server.switches[i].state){
+//			sw = &g_server.switches[i];
+////			sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
+//			// find switch's outter ports
+//
+//			if (sw->dpid == ext_dpid) {
+//				continue;
+//			}
+//
+//			for(j=0; j<sw->n_ports; j++){
+//				// check port state is ok and also not connect other switch(neighbor)
+//				if(sw->neighbor[j] == NULL){
+//					pakout_req.outport = sw->ports[j].port_no;
+//					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
+//				}
+//			}
+//		}
+//	}
+//	return;
+//};
+
+void init_floating_mgr()
 {
-	ip_t *ip = (ip_t *)(packet_in->data);
-	//printf("%s\n", FN);
-	/*
-	//printf("source ip  ");
-	fabric_openstack_show_ip(ip->src);
-	//printf("destination ip  ");
-	fabric_openstack_show_ip(ip->dest);
-	printf("source mac  ");
-	fabric_openstack_show_mac(ip->eth_head.src);
-	printf("destination mac  ");
-	fabric_openstack_show_mac(ip->eth_head.dest);
-	*/
-	//printf("\n");
-	//printf("sw ip is ");
-	// fabric_openstack_show_ip(fip->floating_ip);
+	// call flood function
+	floating_tx_timer(NULL, NULL);
 
-	openstack_port_p dst_port = NULL;
-	gn_switch_t * sww = find_sw_by_dpid(epp->external_dpid);
-	dst_port = find_openstack_host_port_by_mac(ip->eth_head.dest);
-	//printf("dest ip is ");
-	// fabric_openstack_show_ip(dst_port->ip);
-	if(dst_port == NULL || epp == NULL)
-	{
-		return ;
-	}
-
-	if  (dst_port->sw == NULL) {
-		//printf("fabric_openstack_floating_ip_packet_in_handle dst_port : %d | dst_port->sw : %d | ext_port : %d\n",(int)dst_port, (int)dst_port->sw, epp->external_dpid);
-
-		openstack_port_p gateway_p = find_openstack_app_gateway_by_host(dst_port);
-
-		if (NULL != gateway_p) {
-			fabric_opnestack_floating_flood_inside(gateway_p->ip, dst_port->ip, gateway_p->mac, epp->external_dpid);
-		}
-		else {
-			LOG_PROC("ERROR", "Can't find gateway of dest ip");
-		}
-
-		// fabric_openstack_packet_output(sww, packet_in, OFPP13_TABLE);
-		return ;
-	}
-
-	//packet in rule
-	UINT4 vlan_id = of131_fabric_impl_get_tag_sw(dst_port->sw);
-	//printf("%s packet in rule : sw ip is %s ;vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&dst_port->sw->sw_ip), vlan_id);
-	UINT4 out_port = get_out_port_between_switch(epp->external_dpid, dst_port->sw->dpid);
-	if (0 != out_port) {
-		fabric_openstack_floating_ip_install_set_vlan_in_flow(sww, ip->dest, dst_port->ip, dst_port->mac, vlan_id, out_port);
-	}
-	else {
-		// start flood
-		openstack_port_p gateway_p = find_openstack_app_gateway_by_host(dst_port);
-
-		if (NULL != gateway_p) {
-			fabric_opnestack_floating_flood_inside(gateway_p->ip, dst_port->ip, gateway_p->mac, epp->external_dpid);
-		}
-		else {
-			LOG_PROC("ERROR", "Can't find gateway of dest ip");
-		}
-		return;
-	}
-	//write table 3
-	fabric_openstack_floating_ip_install_table_3_flow(dst_port->sw, dst_port->mac, dst_port->port);
-
-	//response rule
-	vlan_id = of131_fabric_impl_get_tag_sw(sww);
-	//printf("%s response rule : sw ip is %s ; vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sww->sw_ip), vlan_id);
-	fabric_openstack_floating_ip_install_set_vlan_out_flow(dst_port->sw, ip->src, dst_port->mac, fip->floating_ip, epp->external_gateway_mac, vlan_id);
-
-	//pack back
-	fabric_openstack_packet_output(sww, packet_in, OFPP13_TABLE);
+	// set the timer
+    g_floating_timerid = timer_init(1);
+    timer_creat(g_floating_timerid, g_floating_interval, NULL, &g_floating_timer, floating_tx_timer);
 }
 
-void fabric_openstack_floating_ip_arp_request_handle(gn_switch_t *sw, external_floating_ip_p fip, packet_in_info_t *packet_in)
+void floating_tx_timer(void *para, void *tid)
 {
-	arp_t *arp = (arp_t *)(packet_in->data);
-	//printf("%s\n", FN);
-	//printf("source ip  ");
-	//fabric_openstack_show_ip(arp->sendip);
-	//printf("destination ip  ");
-	//fabric_openstack_show_ip(arp->targetip);
-	//printf("source mac  ");
-	//fabric_openstack_show_mac(arp->sendmac);
-	//printf("destination mac  ");
-	//fabric_openstack_show_mac(arp->targetmac);
-	openstack_port_p float_port = find_openstack_host_port_by_port_id(fip->port_id);
-	if(float_port != NULL)
-	{
-		openstack_port_p dst_port = find_openstack_host_port_by_port_id(float_port->port_id);
+	openstack_external_node_p node_p = NULL;
+	external_floating_ip_p epp = NULL;
+	external_port_p ext_p = NULL;
+	p_fabric_host_node fip_p = NULL;
+	p_fabric_host_node gateway_p = NULL;
 
-		// get external port
-		external_port_p ext_port = get_external_port_by_floatip(fip->floating_ip);
-		if (NULL == ext_port) {
-			LOG_PROC("INFO", "Floating IP: external port is NULL!");
-			return;
-		}
+	node_p = get_floating_list();
 
-		// get external sw
-		gn_switch_t * ext_sw = NULL;
-		ext_sw = find_sw_by_dpid(ext_port->external_dpid);
-		if (NULL == ext_sw) {
-			LOG_PROC("INFO", "Floating IP: gateway sw is NULL!");
-			return;
-		}
+	// create floating request
+	while(NULL != node_p) {
+		epp = (external_floating_ip_p)node_p->data;
 
-		if(dst_port->sw != NULL)
-		{
-			//printf("%s packet out \n", FN);
-			fabric_openstack_create_arp_reply_public(float_port->mac, arp->targetip, arp->sendmac, \
-					arp->sendip, ext_sw, ext_port->external_port, packet_in);
-		}else
-		{
-			//printf("%s : arp target ip is %s ", FN, inet_ntoa(*(struct in_addr*)&arp->targetip));
-			//printf(";fip fixed ip is %s \n", inet_ntoa(*(struct in_addr*)&fip->fixed_ip));
-			arp->targetip = fip->fixed_ip;
-			fabric_openstack_packet_flood_inside(packet_in, ext_port->external_dpid);
-			//printf("%s flood \n", FN);
-		}
-	}
-}
+		if(NULL != epp) {
+			fip_p = find_fabric_host_port_by_port_id(epp->port_id);
 
+			if (NULL != fip_p) {
+				gateway_p = find_openstack_app_gateway_by_host(fip_p);
+				ext_p = find_openstack_external_by_floating_ip(epp->floating_ip);
 
-void fabric_openstack_floating_ip_arp_reply_handle(gn_switch_t *sw, external_floating_ip_p fip, packet_in_info_t *packet_in)
-{
-	external_port_p ext_port = get_external_port_by_floatip(fip->floating_ip);
-	arp_t *arp = (arp_t *)(packet_in->data);
-	//printf("%s\n", FN);
-	//printf("source ip  ");
-	//fabric_openstack_show_ip(arp->sendip);
-	//printf("destination ip  ");
-	//fabric_openstack_show_ip(arp->targetip);
-	//printf("source mac  ");
-	//fabric_openstack_show_mac(arp->sendmac);
-	//printf("destination mac  ");
-	//fabric_openstack_show_mac(arp->targetmac);
-	if(ext_port != NULL)
-	{
-		gn_switch_t * dest_sw = find_sw_by_dpid(ext_port->external_dpid);
-		if(dest_sw != NULL)
-		{
-			arp->sendip = fip->floating_ip;
-			memcpy(arp->targetmac, ext_port->external_gateway_mac, 6);
-			fabric_openstack_packet_output(dest_sw, packet_in, ext_port->external_port);
-		}
-	}
-}
-
-void fabric_opnestack_floating_flood_inside(UINT4 src_ip, UINT4 dst_ip, UINT1* src_mac, UINT8 ext_dpid)
-{
-	LOG_PROC("INFO", "External: Can't find the dest: start flood!");
-	packout_req_info_t packout_req_info;
-	arp_t new_arp_pkt;
-
-	packout_req_info.buffer_id = 0xffffffff;
-	packout_req_info.inport = OFPP13_CONTROLLER;
-	packout_req_info.max_len = 0xff;
-	packout_req_info.xid = 0;
-	packout_req_info.data_len = sizeof(arp_t);
-	packout_req_info.data = (UINT1 *)&new_arp_pkt;
-
-	memcpy(new_arp_pkt.eth_head.src, src_mac, 6);
-	memcpy(new_arp_pkt.eth_head.dest, nat_broadcat_mac, 6);
-	new_arp_pkt.eth_head.proto = htons(ETHER_ARP);
-	new_arp_pkt.hardwaretype = htons(1);
-	new_arp_pkt.prototype = htons(ETHER_IP);
-	new_arp_pkt.hardwaresize = 0x6;
-	new_arp_pkt.protocolsize = 0x4;
-	new_arp_pkt.opcode = htons(1);
-	new_arp_pkt.sendip = src_ip;
-	new_arp_pkt.targetip=dst_ip;
-
-	memcpy(new_arp_pkt.sendmac, src_mac, 6);
-	memcpy(new_arp_pkt.targetmac, nat_zero_mac, 6);
-
-	gn_switch_t *sw = NULL;
-	UINT2 i = 0,j=0;
-
-	for(i = 0; i < g_server.max_switch; i++) {
-		if (g_server.switches[i].state) {
-			sw = &g_server.switches[i];
-			if (sw->dpid == ext_dpid) {
-				continue;
-			}
-
-			for(j=0; j<sw->n_ports; j++){
-				// check port state is ok and also not connect other switch(neighbor)
-				if(sw->neighbor[j] == NULL){
-					packout_req_info.outport = sw->ports[j].port_no;
-					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
+				if ((NULL != gateway_p) && (NULL != ext_p)) {
+					// g_floating_interval = 30;
+					// fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], epp->fixed_ip, gateway_p->mac, ext_p->external_dpid);
+					fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], epp->fixed_ip, gateway_p->mac);
 				}
 			}
 		}
+
+		node_p = node_p->next;
 	}
 }
-
-void fabric_openstack_packet_flood_inside(packet_in_info_t *packet_in_info, UINT8 ext_dpid)
-{
-	LOG_PROC("INFO", "External: Can't find the dest: start flood!");
-	packout_req_info_t pakout_req;
-	gn_switch_t *sw = NULL;
-	UINT2 i = 0,j=0;
-	pakout_req.buffer_id = 0xffffffff;
-	pakout_req.inport = OFPP13_CONTROLLER;
-	pakout_req.max_len = 0xff;
-	pakout_req.xid = packet_in_info->xid;
-	pakout_req.data_len = packet_in_info->data_len;
-	pakout_req.data = packet_in_info->data;
-
-	// find all switch
-	for(i = 0; i < g_server.max_switch; i++){
-		if (g_server.switches[i].state){
-			sw = &g_server.switches[i];
-//			sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
-			// find switch's outter ports
-
-			if (sw->dpid == ext_dpid) {
-				continue;
-			}
-
-			for(j=0; j<sw->n_ports; j++){
-				// check port state is ok and also not connect other switch(neighbor)
-				if(sw->neighbor[j] == NULL){
-					pakout_req.outport = sw->ports[j].port_no;
-					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
-				}
-			}
-		}
-	}
-	return;
-};

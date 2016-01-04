@@ -36,13 +36,14 @@
 #include "gn_inet.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../event/event_service.h"
 #include "openstack/openstack_host.h"
 #include "fabric_impl.h"
 #include "fabric_flows.h"
 #include "openstack/fabric_openstack_nat.h"
+#include "fabric_openstack_arp.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
@@ -787,7 +788,7 @@ static INT4 of13_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 			}
 
 			if (0 != flow_port) {
-				destroy_nat_connect_by_mac_and_port(ntohl(flow.match.oxm_fields.ipv4_dst), flow.match.oxm_fields.eth_src, ntohs(flow_port), flow.match.oxm_fields.ip_proto);
+				destroy_nat_connect_by_mac_and_port(sw, ntohl(flow.match.oxm_fields.ipv4_dst), flow.match.oxm_fields.eth_src, ntohs(flow_port), flow.match.oxm_fields.ip_proto);
 			}
 		}
 
@@ -878,7 +879,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
+        set_fabric_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
         //1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
@@ -891,6 +892,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         }
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
+        // remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
         return GN_OK;
     }
     else if (ops->reason == OFPPR_DELETE)
@@ -902,6 +904,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
             if (sw->ports[port_index].port_no == port_no)
             {
             	sw->ports[port_index].state = port_state;
+            	remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
             	of13_delete_line(sw,port_index);
                 break;
             }
@@ -930,6 +933,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 			{
 				sw->ports[port_index].state = port_state;
 				if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED){
+					// remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
 					of13_delete_line(sw,port_index);
 				}else if( port_state == OFPPS13_LIVE){
 					// send lldp

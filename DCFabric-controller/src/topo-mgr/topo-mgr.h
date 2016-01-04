@@ -31,7 +31,7 @@
 #define TOPO_MGR_H_
 
 #include "gnflush-types.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 
 #define NO_PATH -1
 

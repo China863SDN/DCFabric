@@ -47,6 +47,7 @@
 #include "openstack_app.h"
 #include "fabric_openstack_external.h"
 #include "fabric_openstack_nat.h"
+#include "fabric_thread.h"
 
 void createPortFabric(char* jsonString,const char* stringType);
 static char * g_openstack_server_name;
@@ -279,6 +280,8 @@ void initOpenstackFabric(){
 		//
 		g_openstack_fobidden_ip = inet_addr("169.254.169.254");
 
+		start_fabric_thread();
+
 		init_openstack_host();
 		init_openstack_external();
 		read_external_port_config();
@@ -288,6 +291,7 @@ void initOpenstackFabric(){
 		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/ports",g_openstack_port,"port");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/security-group-rules",g_openstack_port,"security-group-rules");
 		LOG_PROC("INFO", "Init Openstack service finished");
 	}else{
 		LOG_PROC("INFO", "Init Openstack service Failed");
@@ -322,12 +326,26 @@ void createPortFabric( char *jsonString,const char *stringType){
 	UINT2 totalNum = 0;
 	json_t *json=NULL,*temp=NULL;
 	char* networkType="network",*subnetType="subnet",*portType="port",*floatingType="floating";
+	char* securityType = "security-group-rules";
 	char tenant_id[48] ={0};
 	char network_id[48] = {0};
 	char subnet_id[48] = {0};
 	char port_id[48] = {0};
 	char cidr[30] = {0};
 	char router_id[48]={0};
+	char security_group_id[48]={0};
+	char direction[48] = {0};
+	char ethertype[48] = {0};
+	char rule_id[48] = {0};
+	char port_range_max[48] = {0};
+	char port_range_min[48] = {0};
+	char protocol[48] = {0};
+	char remote_group_id[48] = {0};
+	char remote_ip_prefix[48] = {0};
+	char security_tenant_id[48] = {0};
+	UINT2 security_num = 0;
+	UINT1* security_port_p = NULL;
+
 	parse_type = json_parse_document(&json,tempString);
 	if (parse_type != JSON_OK)
 	{
@@ -494,9 +512,27 @@ void createPortFabric( char *jsonString,const char *stringType){
 							}
 							json_free_value(&fix_ips);
 						}
+
+						json_t *security_groups = json_find_first_label(port, "security_groups");
+						// printf("security_groups\n");
+						if (security_groups) {
+							json_t *security_group = security_groups->child->child;
+							openstack_node_p head_p = NULL;
+							security_num = 0;
+							security_port_p = NULL;
+							while (security_group) {
+								openstack_security_p temp_p = update_openstack_security_group(security_group->text);
+								head_p = add_openstack_host_security_node((UINT1*)temp_p, head_p);
+								security_port_p = (UINT1*)head_p;
+								security_num++;
+								security_group = security_group->next;
+							}
+							json_free_value(&security_groups);
+						}
+
 						if(strcmp(port_type,computer)==0|| strcmp(port_type,floating)==0){
 //							LOG_PROC("INFO","PORT UPDATE!");
-							update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+							update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
 						}else if(strcmp(port_type,dhcp)==0){
 //							LOG_PROC("INFO","DHCP UPDATE!");
 							update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
@@ -553,6 +589,102 @@ void createPortFabric( char *jsonString,const char *stringType){
 					}
 					json_free_value(&floatings);
 					LOG_PROC("INFO","OPENSTACK FLOATINGIP  UPDATE!   [%d] updated!",totalNum);
+					totalNum=0;
+				}
+			}
+			else if (0 == strcmp(stringType, securityType)) {
+				json_t *security_groups = json_find_first_label(json, "security_group_rules");
+				if(security_groups){
+					json_t *security_group  = security_groups->child->child;
+					while(security_group){
+						temp = json_find_first_label(security_group, "security_group_id");
+						if(temp){
+							if(temp->child->text){
+								strcpy(security_group_id,temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(direction,"");
+						temp = json_find_first_label(security_group, "direction");
+						if(temp){
+							if(temp->child->text){
+								strcpy(direction,temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(ethertype,"");
+						temp = json_find_first_label(security_group, "ethertype");
+						if(temp){
+							if(temp->child->text){
+								strcpy(ethertype,temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(rule_id,"");
+						temp = json_find_first_label(security_group, "id");
+						if(temp){
+							if(temp->child->text){
+								strcpy(rule_id, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(port_range_max,"");
+						temp = json_find_first_label(security_group, "port_range_max");
+						if(temp){
+							if(temp->child->text){
+								strcpy(port_range_max, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(port_range_min,"");
+						temp = json_find_first_label(security_group, "port_range_min");
+						if(temp){
+							if(temp->child->text){
+								strcpy(port_range_min, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(protocol,"");
+						temp = json_find_first_label(security_group, "protocol");
+						if(temp){
+							if(temp->child->text){
+								strcpy(protocol, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(remote_group_id,"");
+						temp = json_find_first_label(security_group, "remote_group_id");
+						if(temp){
+							if(temp->child->text){
+								strcpy(remote_group_id, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(remote_ip_prefix,"");
+						temp = json_find_first_label(security_group, "remote_ip_prefix");
+						if(temp){
+							if(temp->child->text){
+								strcpy(remote_ip_prefix, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+						strcpy(security_tenant_id,"");
+						temp = json_find_first_label(security_group, "tenant_id");
+						if(temp){
+							if(temp->child->text){
+								strcpy(security_tenant_id, temp->child->text);
+								json_free_value(&temp);
+							}
+						}
+
+						
+						update_security_rule(security_group_id,rule_id,direction,ethertype,port_range_max,port_range_min,
+								protocol,remote_group_id,remote_ip_prefix,security_tenant_id);
+						security_group = security_group->next;
+						totalNum++;
+					}
+					json_free_value(&security_groups);
+					LOG_PROC("INFO","OPENSTACK SECURITY UPDATE!   [%d] updated!",totalNum);
 					totalNum=0;
 				}
 			}

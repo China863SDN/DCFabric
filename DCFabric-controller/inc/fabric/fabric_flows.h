@@ -30,6 +30,8 @@
 #ifndef INC_FABRIC_FABRIC_FLOWS_H_
 #define INC_FABRIC_FABRIC_FLOWS_H_
 #include "gnflush-types.h"
+#include "forward-mgr.h"
+#include "fabric_openstack_external.h"
 
 #define FABRIC_IMPL_HARD_TIME_OUT 0
 #define FABRIC_IMPL_IDLE_TIME_OUT 0
@@ -53,6 +55,37 @@
 
 #define FABRIC_SWITCH_INPUT_MAX_FLOW_NUM 48
 
+typedef struct action_param
+{
+	INT4 type;
+	void* param;
+	struct action_param *next;
+}action_param_t, *action_param_p;
+
+typedef struct flow_param
+{
+	gn_oxm_t* match_param;
+	action_param_t* instruction_param;
+	action_param_t* action_param;
+}flow_param_t;
+
+
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+typedef struct flow_entry_json
+{
+    INT1 *flow_name;
+    INT1 *actions;
+    UINT2 priority;
+
+    //match
+    UINT4 in_port;
+    UINT2 eth_type;
+    UINT4 ipv4_src;
+
+    struct flow_entry_json *pre;
+    struct flow_entry_json *next;
+} flow_entry_json_t;
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
 
 ////////////////////////////////////////////////////////////////////////
 /*
@@ -66,15 +99,48 @@ void install_fabric_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 void install_fabric_openstack_external_output_flow(gn_switch_t * sw,UINT4 port,UINT1* gateway_mac,UINT4 outer_interface_ip,UINT1 type);
 
 void install_fabric_same_switch_flow(gn_switch_t * sw,UINT1* mac, UINT4 port);
-void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 port);
+void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 port, security_param_p security_param);
 void install_fabric_output_flow(gn_switch_t * sw,UINT1* mac, UINT4 port);
 void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac,UINT4 tag);
-void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 tag);
+void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 tag, security_param_p security_param);
+void fabric_openstack_floating_ip_install_set_vlan_out_flow(gn_switch_t * sw, UINT4 match_ip, UINT1* match_mac, UINT4 mod_src_ip, UINT1* mod_dst_mac, UINT4 vlan_id, security_param_t* src_security);
+void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port);
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+BOOL install_fabric_json_flow(const gn_switch_t * sw, const flow_entry_json_t *entry);
+void delete_fabric_json_flow(const gn_switch_t * sw, const flow_entry_json_t *entry);
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
+/*
+ * 下发流表规则
+ */
+void install_fabric_nat_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
+		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
+		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, security_param_t* security_param);
+
+void install_fabric_nat_from_external_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
+		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
+		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw);
+
+void install_fabric_nat_from_external_fabric_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
+		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
+		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, UINT4 out_port);
+
+void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
+		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
+		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw);
+
+void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4 port, security_param_p security_param);
+void install_fabric_push_tag_security_flow(gn_switch_t * sw,UINT4 dst_ip,UINT1* mac, UINT4 tag, security_param_p security_param);
 
 void init_fabric_flows();
 void delete_fabric_flow(gn_switch_t *sw);
 void delete_fabric_flow_by_sw(gn_switch_t *sw);
 void delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id);
+
+void delete_fabric_input_flow_by_ip(gn_switch_t* sw, UINT4 ip);
+void delete_fabric_input_flow_by_mac_portno(gn_switch_t* sw, UINT1* dst_mac, UINT2 dst_port, UINT2 proto);
+void delete_fabrci_flow_by_ip(gn_switch_t* sw, UINT4 ip, UINT2 table_id);
+void delete_fabrci_flow_by_mac(gn_switch_t* sw, UINT1* mac, UINT2 table_id);
 
 UINT1 get_fabric_last_flow_table();
 UINT1 get_fabric_first_flow_table();

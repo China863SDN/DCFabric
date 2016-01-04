@@ -73,7 +73,7 @@ static UINT1 g_fabric_flow_flag;
 pthread_t p_fabric_flow_thread_id;
 sem_t fabric_flow_sem;
 
-static UINT1 g_fabric_host_flag;
+// static UINT1 g_fabric_host_flag;
 pthread_t p_fabric_host_thread_id;
 sem_t fabric_host_sem;
 

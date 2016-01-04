@@ -28,6 +28,7 @@
 #ifndef INC_OPENSTACK_OPENSTACK_APP_H_
 #define INC_OPENSTACK_OPENSTACK_APP_H_
 #include "openstack_host.h"
+#include "fabric_host.h"
 
 /*******************************************************
  * create update delete
@@ -75,7 +76,7 @@ openstack_subnet_p update_openstack_app_subnet(
 /*
  * create normal port
  */
-openstack_port_p create_openstack_app_port(
+p_fabric_host_node create_openstack_app_port(
 		gn_switch_t* sw,
 		UINT4 port_no,
 		UINT4 ip,
@@ -83,7 +84,9 @@ openstack_port_p create_openstack_app_port(
 		char* tenant_id,
 		char* network_id,
 		char* subnet_id,
-		char* port_id);
+		char* port_id,
+		UINT2 security_num,
+		UINT1* security_group);
 /*
  * create gateway port
  */
@@ -111,7 +114,20 @@ openstack_port_p create_openstack_app_dhcp(
 /*
  * create & update port
  */
-openstack_port_p update_openstack_app_host_by_rest(
+p_fabric_host_node update_openstack_app_host_by_rest(
+		gn_switch_t* sw,
+		UINT4 port_no,
+		UINT4 ip,
+		UINT1* mac,
+		char* tenant_id,
+		char* network_id,
+		char* subnet_id,
+		char* port_id,
+		UINT2 security_num,
+		UINT1* security_group);
+
+
+p_fabric_host_node update_openstack_app_gateway_by_rest(
 		gn_switch_t* sw,
 		UINT4 port_no,
 		UINT4 ip,
@@ -120,18 +136,7 @@ openstack_port_p update_openstack_app_host_by_rest(
 		char* network_id,
 		char* subnet_id,
 		char* port_id);
-
-
-openstack_port_p update_openstack_app_gateway_by_rest(
-		gn_switch_t* sw,
-		UINT4 port_no,
-		UINT4 ip,
-		UINT1* mac,
-		char* tenant_id,
-		char* network_id,
-		char* subnet_id,
-		char* port_id);
-openstack_port_p update_openstack_app_dhcp_by_rest(
+p_fabric_host_node update_openstack_app_dhcp_by_rest(
 		gn_switch_t* sw,
 		UINT4 port_no,
 		UINT4 ip,
@@ -144,7 +149,7 @@ openstack_port_p update_openstack_app_dhcp_by_rest(
 /*
  * create & update port by sdn
  */
-openstack_port_p update_openstack_app_host_by_sdn(
+p_fabric_host_node update_openstack_app_host_by_sdn(
 		gn_switch_t* sw,
 		UINT4 port_no,
 		UINT4 ip,
@@ -163,15 +168,15 @@ openstack_subnet_p find_openstack_app_subnet_by_subnet_id(char* subnet_id);
 /*
  * find host
  */
-openstack_port_p find_openstack_app_host_by_mac(UINT1* mac);
-openstack_port_p find_openstack_app_host_by_ip_tenant(UINT4 ip,char* tenant_id);
-openstack_port_p find_openstack_app_host_by_ip_network(UINT4 ip,char* network_id);
-openstack_port_p find_openstack_app_host_by_ip_subnet(UINT4 ip,char* subnet_id);
-openstack_port_p find_openstack_app_gateway_by_host(openstack_port_p host);
-openstack_port_p find_openstack_app_gateway_by_subnet_id(char* subnet_id);
-openstack_port_p find_openstack_app_dhcp_by_host(openstack_port_p host);
-openstack_port_p find_openstack_app_dhcp_by_subnet_id(char* subnet_id);
-UINT4 find_openstack_app_hosts_by_subnet_id(char* subnet_id,openstack_port_p* host_list);
+//openstack_port_p find_openstack_app_host_by_mac(UINT1* mac);
+//openstack_port_p find_openstack_app_host_by_ip_tenant(UINT4 ip,char* tenant_id);
+//openstack_port_p find_openstack_app_host_by_ip_network(UINT4 ip,char* network_id);
+//openstack_port_p find_openstack_app_host_by_ip_subnet(UINT4 ip,char* subnet_id);
+p_fabric_host_node find_openstack_app_gateway_by_host(p_fabric_host_node host);
+p_fabric_host_node find_openstack_app_gateway_by_subnet_id(char* subnet_id);
+p_fabric_host_node find_openstack_app_dhcp_by_host(openstack_port_p host);
+p_fabric_host_node find_openstack_app_dhcp_by_subnet_id(char* subnet_id);
+UINT4 find_openstack_app_hosts_by_subnet_id(char* subnet_id,p_fabric_host_node* host_list);
 
 UINT4 check_openstack_app_host_is_gateway_by_mac(UINT1* mac);
 #endif /* INC_OPENSTACK_OPENSTACK_APP_H_ */

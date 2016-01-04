@@ -305,3 +305,92 @@ INT1* number2ip(INT4 ip_num, INT1* ip)
    return ip;
 }
 
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+//00:00:00:00:00:00:01:91 --> 401
+INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret)
+{
+    if (NULL == dpid)
+    {
+        return -1;
+    }
+    
+    INT4 len = strlen(dpid);
+    if (len < 23)
+    {
+        return -1;
+    }
+
+    INT4 i = 0;
+    INT4 j = 0;
+    UINT1 tmp[17] = {0};
+    for (; i <23 && j < 16; i++)
+    {
+        if (':' != dpid[i])
+        {
+            if (!((dpid[i] <= '9' && dpid[i] >= '0') 
+                || (dpid[i] <= 'f' && dpid[i] >= 'a') 
+                || (dpid[i] <= 'F' && dpid[i] >= 'A')))
+            {
+                return -1;
+            }
+            tmp[j] = dpid[i];
+            j++;
+        }
+    }
+
+    *ret = strtoul((const char*)tmp, NULL, 16);
+
+    return 0;
+}
+
+
+//is digit, just support base=10/16
+BOOL is_digit(const INT1 *str, INT4 base)
+{
+    if (NULL == str || (10 != base && 16 != base))
+    {
+        return -1;
+    }
+    
+    UINT8 len = strlen(str);
+    int i = 0;
+    switch (base)
+    {
+        case 10:
+        {
+            for (i = 0; i < len; i++)
+            {
+                if (str[i] < '0' || str[i] > '9') 
+                {                        
+                    return FALSE;                
+                }
+            }
+            break;
+        }
+        case 16:
+        {
+            if(0 != strncmp("0x", str, 2))
+            {
+                return FALSE;
+            }
+            
+            for (i = 2; i < len; i++)
+            {
+                if (!((str[i] <= '9' && str[i] >= '0') 
+                        || (str[i] <= 'f' && str[i] >= 'a') 
+                        || (str[i] <= 'F' && str[i] >= 'A')))
+                {                        
+                    return FALSE;                
+                }
+            }
+            break;
+        }
+        default:
+        {
+            return FALSE;
+        }
+    }
+    
+    return TRUE; 
+}
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/

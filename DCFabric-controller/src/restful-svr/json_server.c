@@ -34,7 +34,7 @@
 #include "../conn-svr/conn-svr.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../tenant-mgr/tenant-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../meter-mgr/meter-mgr.h"
@@ -50,6 +50,15 @@
 #include "openstack_app.h"
 #include "fabric_openstack_external.h"
 #include "fabric_openstack_nat.h"
+#include "../inc/fabric/fabric_flows.h"
+
+
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+//save flows recved from rest client
+flow_entry_json_t *g_flow_entry_json_list = NULL;
+UINT g_flow_entry_json_length = 0;
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
 
 //从url中解析附带的参数
 static void get_url_argument(const char *url, key_value_t *arg)
@@ -3020,7 +3029,7 @@ static INT1 *get_path(const const INT1 *url, json_t *root)
         {
             return json_to_reply(NULL, EC_SW_NO_PATH);
         }
-        //锟斤拷前锟斤拷锟斤拷锟斤拷锟斤拷锟�
+        //锟斤拷前锟斤拷锟斤拷锟斤拷锟斤拷锟?
         port_pre = g_adac_matrix.src_port[src_index_id][index_tmp];
 
         //锟斤拷一锟斤拷锟斤拷锟斤拷锟斤拷
@@ -3865,6 +3874,586 @@ static INT1* get_fabric_path(const INT1 *url, json_t *root)
 	return json_to_reply(obj, GN_OK);
 }
 
+
+
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+/****************************************************
+ * Get all nodes and their properties
+ * GET URL eg: http://Controllerhost:8081/dcf/all/nodes/properties/json
+ ****************************************************/
+static INT1 *get_all_nodes_properties(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+
+    json_t *nodes = json_new_string("nodeProperties");
+    json_t *nodes_array = json_new_array();
+    json_insert_child(nodes, nodes_array);
+    json_insert_child(obj, nodes);
+
+    json_t *node = NULL;
+    json_t *node_header = NULL;
+    json_t *node_body = NULL;
+    json_t *body_child = NULL;
+    json_t *key = NULL;
+    json_t *value = NULL;
+    gn_switch_t *sw = NULL;
+    UINT1 buf[8] = {0};
+    INT1 json_tmp[1024] = {0};
+
+    int i = 0;
+    for (; i < g_server.max_switch; i++)
+    {
+        sw = &g_server.switches[i];
+        if (1 == sw->state)
+        {
+            node = json_new_object();
+            json_insert_child(nodes_array,node);
+
+            //header
+            {
+                key = json_new_string("node");
+                node_header = json_new_object();
+                json_insert_child(key, node_header);
+                json_insert_child(node, key);
+                //id
+                ulli64_to_uc8(sw->dpid, buf);
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", buf[0],
+                    buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+                key = json_new_string("id");
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(node_header, key);
+
+                //type
+                key = json_new_string("type");
+                value = json_new_string("OF");
+                json_insert_child(key, value);
+                json_insert_child(node_header, key);
+            }
+
+            //body
+            {
+                key = json_new_string("properties");
+                node_body = json_new_object();
+                json_insert_child(key, node_body);
+                json_insert_child(node, key);
+
+                //tables
+                key = json_new_string("tables");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%u", sw->n_tables);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+                
+                //description
+                key = json_new_string("description");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%s %s", sw->sw_desc.mfr_desc, sw->sw_desc.sw_desc);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //actions
+                key = json_new_string("actions");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                value = json_new_string("-1");
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //macAddress
+                key = json_new_string("macAddress");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%02x:%02x:%02x:%02x:%02x:%02x",
+                        sw->lo_port.hw_addr[0], sw->lo_port.hw_addr[1],
+                        sw->lo_port.hw_addr[2], sw->lo_port.hw_addr[3],
+                        sw->lo_port.hw_addr[4], sw->lo_port.hw_addr[5]);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //capabilities
+                key = json_new_string("capabilities");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%u", sw->capabilities);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //timeStamp
+                key = json_new_string("timeStamp");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                value = json_new_string("-1");
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                key = json_new_string("name");
+                value = json_new_string("");
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //buffers
+                key = json_new_string("buffers");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%u", sw->n_buffers);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+            }
+        }
+    }
+
+    return json_to_reply(obj, GN_OK);
+}
+
+
+
+/****************************************************
+ * Get node properties by dpid
+ * GET URL eg: http://Controllerhost:8081/dcf/node/properties/json/00:00:00:00:00:00:00:01
+ ****************************************************/
+static INT1 *get_node_properties_by_dpid(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    
+    //Get node id
+    INT1 *url_head = "/dcf/node/properties/json/";
+    UINT url_head_len = strlen(url_head);
+    UINT url_len = strlen(url);
+    if (url_len <= url_head_len)
+    {
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    UINT8 node_id = 0;
+    const INT1 *dpid = url + url_head_len;
+    if (-1 == dpidStr2Uint8(dpid, &node_id))
+    {
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //find the switch by nodeid
+    int i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        sw = &g_server.switches[i];
+        if (node_id == sw->dpid)
+        {
+            break;
+        }
+    }
+
+    //if not exist
+    if (i >= g_server.max_switch)
+    {
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //arrange json retvalue
+    json_t *node = json_new_string("nodeConnectorProperties");
+    json_t *node_array = json_new_array();
+    json_insert_child(node, node_array);
+    json_insert_child(obj, node);
+
+    json_t *port = NULL;
+    json_t *header = NULL;
+    json_t *body = NULL;
+    json_t *key = NULL;
+    json_t *value = NULL;
+    json_t *child = NULL;
+    INT1 json_tmp[1024] = {0};
+    for (i = 0; i < sw->n_ports; i++)
+    {
+        gn_port_t *gn_port = &sw->ports[i];
+        //one port info
+        port = json_new_object();
+        json_insert_child(node_array, port);
+
+        //port header
+        {
+            key = json_new_string("nodeconnector");
+            header = json_new_object();
+            json_insert_child(key, header);
+            json_insert_child(port, key);
+
+            //node
+            key = json_new_string("node");
+            child = json_new_object();
+            json_insert_child(key, child);
+            json_insert_child(header, key);
+
+            //node id
+            key = json_new_string("id");
+            value = json_new_string(dpid);
+            json_insert_child(key, value);
+            json_insert_child(child, key);
+
+            //node type
+            key = json_new_string("type");
+            value = json_new_string("OF");
+            json_insert_child(key, value);
+            json_insert_child(child, key);
+
+            //id
+            key = json_new_string("id");
+            memset(json_tmp, 0 , 1024);
+            sprintf(json_tmp, "%u", gn_port->port_no);
+            value = json_new_string(json_tmp);
+            json_insert_child(key, value);
+            json_insert_child(header, key);
+
+            //node type
+            key = json_new_string("type");
+            value = json_new_string("OF");
+            json_insert_child(key, value);
+            json_insert_child(header, key);
+        }
+
+        //port body
+        {
+            key = json_new_string("properties");
+            body = json_new_object();
+            json_insert_child(key, body);
+            json_insert_child(port, key);
+
+            //state
+            key = json_new_string("state");
+            memset(json_tmp, 0 , 1024);
+            sprintf(json_tmp, "%u", gn_port->state);
+            value = json_new_string(json_tmp);
+            json_insert_child(key, value);
+            json_insert_child(body, key);
+
+            //config
+            key = json_new_string("config");
+            memset(json_tmp, 0 , 1024);
+            sprintf(json_tmp, "%u", gn_port->config);
+            value = json_new_string(json_tmp);
+            json_insert_child(key, value);
+            json_insert_child(body, key);
+
+            //name
+            key = json_new_string("name");
+            value = json_new_string(gn_port->name);
+            json_insert_child(key, value);
+            json_insert_child(body, key);
+        }
+    }
+
+    return json_to_reply(obj, GN_OK);
+
+}
+
+
+
+/****************************************************
+ * Add flow by node's dpid
+ * PUT URL eg: http://Controllerhost:8081/dcf/put/node/flow/json/00:00:00:00:00:00:00:01/flowname
+   payload eg:
+   {"flowConfig": {
+        "installInHw": "true",
+        "name": "flowname",
+        "node": {
+            "id": "00: 00: 00: 00: 00: 00: 00: 01",
+            "type": "OF"
+        },
+        "ingress": "2",
+        "priority": "500",
+        "etherType": "0x800",
+        "nwSrc": "9.9.1.1",
+        "actions": "OUTPUT=2"
+      }
+   }
+ ****************************************************/
+static INT1 *put_flow_entry_by_dpid(const INT1 *url, json_t *root)
+{
+    if (NULL == g_flow_entry_json_list)
+    {
+        g_flow_entry_json_list = (flow_entry_json_t *)gn_malloc(sizeof(flow_entry_json_t));
+    }
+    
+    json_t *obj = json_new_object();
+    if (g_flow_entry_json_length > REST_MAX_PARAM_LEN)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : too many flows had been sent by restClient!");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //Get flow name from url
+    INT1 *url_head = "/dcf/put/node/flow/json/00:00:00:00:00:00:00:01/";
+    UINT url_head_len = strlen(url_head);
+    UINT url_len = strlen(url);
+    if (url_len <= url_head_len)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : invalid url! it should be like:PUT URL http://Controllerhost:8081//dcf/put/node/flow/json/00:00:00:00:00:00:00:01/flowname");
+        return json_to_reply(obj, GN_ERR);
+    }
+    const INT1 *flow_name = url + url_head_len;
+
+    //Get dpid from url
+    url_head = "/dcf/put/node/flow/json/";
+    url_head_len = strlen(url_head);
+    const INT1 *dpid_str = url + url_head_len;
+    UINT8 dpid = 0;
+    if (-1 == dpidStr2Uint8(dpid_str, &dpid))
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : invalid dpid in url!");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+
+    json_t *flowconfig = json_find_first_label(root, "flowConfig");
+    
+    //name
+    json_t *name = json_find_first_label(flowconfig->child, "name");
+    if (NULL == name)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : name is NULL!");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    if (0 != strncmp(name->child->text, flow_name, REST_MAX_PARAM_LEN))
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : flowname in url and payload is not equal!");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //ingress
+    json_t *ingress = json_find_first_label(flowconfig->child, "ingress");
+    if (NULL == ingress || !is_digit(ingress->child->text, 10))
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : ingress is NULL!");
+        return json_to_reply(obj, GN_ERR);
+    }
+    UINT4 in_port = (UINT4)atol(ingress->child->text);
+
+    //priority
+    json_t *prior = json_find_first_label(flowconfig->child, "priority");
+    if (NULL == prior || !is_digit(prior->child->text, 10))
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : priority is NULL!");
+        return json_to_reply(obj, GN_ERR);
+    }
+    UINT2 priority = (UINT2)atoi(prior->child->text);
+
+    //etherType
+    json_t *etherType = json_find_first_label(flowconfig->child, "etherType");
+    if (NULL == etherType || !is_digit(etherType->child->text, 16))
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : etherType is NULL!");
+        return json_to_reply(obj, GN_ERR);
+    }
+    UINT2 eth_type = (UINT2)strtoul(etherType->child->text, NULL, 16);
+
+    //nwSrc
+    json_t *nwSrc = json_find_first_label(flowconfig->child, "nwSrc");
+    if (NULL == nwSrc)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : nwSrc is NULL!");
+        return json_to_reply(obj, GN_ERR);
+    }
+    UINT4 ipv4_src = ip2number(nwSrc->child->text);
+    if (-1 == ipv4_src)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : invalid nwSrc!");
+        return json_to_reply(obj, GN_ERR);
+    }
+    
+    //actions
+    json_t *act = json_find_first_label(flowconfig->child, "actions");
+    if (NULL == act)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : actions is NULL!");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //get switch by dpid
+    INT4 i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        if (1 == g_server.switches[i].state && dpid == g_server.switches[i].dpid)
+        {
+            sw = &g_server.switches[i];
+            break;
+        }
+    }
+
+    //if can not find switch , just ret failure
+    if (NULL == sw)
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : can't find the switch by input dpid");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //arrange new flow_entry_json_t param
+    flow_entry_json_t *flow_json = (flow_entry_json_t *)gn_malloc(sizeof(flow_entry_json_t));
+    INT4 len = ((strlen(name->child->text) + 1) > REST_MAX_PARAM_LEN) ? REST_MAX_PARAM_LEN : (strlen(name->child->text) + 1);
+    flow_json->flow_name = (INT1 *)gn_malloc(sizeof(len));
+    strncpy(flow_json->flow_name, name->child->text, len - 1);
+    flow_json->flow_name[len - 1] = '\0';
+
+    len = ((strlen(act->child->text) + 1) > REST_MAX_PARAM_LEN) ? REST_MAX_PARAM_LEN : (strlen(act->child->text) + 1);
+    flow_json->actions = (INT1 *)gn_malloc(sizeof(len));
+    strncpy(flow_json->actions, act->child->text, len - 1);
+    flow_json->actions[len - 1] = '\0';
+
+    flow_json->eth_type = eth_type;
+    flow_json->in_port = in_port;
+    flow_json->ipv4_src = ipv4_src;
+    flow_json->priority = priority;
+    
+    //install flow
+    if(!install_fabric_json_flow(sw, flow_json))
+    {
+        LOG_PROC("ERROR", "%s", "put_flow_entry_by_dpid : invalid actions, it should be like: OUTPUT=2 or OUTPUT=2,3");
+        gn_free((void *)(&flow_json->flow_name));
+        gn_free((void *)(&flow_json->actions));
+        gn_free((void *)(&flow_json));
+        
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //save flow json to g_flow_entry_json_list
+    flow_json->next = g_flow_entry_json_list->next;
+    flow_json->pre = g_flow_entry_json_list;
+    if (NULL != g_flow_entry_json_list->next)
+    {
+        g_flow_entry_json_list->next->pre = flow_json;
+    }
+    g_flow_entry_json_list->next = flow_json;
+    g_flow_entry_json_length++;
+    
+    return json_to_reply(root, GN_OK);
+}
+
+
+
+/****************************************************
+ * Del flow by node's dpid
+ * GET URL eg: http://Controllerhost:8081/dcf/del/node/flow/json/00:00:00:00:00:00:00:01/flowname
+ ****************************************************/
+static INT1 *del_flow_entry_by_dpid(const INT1 *url, json_t *root)
+{
+    if (NULL == g_flow_entry_json_list)
+    {
+        g_flow_entry_json_list = (flow_entry_json_t *)gn_malloc(sizeof(flow_entry_json_t));
+    }
+
+    json_t *obj = json_new_object();
+
+    //Get flowname
+    INT1 *url_head = "/dcf/del/node/flow/json/00:00:00:00:00:00:00:01/";
+    UINT url_head_len = strlen(url_head);
+    UINT url_len = strlen(url);
+    if (url_len <= url_head_len)
+    {
+        LOG_PROC("ERROR", "%s", "del_flow_entry_by_dpid : invalid url! it should be like:GET URL http://Controllerhost:8081/dcf/del/node/flow/json/00:00:00:00:00:00:00:01/flowname");
+        return json_to_reply(obj, GN_ERR);
+    }
+    const INT1 *flow_name = url + url_head_len;
+
+    //Get dpid
+    url_head = "/dcf/del/node/flow/json/";
+    url_head_len = strlen(url_head);
+    const INT1 *dpid_str = url + url_head_len;
+    UINT8 dpid = 0;
+    if (-1 == dpidStr2Uint8(dpid_str, &dpid))
+    {
+        LOG_PROC("ERROR", "%s", "del_flow_entry_by_dpid : invalid dpid in url!");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //get switch by dpid
+    INT4 i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        if (1 == g_server.switches[i].state && dpid == g_server.switches[i].dpid)
+        {
+            sw = &g_server.switches[i];
+            break;
+        }
+    }
+
+    //if can not find switch , just ret failure
+    if (NULL == sw)
+    {
+        LOG_PROC("ERROR", "%s", "del_flow_entry_by_dpid : can't find the switch by input dpid");
+        return json_to_reply(obj, GN_ERR);
+    }
+
+    //Get flow_entry_json
+    flow_entry_json_t *cur = g_flow_entry_json_list->next;
+    flow_entry_json_t *pre = NULL;
+    while (NULL != cur)
+    {
+        if (0 == strncmp(flow_name, cur->flow_name, REST_MAX_FLOW_NUM))
+        {
+            if (NULL != cur->next)
+            {
+                cur->next->pre = cur->pre;
+                
+            }
+            cur->pre->next = cur->next;
+            pre = cur;
+            cur = cur->next;
+            
+            delete_fabric_json_flow(sw, pre);
+            gn_free((void *)(&pre->flow_name));
+            gn_free((void *)(&pre->actions));
+            gn_free((void *)(&pre));
+            
+            g_flow_entry_json_length--;
+            
+            continue;
+        }
+        
+        cur = cur->next;
+    }
+    
+    return json_to_reply(obj, GN_OK);
+}
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
+
+
+
 /****************************************************
  * neutron
  ****************************************************/
@@ -4096,7 +4685,7 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 			json_free_value(&port);
 		}
 		if(strcmp(port_type,computer)==0){
-			update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+			update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
 		}else if(strcmp(port_type,dhcp)==0){
 			update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
 		}else if(strcmp(port_type,floatip)==0){
@@ -4335,6 +4924,14 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/update/json", update_fabric_external);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/getpath/json", get_fabric_path);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/setupparts/json", setup_fabric_entries_parts);
+
+    //dcf
+    /*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+    ret += register_restful_handler(HTTP_GET, "/dcf/all/nodes/properties/json", get_all_nodes_properties);
+    ret += register_restful_handler(HTTP_GET, "/dcf/node/properties/json", get_node_properties_by_dpid);
+    ret += register_restful_handler(HTTP_PUT, "/dcf/put/node/flow/json", put_flow_entry_by_dpid);
+    ret += register_restful_handler(HTTP_GET, "/dcf/del/node/flow/json", del_flow_entry_by_dpid);
+    /*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
 
     // nat
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/nat/switch", setup_fabric_nat_switch);
