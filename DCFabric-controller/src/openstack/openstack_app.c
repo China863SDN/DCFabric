@@ -120,7 +120,11 @@ p_fabric_host_node create_openstack_app_port(
 		UINT1* security_group){
 	p_fabric_host_node port = NULL;
 	openstack_subnet_p subnet = NULL;
+<<<<<<< HEAD
 	port = create_openstack_host_port(sw,port_type,port_no,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id, security_num, security_group);
+=======
+	port = create_openstack_host_port(sw,port_no,ip,mac,tenant_id,network_id,subnet_id,port_id, security_num, security_group);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	//add_openstack_host_port(port);
 	// add to subnet;
 	subnet = find_openstack_host_subnet_by_subnet_id(subnet_id);
@@ -144,7 +148,11 @@ openstack_port_p create_openstack_app_gateway(
 		char* port_id){
 	openstack_port_p port = NULL;
 	openstack_subnet_p subnet = NULL;
+<<<<<<< HEAD
 	port = create_openstack_host_port(sw,port_type,port_no,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+=======
+	port = create_openstack_host_port(sw,port_no,ip,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	// add_openstack_host_port(port);
 	// add to subnet;
 	subnet = find_openstack_host_subnet_by_subnet_id(subnet_id);
@@ -169,7 +177,11 @@ openstack_port_p create_openstack_app_dhcp(
 		char* port_id){
 	openstack_port_p port = NULL;
 	openstack_subnet_p subnet = NULL;
+<<<<<<< HEAD
 	port = create_openstack_host_port(sw,port_type,port_no,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+=======
+	port = create_openstack_host_port(sw,port_no,ip,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	// add_openstack_host_port(port);
 	// add to subnet;
 	subnet = find_openstack_host_subnet_by_subnet_id(subnet_id);
@@ -198,14 +210,22 @@ p_fabric_host_node update_openstack_app_host_by_rest(
 //	LOG_PROC("INFO","PORT UPDATE!");
 	port = get_fabric_host_from_list_by_mac(mac);
 	if(port == NULL){
+<<<<<<< HEAD
 		port = create_openstack_app_port(sw,port_type,port_no,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_group);
+=======
+		//printf("create app port\n");
+		port = create_openstack_app_port(sw,port_no,ip,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_group);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 //		add_openstack_host_port(port);
 	}else{
 		//printf("update app port\n");
 		openstack_port_p port_p = (openstack_port_p)port->data;
 		port->ip_list[0] = ip;
+<<<<<<< HEAD
 		if (ipv6)
 			memcpy(port->ipv6[0], ipv6, 16);
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		strcpy(port_p->tenant_id,tenant_id);
 		strcpy(port_p->network_id,network_id);
 		strcpy(port_p->port_id,port_id);
@@ -231,7 +251,11 @@ p_fabric_host_node update_openstack_app_gateway_by_rest(
 	p_fabric_host_node port = NULL;
 	openstack_subnet_p subnet = NULL;
 //	LOG_PROC("INFO","Gateway UPDATE!");
+<<<<<<< HEAD
 	port = update_openstack_app_host_by_rest(sw,port_type,port_no,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+=======
+	port = update_openstack_app_host_by_rest(sw,port_no,ip,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	// add to subnet;
 	subnet = find_openstack_host_subnet_by_subnet_id(subnet_id);
 	if(subnet == NULL){
@@ -255,7 +279,11 @@ p_fabric_host_node update_openstack_app_dhcp_by_rest(
 	p_fabric_host_node port = NULL;
 	openstack_subnet_p subnet = NULL;
 //	LOG_PROC("INFO","DHCP UPDATE!");
+<<<<<<< HEAD
 	port = update_openstack_app_host_by_rest(sw,port_type,port_no,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+=======
+	port = update_openstack_app_host_by_rest(sw,port_no,ip,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	// add to subnet;
 	subnet = find_openstack_host_subnet_by_subnet_id(subnet_id);
 	if(subnet == NULL){
@@ -274,11 +302,18 @@ p_fabric_host_node update_openstack_app_host_by_sdn(
 	p_fabric_host_node port = NULL;
 	port = get_fabric_host_from_list_by_mac(mac);
 	if(port == NULL){
+<<<<<<< HEAD
 		port = create_openstack_app_port(sw,port_type,port_no,ip,ipv6,mac,"","","","",0,NULL);
 //		add_openstack_host_port(port);
 	}else{
 		port->ip_list[0] = ip;
 		memcpy(port->ipv6[0], ipv6, 16);
+=======
+		port = create_openstack_app_port(sw,port_no,ip,mac,"","","","",0,NULL);
+//		add_openstack_host_port(port);
+	}else{
+		port->ip_list[0] = ip;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		port->sw = sw;
 		port->port = port_no;
 	}

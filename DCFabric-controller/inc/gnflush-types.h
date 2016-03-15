@@ -66,9 +66,12 @@ enum forward_ip_type
 	Internal_out_subnet_flow = 8,
 	Floating_ip_flow = 9,
 	Nat_ip_flow = 10,
+<<<<<<< HEAD
 	Internal_vip_flow = 11,
 	External_vip_flow = 12,
 	Internal_floating_vip_flow = 13,
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 };
 
 #pragma pack(1)

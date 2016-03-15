@@ -34,9 +34,18 @@
 #include "app_impl.h"
 
 
+<<<<<<< HEAD
 //max length of param that pasted by rest client
 #define REST_MAX_PARAM_LEN 1024
 #define REST_MAX_ACTION_NUM 256
+=======
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+//max length of param that pasted by rest client
+#define REST_MAX_PARAM_LEN 1024
+//max flow number send by rest client
+#define REST_MAX_FLOW_NUM 1024
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 INT4 init_json_server();
 INT1 *json_to_reply(json_t *obj, INT4 code);

@@ -67,6 +67,7 @@ typedef struct flow_param
 {
 	gn_oxm_t* match_param;
 	action_param_t* instruction_param;
+<<<<<<< HEAD
 	action_param_t* action_param;			/* OFPIT_APPLY_ACTIONS use*/
 	action_param_t* write_action_param;		/* OFPIT_WRITE_ACTIONS use*/
 }flow_param_t;
@@ -85,10 +86,31 @@ typedef struct flow_entry_json
     flow_param_t *flow_param;
 
     UINT8 *data;
+=======
+	action_param_t* action_param;
+}flow_param_t;
+
+
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+typedef struct flow_entry_json
+{
+    INT1 *flow_name;
+    INT1 *actions;
+    UINT2 priority;
+
+    //match
+    UINT4 in_port;
+    UINT2 eth_type;
+    UINT4 ipv4_src;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
     struct flow_entry_json *pre;
     struct flow_entry_json *next;
 } flow_entry_json_t;
+<<<<<<< HEAD
+=======
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 ////////////////////////////////////////////////////////////////////////
 /*
@@ -108,6 +130,13 @@ void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac,UINT4 tag);
 void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 tag, security_param_p security_param);
 void fabric_openstack_floating_ip_install_set_vlan_out_flow(gn_switch_t * sw, UINT4 match_ip, UINT1* match_mac, UINT4 mod_src_ip, UINT1* mod_dst_mac, UINT4 vlan_id, security_param_t* src_security);
 void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port);
+<<<<<<< HEAD
+=======
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+BOOL install_fabric_json_flow(const gn_switch_t * sw, const flow_entry_json_t *entry);
+void delete_fabric_json_flow(const gn_switch_t * sw, const flow_entry_json_t *entry);
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 /*
  * 下发流表规则
@@ -138,8 +167,13 @@ void delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table
 
 void delete_fabric_input_flow_by_ip(gn_switch_t* sw, UINT4 ip);
 void delete_fabric_input_flow_by_mac_portno(gn_switch_t* sw, UINT1* dst_mac, UINT2 dst_port, UINT2 proto);
+<<<<<<< HEAD
 void delete_fabric_flow_by_ip(gn_switch_t* sw, UINT4 ip, UINT2 table_id);
 void delete_fabric_flow_by_mac(gn_switch_t* sw, UINT1* mac, UINT2 table_id);
+=======
+void delete_fabrci_flow_by_ip(gn_switch_t* sw, UINT4 ip, UINT2 table_id);
+void delete_fabrci_flow_by_mac(gn_switch_t* sw, UINT1* mac, UINT2 table_id);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 UINT1 get_fabric_last_flow_table();
 UINT1 get_fabric_first_flow_table();

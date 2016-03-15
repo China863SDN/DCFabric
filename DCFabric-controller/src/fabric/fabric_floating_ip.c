@@ -43,6 +43,12 @@
 #include "openstack_app.h"
 #include "fabric_openstack_arp.h"
 
+<<<<<<< HEAD
+=======
+void *g_floating_timerid = NULL;
+UINT4 g_floating_interval = 300;
+void *g_floating_timer = NULL;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 // const UINT1 nat_zero_mac[] = {0x0,0x0,0x0,0x0,0x0,0x0};
 // const UINT1 nat_broadcat_mac[] = {0xff,0xff,0xff,0xff,0xff,0xff};
@@ -332,3 +338,48 @@ INT4 fabric_openstack_floating_ip_packet_out_handle(p_fabric_host_node src_port,
 //	return;
 //};
 
+<<<<<<< HEAD
+=======
+void init_floating_mgr()
+{
+	// call flood function
+	floating_tx_timer(NULL, NULL);
+
+	// set the timer
+    g_floating_timerid = timer_init(1);
+    timer_creat(g_floating_timerid, g_floating_interval, NULL, &g_floating_timer, floating_tx_timer);
+}
+
+void floating_tx_timer(void *para, void *tid)
+{
+	openstack_external_node_p node_p = NULL;
+	external_floating_ip_p epp = NULL;
+	external_port_p ext_p = NULL;
+	p_fabric_host_node fip_p = NULL;
+	p_fabric_host_node gateway_p = NULL;
+
+	node_p = get_floating_list();
+
+	// create floating request
+	while(NULL != node_p) {
+		epp = (external_floating_ip_p)node_p->data;
+
+		if(NULL != epp) {
+			fip_p = find_fabric_host_port_by_port_id(epp->port_id);
+
+			if (NULL != fip_p) {
+				gateway_p = find_openstack_app_gateway_by_host(fip_p);
+				ext_p = find_openstack_external_by_floating_ip(epp->floating_ip);
+
+				if ((NULL != gateway_p) && (NULL != ext_p)) {
+					// g_floating_interval = 30;
+					// fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], epp->fixed_ip, gateway_p->mac, ext_p->external_dpid);
+					fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], epp->fixed_ip, gateway_p->mac);
+				}
+			}
+		}
+
+		node_p = node_p->next;
+	}
+}
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb

@@ -305,6 +305,7 @@ INT1* number2ip(INT4 ip_num, INT1* ip)
    return ip;
 }
 
+<<<<<<< HEAD
 UINT1* ipv6_str_to_number(char* str, UINT1* ipv6)
 {
 	struct in6_addr ip;
@@ -348,6 +349,9 @@ void nat_show_ipv6(UINT1* ip)
 }
 
 
+=======
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 //00:00:00:00:00:00:01:91 --> 401
 INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret)
 {
@@ -435,6 +439,7 @@ BOOL is_digit(const INT1 *str, INT4 base)
     
     return TRUE; 
 }
+<<<<<<< HEAD
 
 
 // calculate checksum
@@ -455,3 +460,6 @@ UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size)
 	cksum += (cksum >>16);
 	return (UINT2)(~cksum);
 }
+=======
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb

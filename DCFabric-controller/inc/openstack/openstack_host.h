@@ -87,8 +87,11 @@ typedef struct _openstack_subnet{
 	UINT1 gateway_ipv6[16];
 	UINT4 start_ip;
 	UINT4 end_ip;
+<<<<<<< HEAD
 	UINT1 start_ipv6[16];
 	UINT1 end_ipv6[16];
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	void* gateway_port;
 	void* dhcp_port;
 	UINT4 port_num;
@@ -251,7 +254,10 @@ void destory_openstack_host_node(openstack_node_p node);
 openstack_security_p update_openstack_security_group(char* security_group);
 openstack_node_p add_openstack_host_security_node(UINT1* data, openstack_node_p head_p);
 void clear_openstack_host_security_node(UINT1* head_p);
+<<<<<<< HEAD
 void clear_all_security_group_info();
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 void update_security_rule(char* security_group, char* rule_id, char* direction, char* ethertype, char* port_range_max,
 char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id);
 
@@ -264,10 +270,13 @@ UINT4 find_fabric_host_ports_by_subnet_id(char* subnet_id,p_fabric_host_node* ho
 p_fabric_host_node find_fabric_host_port_by_subnet_id(UINT4 ip, char* subnet_id);
 void find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id);
 
+<<<<<<< HEAD
 
 void init_host_check_mgr();
 void host_check_tx_timer(void *para, void *tid);
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 #endif /* INC_OPENSTACK_OPENSTACK_HOST_H_ */
 
 

@@ -101,7 +101,11 @@ p_fabric_host_node get_fabric_host_from_list_by_ipv6(UINT1* ip);
 
 p_fabric_host_node get_fabric_host_from_list_by_mac(UINT1* mac);
 void insert_fabric_host_into_list(p_fabric_host_node node);
+<<<<<<< HEAD
 p_fabric_host_node insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT8 dpid,UINT4 port,UINT1* mac,UINT4 ip, UINT1* ipv6);
+=======
+p_fabric_host_node insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT8 dpid,UINT4 port,UINT1* mac,UINT4 ip);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 p_fabric_host_node remove_fabric_host_from_list_by_ip(UINT4 ip);
 p_fabric_host_node remove_fabric_host_from_list_by_mac(UINT1* mac);
 void delete_fabric_host_from_list_by_sw(gn_switch_t* sw);

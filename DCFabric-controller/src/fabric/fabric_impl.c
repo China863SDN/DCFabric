@@ -34,8 +34,11 @@
 #include "../event/event_service.h"
 #include <stdio.h>
 #include "forward-mgr.h"
+<<<<<<< HEAD
 #include "fabric_stats.h"
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 extern UINT4 g_openstack_on;
 /*****************************

@@ -48,6 +48,7 @@ INT4 openstack_ip_p_broadcast(packet_in_info_t *packet_in);
 INT4 openstack_ip_packet_check_access(p_fabric_host_node src_port, p_fabric_host_node dst_port, packet_in_info_t *packet_in, param_set_p param);
 void remove_flows_by_sw_port(UINT8 sw_dpid, UINT4 port);
 void fabric_openstack_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport);
+<<<<<<< HEAD
 
 /*
  * temp added for ipv6
@@ -59,4 +60,6 @@ p_fabric_host_node openstack_save_host_info_ipv6(gn_switch_t *sw,UINT1* sendmac,
 void fabric_openstack_install_fabric_flows_ipv6(p_fabric_host_node src_port,p_fabric_host_node dst_port,
 										   security_param_p src_security, security_param_p dst_security);
 #endif
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 #endif /* INC_FABRIC_FABRIC_OPENSTACK_ARP_H_ */

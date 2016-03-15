@@ -124,12 +124,18 @@ p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 se
 		if(!check_IP_in_fabric_host(p_node,sendip))
 		{
 			add_fabric_host_ip(p_node,sendip);
+<<<<<<< HEAD
 		}
 	}else{
 		p_node = create_fabric_host_list_node(sw,inport,sendmac,sendip,NULL);
 		if (NULL == p_node) {
 		    return NULL;	
 		}
+=======
+		}
+	}else{
+		p_node = create_fabric_host_list_node(sw,inport,sendmac,sendip);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		insert_fabric_host_into_list(p_node);
 	}
 	p_node->port = inport;

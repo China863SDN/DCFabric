@@ -39,7 +39,10 @@
 #include "../conn-svr/conn-svr.h"
 #include "fabric_arp.h"
 #include "openstack_security_app.h"
+<<<<<<< HEAD
 #include "openstack_lbaas_app.h"
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 UINT4 g_openstack_dns_ip = 0x8080808;
 const UINT1 arp_zero_mac[] = {0x0,0x0,0x0,0x0,0x0,0x0};
@@ -75,14 +78,22 @@ void fabric_openstack_create_arp_reply_public(UINT1* srcMac, UINT4 srcIP, UINT1*
 void fabric_openstack_external_arp_mac();
 gn_switch_t* get_ext_sw_by_dpid(UINT8 dpid);
 
+<<<<<<< HEAD
 INT4 external_packet_out_compute_forward(p_fabric_host_node src_port,UINT4 sendip, UINT4 targetip, packet_in_info_t *packet_in, UINT1 proto, param_set_p param_set);
+=======
+INT4 external_packet_out_compute_forward(p_fabric_host_node src_port, UINT4 targetip, packet_in_info_t *packet_in, UINT1 proto, param_set_p param_set);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 INT4 external_packet_in_compute_forward(p_fabric_host_node src_port, UINT4 src_ip, UINT4 targetip, packet_in_info_t* packet_in, UINT1 proto, param_set_p param_set);
 INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_node dst_port, UINT4 targetip, param_set_p param_set, ip_t *ip);
 void remove_host_output_flow_by_ip_mac(gn_switch_t* sw, UINT4 ip, UINT1* mac);
 void remove_floating_flow(gn_switch_t* sw, UINT4 floating_ip, UINT1* mac);
 void remove_nat_flow(gn_switch_t* sw, UINT4 ip, UINT1* src_mac);
+<<<<<<< HEAD
 INT4 internal_packet_compute_vip_forward(p_fabric_host_node src_port, p_fabric_host_node dst_port, UINT4 targetip, param_set_p param_set, ip_t *ip);
 INT4 openstack_check_src_dst_is_controller(packet_in_info_t *packet_in);
+=======
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 void fabric_openstack_show_port(p_fabric_host_node port){
 	struct in_addr addr;
@@ -326,11 +337,20 @@ p_fabric_host_node openstack_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4
 	/*
 	 * temporary code write for internal instance transition.
 	 */
+<<<<<<< HEAD
 	if ((NULL != p_node->sw) && (0 != p_node->port))
 		return p_node;
 
 	if (sendip) 
 		p_node->ip_list[0] = sendip;
+=======
+#if 1
+	if ((NULL != p_node->sw) && (0 != p_node->port))
+		return p_node;
+#endif
+
+	p_node->ip_list[0] = sendip;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	p_node->port = inport;
 	p_node->sw=sw;
 	//please test if need install flow
@@ -352,7 +372,11 @@ p_fabric_host_node openstack_find_dst_port(p_fabric_host_node src_node,UINT4 tar
 			if(NULL!=ext_port){
 				UINT1 mac[48] = {0};
 				macstr2hex("0", mac);
+<<<<<<< HEAD
 				dst_port = update_openstack_app_host_by_rest(NULL,OPENSTACK_PORT_TYPE_GATEWAY,0,targetip,NULL,mac,"0","0","0","0",0,NULL);
+=======
+				dst_port = update_openstack_app_host_by_rest(NULL,0,targetip,mac,"0","0","0","0",0,NULL);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			}
 		}
 	}else{
@@ -432,9 +456,15 @@ INT4 openstack_ip_p_install_flow(param_set_p param_set, INT4 foward_type)
 	if (NULL == param_set) {
 		return GN_OK;
 	}
+<<<<<<< HEAD
 
 	// printf("*************foward type is%d\n", foward_type);
 
+=======
+
+	// printf("*************foward type is%d\n", foward_type);
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	if (Internal_port_flow == foward_type) {
 		fabric_openstack_install_fabric_flows(param_set->src_port, param_set->dst_port,
 				param_set->src_security, param_set->dst_security);
@@ -468,6 +498,7 @@ INT4 openstack_ip_p_install_flow(param_set_p param_set, INT4 foward_type)
 					param_set->outer_mac, param_set->dst_port_no, param_set->dst_vlanid, param_set->src_vlanid, param_set->src_inport, param_set->src_sw, param_set->dst_sw);
 		}
 	}
+<<<<<<< HEAD
 	else if (Internal_vip_flow == foward_type) {
 		fabric_openstack_install_fabric_vip_flows(param_set->src_port, param_set->dst_port, param_set->proto, param_set->vip, param_set->vip_mac,
 				param_set->src_gateway, param_set->dst_gateway, param_set->src_port_no, param_set->vip_tcp_port_no, param_set->src_security, param_set->dst_security);
@@ -482,6 +513,8 @@ INT4 openstack_ip_p_install_flow(param_set_p param_set, INT4 foward_type)
 		fabric_openstack_install_fabric_floaing_vip_flows(param_set->src_port, param_set->dst_port, param_set->proto, param_set->vip, param_set->vip_mac, param_set->mod_dst_ip, param_set->packet_dst_mac,
 				param_set->src_gateway, param_set->dst_gateway, param_set->src_port_no, param_set->vip_tcp_port_no, param_set->src_security, param_set->dst_security);
 	}
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	else {
 
 	}
@@ -1114,6 +1147,7 @@ INT4 openstack_ip_packet_compute_src_dst_forward(p_fabric_host_node src_port,p_f
 		dst_port = NULL;
 	}
 
+<<<<<<< HEAD
 	if ((ip->dest == ntohl(g_controller_ip)) && (src_port)) {
 		if (IPPROTO_ICMP == ip->proto) {
 
@@ -1147,6 +1181,15 @@ INT4 openstack_ip_packet_compute_src_dst_forward(p_fabric_host_node src_port,p_f
 	}
 	// from external to internal
 	else if ((NULL == src_port) && (g_broad_ip != ip->dest))
+=======
+	// internal network
+	if ((NULL != src_port) && (NULL != dst_port))
+	{
+		foward_type = internal_packet_compute_forward(src_port, dst_port, ip->dest, param_set, ip);
+	}
+	// from external to internal
+	else if (NULL == src_port)
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	{
 		foward_type = external_packet_in_compute_forward(src_port, ip->src, ip->dest, packet_in, ip->proto, param_set);
 	}
@@ -1154,7 +1197,11 @@ INT4 openstack_ip_packet_compute_src_dst_forward(p_fabric_host_node src_port,p_f
 	else if (NULL == dst_port)
 	{
 		// if dest ip is dns or fobidden ip
+<<<<<<< HEAD
 		if (/*(ip->dest == g_openstack_dns_ip) || */((ip->dest == g_openstack_fobidden_ip)))
+=======
+		if ((ip->dest == g_openstack_dns_ip) || ((ip->dest == g_openstack_fobidden_ip)))
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		{
 			// LOG_PROC("INFO", "dst is forbidden ip or dns ip!");
 			return IP_DROP;
@@ -1175,11 +1222,19 @@ INT4 openstack_ip_packet_compute_src_dst_forward(p_fabric_host_node src_port,p_f
 				return BROADCAST_DHCP;
 			}
 			else {
+<<<<<<< HEAD
 				foward_type = external_packet_out_compute_forward(src_port, ip->src, ip->dest, packet_in, ip->proto, param_set);
 			}
 		}
 		else {
 			foward_type = external_packet_out_compute_forward(src_port, ip->src, ip->dest, packet_in, ip->proto, param_set);
+=======
+				foward_type = external_packet_out_compute_forward(src_port, ip->src, packet_in, ip->proto, param_set);
+			}
+		}
+		else {
+			foward_type = external_packet_out_compute_forward(src_port, ip->src, packet_in, ip->proto, param_set);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		}
 	}
 	else
@@ -1190,6 +1245,7 @@ INT4 openstack_ip_packet_compute_src_dst_forward(p_fabric_host_node src_port,p_f
 	return foward_type;
 }
 
+<<<<<<< HEAD
 INT4 internal_packet_compute_vip_forward(p_fabric_host_node src_port, p_fabric_host_node dst_port, UINT4 targetip, param_set_p param_set, ip_t *ip)
 {
 	// define the value
@@ -1347,6 +1403,8 @@ INT4 internal_packet_compute_floating_vip_forward(p_fabric_host_node src_port, p
 }
 
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_node dst_port, UINT4 targetip, param_set_p param_set, ip_t *ip)
 {
 	openstack_subnet_p src_subnet = NULL;
@@ -1357,6 +1415,7 @@ INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_
 	openstack_port_p src_port_p = (openstack_port_p)src_port->data;
 	openstack_port_p dst_port_p = (openstack_port_p)dst_port->data;
 
+<<<<<<< HEAD
 	if ((NULL == src_port_p) || (NULL == dst_port_p)) {
 		return IP_DROP;
 	}
@@ -1365,14 +1424,37 @@ INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_
 
 	if (NULL == src_subnet) {
 		LOG_PROC("INFO", "Can't get src port subnet!");
+=======
+	src_subnet = find_openstack_app_subnet_by_subnet_id(src_port_p->subnet_id);
+	src_gateway = find_openstack_app_gateway_by_subnet_id(src_port_p->subnet_id);
+
+	// if dst_port is source gateway packet out
+	if(src_gateway->ip_list[0] == dst_port->ip_list[0]) {
+		// packet out
+		LOG_PROC("INFO","IP Handle :  Destination is gate way! IP_DROP!");
+		return IP_DROP;
+	}
+
+	if (NULL != dst_port_p) {
+		dst_gateway = find_openstack_app_gateway_by_subnet_id(dst_port_p->subnet_id);
+	}
+
+	// dst gateway is not found?
+	if(NULL == dst_gateway) {
+		LOG_PROC("INFo", "Dest gateway is NULL! subnet is %s", dst_port_p->subnet_id);
+		// IP_DROP flow
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		return IP_DROP;
 	}
 
 	// save the parameter
 	param_set->src_port = src_port;
 	param_set->dst_port = dst_port;
+<<<<<<< HEAD
 	param_set->dst_sw = dst_port->sw;
 	param_set->dst_inport = dst_port->port;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 	// if in the same subnet
 	if (0 == strcmp(dst_port_p->subnet_id, src_port_p->subnet_id)) {
@@ -1394,6 +1476,7 @@ INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_
 	}
 	// in the various subnet
 	else {
+<<<<<<< HEAD
 		src_gateway = find_openstack_app_gateway_by_subnet_id(src_port_p->subnet_id);
 		dst_gateway = find_openstack_app_gateway_by_subnet_id(dst_port_p->subnet_id);
 
@@ -1407,6 +1490,10 @@ INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_
 			// modify the dst mac
 			memcpy(ip->eth_head.dest,dst_port->mac,6);
 		}
+=======
+		// modify the dst mac
+		memcpy(ip->eth_head.dest,dst_port->mac,6);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 		if (dst_port->sw == NULL) {
 			//flood
@@ -1429,6 +1516,7 @@ INT4 internal_packet_compute_forward(p_fabric_host_node src_port, p_fabric_host_
 	return IP_DROP;
 }
 
+<<<<<<< HEAD
 INT4 external_packet_out_compute_forward(p_fabric_host_node src_port, UINT4 sendip, UINT4 targetip, packet_in_info_t *packet_in, UINT1 proto, param_set_p param_set)
 {
 	INT4 foward_type = IP_DROP;
@@ -1451,6 +1539,20 @@ INT4 external_packet_out_compute_forward(p_fabric_host_node src_port, UINT4 send
 		if (fixed_dst_port)
 			foward_type = internal_packet_compute_floating_vip_forward(src_port, fixed_dst_port, fip_dst->fixed_ip,
 							param_set, ip, NULL, fip_dst);
+=======
+INT4 external_packet_out_compute_forward(p_fabric_host_node src_port, UINT4 sendip, packet_in_info_t *packet_in, UINT1 proto, param_set_p param_set)
+{
+	INT4 foward_type = IP_DROP;
+	external_floating_ip_p fip = NULL;
+
+	// get floating ip
+	fip = get_external_floating_ip_by_fixed_ip(sendip);
+
+	// if source port is floating ip
+	if(NULL != fip)
+	{
+		foward_type = fabric_openstack_floating_ip_packet_out_handle(src_port, packet_in, fip, param_set);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	}
 	else
 	{
@@ -1488,11 +1590,14 @@ INT4 external_packet_in_compute_forward(p_fabric_host_node src_port, UINT4 src_i
 			return IP_DROP;
 		}
 
+<<<<<<< HEAD
 		if (NULL != find_openstack_lbaas_pool_by_ip(fip->fixed_ip)) {
 			ip_t* ip = (ip_t*)packet_in->data;
 			return external_packet_in_compute_vip_forward(src_port, dst_port, fip->fixed_ip, param_set, ip, epp, fip);
 		}
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		if (NULL == dst_port->sw) {
 			LOG_PROC("INFO", "Floating IP: Fixed ip sw is NULL");
 			return create_arp_flood_parameter(fip->fixed_ip, dst_port, param_set);
@@ -1530,6 +1635,7 @@ INT4 external_packet_in_compute_forward(p_fabric_host_node src_port, UINT4 src_i
 	return foward_type;
 }
 
+<<<<<<< HEAD
 INT4 openstack_check_src_dst_is_controller(packet_in_info_t *packet_in)
 {
 	INT4 check_result = GN_ERR;
@@ -1557,6 +1663,11 @@ INT4 openstack_ip_packet_check_access(p_fabric_host_node src_port, p_fabric_host
 	}
 
 	check_result = openstack_security_group_main_check(src_port, dst_port, packet_in, param->src_security, param->dst_security);
+=======
+INT4 openstack_ip_packet_check_access(p_fabric_host_node src_port, p_fabric_host_node dst_port, packet_in_info_t *packet_in, param_set_p param)
+{
+	INT4 check_result = openstack_security_group_main_check(src_port, dst_port, packet_in, param->src_security, param->dst_security);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	return check_result;
 }
 
@@ -1661,6 +1772,7 @@ INT4 create_arp_flood_parameter(UINT4 dst_ip, p_fabric_host_node dst_port, param
 	return IP_DROP;
 }
 
+<<<<<<< HEAD
 p_fabric_host_node openstack_save_host_info_ipv6(gn_switch_t *sw,UINT1* sendmac,UINT1* sendip,UINT4 inport)
 {
 	p_fabric_host_node p_node =  get_fabric_host_from_list_by_mac(sendmac);
@@ -1723,3 +1835,5 @@ void fabric_openstack_install_fabric_flows_ipv6(p_fabric_host_node src_port,p_fa
 	return;
 };
 #endif
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb

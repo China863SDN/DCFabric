@@ -220,6 +220,14 @@ INT4 fabric_openstack_ip_nat_comute_foward(gn_switch_t *sw, packet_in_info_t *pa
  * @param from_inside		: TRUE:从内网到外网; FALSE:从外网到内网
  */
 INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside, param_set_p param_set);
+<<<<<<< HEAD
+=======
+
+/*
+ * 计算校验和
+ */
+UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 /*
  * 设置是否使用物理交换机的flag
@@ -234,4 +242,12 @@ UINT1 get_nat_physical_switch_flag();
 
 UINT4 get_nat_connect_count_by_ip(UINT4 internal_ip, UINT2* port_list, UINT4* externalip_list, UINT2* proto_list);
 
+<<<<<<< HEAD
+=======
+/*
+ * 测试用
+ */
+void nat_show_ip(UINT4 ip);
+void nat_show_mac(UINT1* mac);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 #endif /* INC_FABRIC_FABRIC_OPENSTACK_NAT_H_ */

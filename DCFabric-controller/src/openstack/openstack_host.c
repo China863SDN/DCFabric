@@ -35,6 +35,9 @@
 
 extern t_fabric_host_list g_fabric_host_list;
 
+
+extern t_fabric_host_list g_fabric_host_list;
+
 void *g_openstack_host_network_id = NULL;
 void *g_openstack_host_subnet_id = NULL;
 void *g_openstack_host_port_id = NULL;
@@ -49,12 +52,15 @@ openstack_node_p g_openstack_host_subnet_list = NULL;
 openstack_node_p g_openstack_host_port_list = NULL;
 openstack_security_p g_openstack_security_list = NULL;
 
+<<<<<<< HEAD
 
 void *g_host_check_timerid = NULL;
 UINT4 g_host_check_interval = 20;
 void *g_host_check_timer = NULL;
 
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 ////////////////////////////////////////////////////////////////////////
 void openstack_show_port(openstack_node_p node){
 	openstack_port_p p = (openstack_port_p)(node->data);
@@ -139,10 +145,16 @@ void show_all_fabric_host()
 	p_fabric_host_node head = g_fabric_host_list.list;
 	while (NULL != head) {
 		printf("show openstack node:\n");
+<<<<<<< HEAD
 		nat_show_ip(head->ip_list[0]);
 		nat_show_mac(head->mac);
 		nat_show_ipv6(head->ipv6[0]);
 		printf("type is:%d,dpid:%llu, port:%d", head->type, head->dpid, head->port);
+=======
+		//nat_show_ip(head->ip_list[0]);
+		//nat_show_mac(head->mac);
+		printf("dpid:%llu, port:%d", head->dpid, head->port);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		openstack_port_p p=  (openstack_port_p)head->data;
 		if (NULL != p) {
 			printf("port id: %s | subnet: %s | network: %s | tenant: %s |\n", p->port_id,p->subnet_id,p->network_id,p->tenant_id);
@@ -369,12 +381,15 @@ openstack_subnet_p create_openstack_host_subnet(
 		ret->gateway_ip = gateway_ip;
 		ret->start_ip = start_ip;
 		ret->end_ip = end_ip;
+<<<<<<< HEAD
 		if (gateway_ipv6)
 			memcpy(ret->gateway_ipv6, gateway_ipv6, 16);
 		if (start_ipv6)
 			memcpy(ret->start_ipv6, start_ipv6, 16);
 		if (end_ipv6)
 			memcpy(ret->end_ipv6, end_ipv6, 16);
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	}
 	else {
 		LOG_PROC("ERROR", "Openstack Subnet: Create failed, Can't get memory.");
@@ -530,7 +545,16 @@ void* create_openstack_host_port(
 			strcpy(ret->port_id,port_id);
 		if (NULL != subnet_id)
 			strcpy(ret->subnet_id, subnet_id);
+<<<<<<< HEAD
 
+=======
+	//	ret->ip = ip;
+	//	ret->sw = sw;
+	//	if(sw != NULL)
+	//		ret->dpid = sw->dpid;
+	//	ret->port = port;
+	//	memcpy(ret->mac, mac, 6);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		if (NULL != sw) {
 			dpid = sw->dpid;
 		}
@@ -538,6 +562,7 @@ void* create_openstack_host_port(
 		if (NULL != security_data)
 			ret->security_data = security_data;
 
+<<<<<<< HEAD
 		node = insert_fabric_host_into_list_paras(sw, dpid, port, mac, ip, ipv6);
 		if (NULL != node) {
 			node->data = (void*)ret;
@@ -545,6 +570,14 @@ void* create_openstack_host_port(
 		}
 		else {
 			mem_free(g_openstack_host_port_id, ret);
+=======
+		node = insert_fabric_host_into_list_paras(sw, dpid, port, mac, ip);
+		if (NULL != node) {
+			node->data = (void*)ret;
+		}
+		else {
+			mem_free(ret, g_openstack_host_port_id);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		}
 	}
 	else {
@@ -889,6 +922,7 @@ void clear_openstack_host_security_node(UINT1* head_p)
 	mem_free(g_openstack_host_security_id, node_p);
 }
 
+<<<<<<< HEAD
 void clear_all_security_group_info()
 {
 	if (g_openstack_security_group_id != NULL) {
@@ -969,6 +1003,58 @@ void update_security_rule(char* security_group, char* rule_id, char* direction, 
 
 
 p_fabric_host_node find_fabric_host_port_by_port_id(char* port_id)
+=======
+void update_security_rule(char* security_group, char* rule_id, char* direction, char* ethertype, char* port_range_max,
+		char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id)
+{
+	openstack_security_p security_p = g_openstack_security_list;
+	while (NULL !=  security_p) {
+		if (0 == strcmp(security_group, security_p->security_group)) {
+			openstack_security_rule_p rule_p = security_p->security_rule_p;
+			while (NULL != rule_p) {
+				if (0 == strcmp(rule_p->rule_id, rule_id)) {
+					// update info
+					memcpy(rule_p->direction, direction, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->ethertype, ethertype, OPENSTACK_SECURITY_GROUP_LEN);
+					rule_p->port_range_max = (0 == strcmp(port_range_max, "")) ? 0:atoi(port_range_max);
+					rule_p->port_range_min = (0 == strcmp(port_range_min, "")) ? 0:atoi(port_range_min);
+					memcpy(rule_p->protocol, protocol, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->remote_group_id, remote_group_id, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->remote_ip_prefix, remote_ip_prefix, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->tenant_id, tenant_id, OPENSTACK_SECURITY_GROUP_LEN);
+					return ;
+				}
+				rule_p = rule_p->next;
+			}
+			// if can't find, create
+			if (NULL == rule_p) {
+				// create rule
+				rule_p = mem_get(g_openstack_security_rule_id);
+				if (NULL != rule_p) {
+					memcpy(rule_p->direction, direction, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->ethertype, ethertype, OPENSTACK_SECURITY_GROUP_LEN);
+					rule_p->port_range_max = (0 == strcmp(port_range_max, "")) ? 0:atoi(port_range_max);
+					rule_p->port_range_min = (0 == strcmp(port_range_min, "")) ? 0:atoi(port_range_min);
+					memcpy(rule_p->protocol, protocol, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->remote_group_id, remote_group_id, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->remote_ip_prefix, remote_ip_prefix, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->tenant_id, tenant_id, OPENSTACK_SECURITY_GROUP_LEN);
+					memcpy(rule_p->rule_id, rule_id, OPENSTACK_SECURITY_GROUP_LEN);
+					rule_p->next = security_p->security_rule_p;
+					security_p->security_rule_p = rule_p;
+					return ;
+				}
+			}
+		}
+
+		security_p = security_p->next;
+	}
+}
+
+
+
+
+p_fabric_host_node find_fabric_host_port_by_port_id(char* port_id)
 {
 	p_fabric_host_node port = NULL;
 	port = g_fabric_host_list.list;
@@ -983,6 +1069,26 @@ p_fabric_host_node find_fabric_host_port_by_port_id(char* port_id)
 }
 
 p_fabric_host_node find_fabric_host_port_by_tenant_id(UINT4 ip, char* tenant_id)
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+{
+	p_fabric_host_node port = NULL;
+	port = g_fabric_host_list.list;
+	while(port != NULL){
+		openstack_port_p port_p = (openstack_port_p)port->data;
+<<<<<<< HEAD
+		if ((NULL != port_p) && (strcmp(port_p->port_id,port_id) == 0)) {
+=======
+		if (((NULL != port_p) &&  (ip == port->ip_list[0]) && (strcmp(port_p->tenant_id,tenant_id) == 0))){
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+			return port;
+		}
+		port = port->next;
+	}
+	return NULL;
+<<<<<<< HEAD
+}
+
+p_fabric_host_node find_fabric_host_port_by_tenant_id(UINT4 ip, char* tenant_id)
 {
 	p_fabric_host_node port = NULL;
 	port = g_fabric_host_list.list;
@@ -994,6 +1100,8 @@ p_fabric_host_node find_fabric_host_port_by_tenant_id(UINT4 ip, char* tenant_id)
 		port = port->next;
 	}
 	return NULL;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 }
 
 p_fabric_host_node find_fabric_host_port_by_network_id(UINT4 ip, char* network_id)
@@ -1034,6 +1142,7 @@ p_fabric_host_node find_fabric_host_port_by_subnet_id(UINT4 ip, char* subnet_id)
 		openstack_port_p port_p = (openstack_port_p)port->data;
 		if ((NULL != port_p) && (ip == port->ip_list[0]) && (strcmp(port_p->subnet_id,subnet_id) == 0)){
 			return port;
+<<<<<<< HEAD
 		}
 		port = port->next;
 	}
@@ -1128,5 +1237,28 @@ void host_check_tx_timer(void *para, void *tid)
 
 }
 
+=======
+		}
+		port = port->next;
+	}
+	return NULL;
+}
+
+void find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id)
+{
+	p_fabric_host_node port = NULL;
+	port = g_fabric_host_list.list;
+	while(port != NULL){
+		if(floating_ip == port->ip_list[0]){
+			openstack_port_p port_p = (openstack_port_p)port->data;
+			if (NULL != port_p) {
+				strcpy(network_id,port_p->network_id);
+				return;
+			}
+		}
+		port = port->next;
+	}
+};
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 

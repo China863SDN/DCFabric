@@ -36,7 +36,10 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "fabric_openstack_nat.h"
+<<<<<<< HEAD
 #include "fabric_impl.h"
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 // flow functions
 gn_flow_t * install_add_fabric_host_input_flow(gn_switch_t *sw);
@@ -212,6 +215,7 @@ void install_fabric_same_switch_flow(gn_switch_t * sw,UINT1* mac, UINT4 port)
 //	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 //	return;
 };
+<<<<<<< HEAD
 
 void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4 port, security_param_p security_param)
 {
@@ -226,6 +230,24 @@ void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4
 	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
 						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
 
+=======
+
+void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4 port, security_param_p security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+
+
+	memcpy(flow_param->match_param->eth_dst, mac, 6);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+	set_security_match(flow_param->match_param, security_param);
+
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	clear_flow_param(flow_param);
 }
 
@@ -242,7 +264,10 @@ void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_
 	flow_param->match_param->eth_type = ETHER_IP;
 	memcpy(flow_param->match_param->eth_dst, gateway_mac, 6);
 	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+<<<<<<< HEAD
 	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
 
 
@@ -363,6 +388,10 @@ void install_fabric_output_flow(gn_switch_t * sw,UINT1* mac, UINT4 port)
 //
 //	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 //	return;
+<<<<<<< HEAD
+};
+void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
+=======
 };
 void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
 {
@@ -380,8 +409,8 @@ void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
 	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
 	// set_security_match(flow_param->match_param, security_param);
-	if (OFP13_VERSION == sw->ofp_version) 
-		install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
 						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
@@ -441,6 +470,158 @@ void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
 //	return;
 };
 
+void install_fabric_push_tag_security_flow(gn_switch_t * sw,UINT4 dst_ip, UINT1* mac, UINT4 tag, security_param_p security_param)
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+{
+	flow_param_t* flow_param = init_flow_param();
+
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	oxm.vlan_vid = (UINT2)tag;
+
+<<<<<<< HEAD
+	memcpy(flow_param->match_param->eth_dst, mac, 6);
+	// flow_param->match_param->mask |= (1 << OFPXMT_OFB_ETH_DST);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	// set_security_match(flow_param->match_param, security_param);
+	if (OFP13_VERSION == sw->ofp_version) 
+		install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return ;
+
+
+=======
+	// memcpy(flow_param->match_param->eth_dst, mac, 6);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(dst_ip);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	set_security_match(flow_param->match_param, security_param);
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+
+
+
+void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 tag, security_param_p security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	oxm.vlan_vid = (UINT2)tag;
+	memcpy(oxm.eth_dst, dst_mac, 6);
+
+	memcpy(flow_param->match_param->eth_dst, gateway_mac, 6);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst=ntohl(dst_ip);
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	set_security_match(flow_param->match_param, security_param);
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+			FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+
+	// printf("%s\n", FN);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+//	flow_mod_req_info_t flow_mod_req;
+//    gn_flow_t flow;
+//    gn_instruction_actions_t instruction_act;
+//	gn_instruction_goto_table_t instruction_goto;
+//    gn_action_set_field_t act_set_field;
+<<<<<<< HEAD
+=======
+//    gn_action_set_field_t act_set_field_mac;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+//    gn_action_t act_pushVlan;
+//
+//    memset(&flow, 0, sizeof(gn_flow_t));
+//	flow.create_time = g_cur_sys_time.tv_sec;
+//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
+//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
+//	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
+//	flow.table_id = FABRIC_PUSHTAG_TABLE;
+//	flow.match.type = OFPMT_OXM;
+//
+<<<<<<< HEAD
+//	memcpy(flow.match.oxm_fields.eth_dst, mac, 6);
+//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
+//
+=======
+//	memcpy(flow.match.oxm_fields.eth_dst, gateway_mac, 6);
+//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
+//
+//    flow.match.oxm_fields.eth_type = ETHER_IP;
+//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
+//
+//	flow.match.oxm_fields.ipv4_dst=ntohl(dst_ip);
+//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
+//
+//
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+//	memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
+//	instruction_goto.type = OFPIT_GOTO_TABLE;
+//	instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
+//	instruction_goto.next = flow.instructions;
+//    flow.instructions = (gn_instruction_t *)&instruction_goto;
+//
+//	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
+//	instruction_act.type = OFPIT_APPLY_ACTIONS;
+//	instruction_act.next = flow.instructions;
+//    flow.instructions = (gn_instruction_t *)&instruction_act;
+//
+//    memset(&act_set_field, 0, sizeof(gn_action_set_field_t));
+//    act_set_field.type = OFPAT13_SET_FIELD;
+//    act_set_field.oxm_fields.vlan_vid = (UINT2)tag;
+//    act_set_field.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
+//    act_set_field.next = instruction_act.actions;
+//    instruction_act.actions = (gn_action_t *)&act_set_field;
+//
+<<<<<<< HEAD
+=======
+//    memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
+//    act_set_field_mac.type = OFPAT13_SET_FIELD;
+//    memcpy(act_set_field_mac.oxm_fields.eth_dst, dst_mac, 6);
+//    act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
+//    act_set_field_mac.next = instruction_act.actions;
+//    instruction_act.actions = (gn_action_t *)&act_set_field_mac;
+//
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+//    memset(&act_pushVlan, 0, sizeof(gn_action_t));
+//    act_pushVlan.type = OFPAT13_PUSH_VLAN;
+//    act_pushVlan.next = instruction_act.actions;
+//    instruction_act.actions = (gn_action_t *)&act_pushVlan;
+//
+//	flow_mod_req.xid = 0;
+//	flow_mod_req.buffer_id = 0xffffffff;
+//	flow_mod_req.out_port = 0xffffffff;
+//	flow_mod_req.out_group = 0xffffffff;
+//	flow_mod_req.command = OFPFC_ADD;
+//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
+//	flow_mod_req.flow = &flow;
+//
+//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
+//	return;
+};
+
+<<<<<<< HEAD
 void install_fabric_push_tag_security_flow(gn_switch_t * sw,UINT4 dst_ip, UINT1* mac, UINT4 tag, security_param_p security_param)
 {
 	flow_param_t* flow_param = init_flow_param();
@@ -560,6 +741,95 @@ void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac
 //	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 //	return;
 };
+=======
+
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+BOOL install_fabric_json_flow(const gn_switch_t * sw, const flow_entry_json_t *entry)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+    flow_param->match_param->eth_type = entry->eth_type;
+    flow_param->match_param->in_port = entry->in_port;
+    flow_param->match_param->ipv4_src = htonl(entry->ipv4_src);
+    
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+
+    //get all output: "OUTPUT=2,3,4"
+    INT1 *actions = entry->actions;
+    while ('\0' != *actions && '=' != *actions)
+    {
+        actions++;
+    }
+
+    if ('\0' == *actions || '\0' == *(actions + 1))
+    {
+        return FALSE;
+    }
+
+    actions++;
+
+    INT1 *pre = actions;
+    INT1 *cur = actions;
+    INT1 tmp[1024] = {0};
+    UINT4 *ports = (UINT4 *)gn_malloc(sizeof(UINT4) * 1024);
+    INT4 i = 0;
+    while ('\0' != *cur && i < 1024)
+    {
+        pre = cur;
+        while (',' != *cur && '\0' != *cur)
+        {
+            cur++;
+        }
+
+        if (cur - pre <= 0)
+        {
+            gn_free((void *)(&ports));
+            return FALSE;
+        }
+        
+        memset(tmp, 0, 1024);
+        strncpy(tmp, pre, cur - pre);
+        if (!is_digit(tmp, 10))
+        {
+            gn_free((void *)(&ports));
+            return FALSE;
+        }
+
+        ports[i] = (UINT4)strtoul(tmp, NULL, 10);
+
+        add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&ports[i]);
+
+        if (',' == *cur)
+        {
+            cur++;
+        }
+
+        i++;
+    }
+
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, entry->priority,
+						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+    gn_free((void *)(&ports));
+	clear_flow_param(flow_param);
+
+    return TRUE;
+}
+
+void delete_fabric_json_flow(const gn_switch_t * sw, const flow_entry_json_t *entry)
+{
+    flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = entry->eth_type;
+	flow_param->match_param->ipv4_src= htonl(entry->ipv4_src);
+    flow_param->match_param->in_port= entry->in_port;
+
+	install_fabric_flows(sw, 0, 0, entry->priority, FABRIC_INPUT_TABLE, OFPFC_DELETE, flow_param);
+
+	clear_flow_param(flow_param);
+}
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 UINT1 get_fabric_last_flow_table(){
 	return (UINT1)FABRIC_INPUT_TABLE;
@@ -1971,11 +2241,14 @@ void delete_fabric_flow_by_mac(gn_switch_t* sw, UINT1* mac, UINT2 table_id)
 
 void set_flow_match(gn_oxm_t* flow_oxm, gn_oxm_t* oxm)
 {
+<<<<<<< HEAD
 	if ((NULL == flow_oxm) || (NULL == oxm))
 	{
 		return ;
 	}
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	// printf("%s\n", FN);
 	memcpy(flow_oxm, oxm, sizeof(gn_oxm_t));
 
@@ -2058,6 +2331,7 @@ void set_flow_match(gn_oxm_t* flow_oxm, gn_oxm_t* oxm)
 	if (0xffffff & *oxm->ipv6_dst) {
 		flow_oxm->mask |= (1 << OFPXMT_OFB_IPV6_DST);
 	}
+<<<<<<< HEAD
 
 	if (oxm->mpls_label) {
 		flow_oxm->mask |= ((UINT8)1 << OFPXMT_OFB_MPLS_LABEL);
@@ -2080,6 +2354,31 @@ void set_flow_match(gn_oxm_t* flow_oxm, gn_oxm_t* oxm)
 	if (oxm->metadata_mask) {
 		flow_oxm->mask |= ((UINT8)1 << OFPXMT_OFB_METADATA_MASK);
 	}
+=======
+	/*
+	if (oxm->mpls_label) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_MPLS_LABEL);
+	}
+	if (oxm->tunnel_id) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_TUNNEL_ID);
+	}
+	if (oxm->ipv4_src_prefix) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_IPV4_SRC_PREFIX);
+	}
+	if (oxm->ipv4_dst_prefix) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_IPV4_DST_PREFIX);
+	}
+	if (oxm->ipv6_src_prefix) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_IPV6_SRC_PREFIX);
+	}
+	if (oxm->ipv6_dst_prefix) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_IPV6_DST_PREFIX);
+	}
+	if (oxm->metadata_mask) {
+		flow_oxm->mask |= (1 << OFPXMT_OFB_METADATA_MASK);
+	}
+	*/
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 }
 
 void set_security_match( gn_oxm_t* oxm, security_param_t* security_param)
@@ -2098,6 +2397,7 @@ gn_instruction_t* set_flow_instruction(gn_instruction_t* flow_instruction, actio
 {
 	// printf("%s\n", FN);
 	gn_instruction_t* instruction = flow_instruction;
+<<<<<<< HEAD
 	gn_instruction_goto_table_t* instruction_goto = NULL;
 	gn_instruction_write_metadata_t* instruction_metadata = NULL;
 	gn_instruction_actions_t* instruction_write = NULL;
@@ -2105,19 +2405,31 @@ gn_instruction_t* set_flow_instruction(gn_instruction_t* flow_instruction, actio
 	gn_instruction_actions_t* instruction_clear = NULL;
 	gn_instruction_meter_t* instrucion_meter = NULL;
 	gn_instruction_experimenter_t* instruction_experimenter = NULL;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 	while (NULL != instraction_param) {
 		switch (instraction_param->type) {
 		case OFPIT_GOTO_TABLE:
 		{
+<<<<<<< HEAD
 			instruction_goto = (gn_instruction_goto_table_t*)gn_malloc(sizeof(gn_instruction_goto_table_t));
 			memset(instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
 			instruction_goto->type = OFPIT_GOTO_TABLE;
 			instruction_goto->table_id = *(UINT1*)instraction_param->param;
+=======
+			gn_instruction_goto_table_t* instruction_goto = gn_malloc(sizeof(gn_instruction_goto_table_t));
+			memset(instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
+			instruction_goto->type = OFPIT_GOTO_TABLE;
+			instruction_goto->table_id = FABRIC_SWAPTAG_TABLE;
+			instruction_goto->next = instruction;
+			instruction = (gn_instruction_t *)instruction_goto;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPIT_WRITE_METADATA:
 		{
+<<<<<<< HEAD
 #if 1
 			instruction_metadata = (gn_instruction_write_metadata_t*)gn_malloc(sizeof(gn_instruction_write_metadata_t));
 			memset(instruction_metadata, 0, sizeof(gn_instruction_write_metadata_t));
@@ -2125,43 +2437,70 @@ gn_instruction_t* set_flow_instruction(gn_instruction_t* flow_instruction, actio
 			instruction_metadata->metadata = *(UINT8*)instraction_param->param;
 			instruction_metadata->metadata_mask = *((UINT8*)instraction_param->param + 1);
 #endif
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPIT_WRITE_ACTIONS:
 		{
+<<<<<<< HEAD
 			instruction_write = (gn_instruction_actions_t*)gn_malloc(sizeof(gn_instruction_actions_t));
 			memset(instruction_write, 0, sizeof(gn_instruction_actions_t));
 			instruction_write->type = (UINT2)OFPIT_APPLY_ACTIONS;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPIT_APPLY_ACTIONS:
 		{
 			// printf("***%s\n",FN);
+<<<<<<< HEAD
 			instruction_apply = (gn_instruction_actions_t*)gn_malloc(sizeof(gn_instruction_actions_t));
 			memset(instruction_apply, 0, sizeof(gn_instruction_actions_t));
 			instruction_apply->type = (UINT2)OFPIT_APPLY_ACTIONS;
+=======
+			gn_instruction_actions_t* instruction_apply = (gn_instruction_actions_t*)gn_malloc(sizeof(gn_instruction_actions_t));
+			memset(instruction_apply, 0, sizeof(gn_instruction_actions_t));
+			instruction_apply->type = (UINT2)OFPIT_APPLY_ACTIONS;
+			instruction_apply->next = instruction;
+			instruction = (gn_instruction_t *)instruction_apply;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPIT_CLEAR_ACTIONS:
 		{
+<<<<<<< HEAD
 			instruction_clear = (gn_instruction_actions_t*)gn_malloc(sizeof(gn_instruction_actions_t));
 			memset(instruction_clear, 0, sizeof(gn_instruction_actions_t));
 			instruction_clear->type = OFPIT_CLEAR_ACTIONS;
+=======
+			gn_instruction_actions_t* instruction_clear = gn_malloc(sizeof(gn_instruction_actions_t));
+			memset(instruction_clear, 0, sizeof(gn_instruction_actions_t));
+			instruction_clear->type = OFPIT_CLEAR_ACTIONS;
+			instruction_clear->next = instruction;
+			instruction = (gn_instruction_t *)instruction_clear;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPIT_METER:
 		{
+<<<<<<< HEAD
 			instrucion_meter = (gn_instruction_meter_t*)gn_malloc(sizeof(gn_instruction_meter_t));
 			memset(instrucion_meter, 0, sizeof(gn_instruction_meter_t));
 			instrucion_meter->type = (UINT2)OFPIT_METER;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPIT_EXPERIMENTER:
 		{
+<<<<<<< HEAD
 			instruction_experimenter = (gn_instruction_experimenter_t*)gn_malloc(sizeof(gn_instruction_experimenter_t));
 			memset(instrucion_meter, 0, sizeof(gn_instruction_meter_t));
 			instrucion_meter->type = (UINT2)OFPIT_EXPERIMENTER;
 			instrucion_meter->meter_id = *(UINT4*)instraction_param->param;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		default:
@@ -2170,6 +2509,7 @@ gn_instruction_t* set_flow_instruction(gn_instruction_t* flow_instruction, actio
 		instraction_param = instraction_param->next;
 	}
 
+<<<<<<< HEAD
 #if 1
 	if (NULL != instruction_experimenter) {
 		instruction_experimenter->next = instruction;
@@ -2205,6 +2545,12 @@ gn_instruction_t* set_flow_instruction(gn_instruction_t* flow_instruction, actio
 }
 
 void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_param, enum ofp_instruction_type instruction_type)
+=======
+	return instruction;
+}
+
+void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_param)
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 {
 	// printf("%s\n", FN);
 	gn_instruction_t* instruction_p = flow_instruction;
@@ -2214,7 +2560,11 @@ void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_
 
 	while (NULL != instruction_p)
 	{
+<<<<<<< HEAD
 		if (instruction_type == instruction_p->type) {
+=======
+		if (OFPIT_APPLY_ACTIONS == instruction_p->type) {
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		instruction_p = instruction_p->next;
@@ -2233,7 +2583,11 @@ void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_
 		case OFPAT13_OUTPUT:
 		{
 			// printf("%s****output********\n", FN);
+<<<<<<< HEAD
 			gn_action_output_t* action_output = (gn_action_output_t*)gn_malloc(sizeof(gn_action_output_t));
+=======
+			gn_action_output_t* action_output = gn_malloc(sizeof(gn_action_output_t));
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			memset(action_output, 0, sizeof(gn_action_t));
 			action_output->port = *(UINT4*)action_param->param;
 			action_output->type = OFPAT13_OUTPUT;
@@ -2244,45 +2598,61 @@ void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_
 		}
 		case OFPAT13_COPY_TTL_OUT:
 		{
+<<<<<<< HEAD
 			gn_action_t* act_copyTTLOut = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_copyTTLOut, 0, sizeof(gn_action_t));
 			act_copyTTLOut->type = OFPAT13_COPY_TTL_OUT;
 			act_copyTTLOut->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_copyTTLOut;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_COPY_TTL_IN:
 		{
+<<<<<<< HEAD
 			gn_action_t* act_copyTTLIn = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_copyTTLIn, 0, sizeof(gn_action_t));
 			act_copyTTLIn->type = OFPAT13_COPY_TTL_IN;
 			act_copyTTLIn->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_copyTTLIn;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_MPLS_TTL:
 		{
+<<<<<<< HEAD
 			gn_action_mpls_ttl_t* act_setMplsTtl = (gn_action_mpls_ttl_t*)gn_malloc(sizeof(gn_action_mpls_ttl_t));
 			memset(act_setMplsTtl, 0, sizeof(gn_action_mpls_ttl_t));
 			act_setMplsTtl->type = OFPAT13_MPLS_TTL;
 			act_setMplsTtl->mpls_tt = *(UINT1*)action_param->param;
 			act_setMplsTtl->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_setMplsTtl;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_DEC_MPLS_TTL:
 		{
+<<<<<<< HEAD
 			gn_action_t* act_decMplsTtl = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_decMplsTtl, 0, sizeof(gn_action_t));
 			act_decMplsTtl->type = OFPAT13_DEC_MPLS_TTL;
 			act_decMplsTtl->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_decMplsTtl;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_PUSH_VLAN:
 		{
 			//
+<<<<<<< HEAD
 			gn_action_t* act_pushVlan = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
+=======
+			gn_action_t* act_pushVlan = gn_malloc(sizeof(gn_action_t));
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			memset(act_pushVlan, 0, sizeof(gn_action_t));
 			act_pushVlan->type = OFPAT13_PUSH_VLAN;
 			act_pushVlan->next = instruction->actions;
@@ -2292,110 +2662,152 @@ void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_
 		case OFPAT13_POP_VLAN:
 		{
 			//
+<<<<<<< HEAD
 			gn_action_t* act_popVlan = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_popVlan, 0, sizeof(gn_action_t));
 			act_popVlan->type = OFPAT13_POP_VLAN;
 			act_popVlan->next = instruction->actions;
+=======
+			gn_action_t* act_popVlan = gn_malloc(sizeof(gn_action_t));
+			memset(act_popVlan, 0, sizeof(gn_action_t));
+			act_popVlan->next = instruction->actions;
+			act_popVlan->type = OFPAT13_POP_VLAN;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			instruction->actions = (gn_action_t *)act_popVlan;
 			break;
 		}
 		case OFPAT13_PUSH_MPLS:
 		{
 			//
+<<<<<<< HEAD
 			gn_action_t* act_pushMpls = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_pushMpls, 0, sizeof(gn_action_set_field_t));
 			act_pushMpls->type = OFPAT13_PUSH_MPLS;
 			act_pushMpls->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_pushMpls;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_POP_MPLS:
 		{
 			//
+<<<<<<< HEAD
 			gn_action_t* act_popMpls = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_popMpls, 0, sizeof(gn_action_t));
 			act_popMpls->type = OFPAT13_POP_MPLS;
 			act_popMpls->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_popMpls;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_SET_QUEUE:
 		{
+<<<<<<< HEAD
 			gn_action_set_queue_t* act_queue = (gn_action_set_queue_t*)gn_malloc(sizeof(gn_action_set_queue_t));
 			memset(act_queue, 0, sizeof(gn_action_group_t));
 			act_queue->type = OFPAT13_SET_QUEUE;
 			act_queue->queue_id = *(UINT4*)action_param->param;
 			act_queue->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_queue;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_GROUP:
 		{
 			//
+<<<<<<< HEAD
 			gn_action_group_t* act_group = (gn_action_group_t*)gn_malloc(sizeof(gn_action_group_t));
 			memset(act_group, 0, sizeof(gn_action_group_t));
 			act_group->type = OFPAT13_GROUP;
 			act_group->group_id = *(UINT4*)action_param->param;
 			act_group->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_group;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_SET_NW_TTL:
 		{
+<<<<<<< HEAD
 			gn_action_nw_ttl_t* act_setNwTTl = (gn_action_nw_ttl_t*)gn_malloc(sizeof(gn_action_nw_ttl_t));
 			memset(act_setNwTTl, 0, sizeof(gn_action_nw_ttl_t));
 			act_setNwTTl->type = OFPAT13_SET_NW_TTL;
 			act_setNwTTl->nw_tt = *(UINT1*)action_param->param;
 			act_setNwTTl->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_setNwTTl;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_DEC_NW_TTL:
 		{
+<<<<<<< HEAD
 			gn_action_t* act_decNwTtl = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_decNwTtl, 0, sizeof(gn_action_t));
 			act_decNwTtl->type = OFPAT13_DEC_NW_TTL;
 			act_decNwTtl->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_decNwTtl;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_SET_FIELD:
 		{
 			//
+<<<<<<< HEAD
 			gn_action_set_field_t* act_set_field = (gn_action_set_field_t*)gn_malloc(sizeof(gn_action_set_field_t));
 			memset(act_set_field, 0, sizeof(gn_action_set_field_t));
 			act_set_field->type = OFPAT13_SET_FIELD;
 			set_flow_match(&act_set_field->oxm_fields, (gn_oxm_t*)action_param->param);
+=======
+			gn_action_set_field_t* act_set_field = gn_malloc(sizeof(gn_action_set_field_t));
+			memset(act_set_field, 0, sizeof(gn_action_set_field_t));
+			act_set_field->type = OFPAT13_SET_FIELD;
+			set_flow_match(&act_set_field->oxm_fields, (gn_oxm_t*)action_param->param);
+			// printf("action param: %d, %llu", act_set_field->oxm_fields.vlan_vid, act_set_field->oxm_fields.mask);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			act_set_field->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_set_field;
 			break;
 		}
 		case OFPAT13_PUSH_PBB:
 		{
+<<<<<<< HEAD
 			gn_action_t* act_pushPBB = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_pushPBB, 0, sizeof(gn_action_set_field_t));
 			act_pushPBB->type = OFPAT13_PUSH_PBB;
 			act_pushPBB->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_pushPBB;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_POP_PBB:
 		{
+<<<<<<< HEAD
 			gn_action_t* act_popPBB = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
 			memset(act_popPBB, 0, sizeof(gn_action_t));
 			act_popPBB->type = OFPAT13_POP_PBB;
 			act_popPBB->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_popPBB;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		case OFPAT13_EXPERIMENTER:
 		{
+<<<<<<< HEAD
 			gn_action_experimenter_t* act_experimenter = (gn_action_experimenter_t*)gn_malloc(sizeof(gn_action_experimenter_t));
 			memset(act_experimenter, 0, sizeof(gn_action_experimenter_t));
 			act_experimenter->type = OFPAT13_EXPERIMENTER;
 			act_experimenter->experimenter = *(UINT4*)action_param->param;
 			act_experimenter->next = instruction->actions;
 			instruction->actions = (gn_action_t *)act_experimenter;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 			break;
 		}
 		default:
@@ -2465,9 +2877,15 @@ void install_fabric_flows(gn_switch_t * sw,
 	set_flow_match(&flow.match.oxm_fields, flow_param->match_param);
 	// printf("flow match mask is %llu\n", flow.match.oxm_fields.mask);
 	flow.instructions = set_flow_instruction(flow.instructions, flow_param->instruction_param);
+<<<<<<< HEAD
 	set_flow_action(flow.instructions, flow_param->action_param, OFPIT_APPLY_ACTIONS);
 	set_flow_action(flow.instructions, flow_param->write_action_param, OFPIT_WRITE_ACTIONS);
 
+=======
+	set_flow_action(flow.instructions, flow_param->action_param);
+
+	flow_mod_req.xid = 0;
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	flow_mod_req.buffer_id = 0xffffffff;
 	flow_mod_req.out_port = 0xffffffff;
 	flow_mod_req.out_group = 0xffffffff;
@@ -2518,7 +2936,10 @@ flow_param_t* init_flow_param()
 	memset(flow_param->match_param, 0, sizeof(gn_oxm_t));
 	flow_param->instruction_param = NULL;
 	flow_param->action_param = NULL;
+<<<<<<< HEAD
 	flow_param->write_action_param = NULL;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 	return flow_param;
 }
@@ -2529,6 +2950,7 @@ void clear_flow_param(flow_param_t* flow_param)
 	gn_free((void**)&flow_param->match_param);
 	clear_action_param(flow_param->instruction_param);
 	clear_action_param(flow_param->action_param);
+<<<<<<< HEAD
 	clear_action_param(flow_param->write_action_param);
 	gn_free((void**)&flow_param);
 }
@@ -2778,4 +3200,10 @@ void fabric_openstack_install_fabric_floaing_vip_flows(p_fabric_host_node src_po
 								 src_tag, dst_outport, goto_id, dst_security);
 
 }
+=======
+	gn_free((void**)&flow_param);
+}
+
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 

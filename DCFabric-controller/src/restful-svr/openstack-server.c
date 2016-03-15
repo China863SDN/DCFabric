@@ -48,7 +48,11 @@
 #include "fabric_openstack_external.h"
 #include "fabric_openstack_nat.h"
 #include "fabric_thread.h"
+<<<<<<< HEAD
 #include "openstack_lbaas_app.h"
+=======
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 void createPortFabric(char* jsonString,const char* stringType);
 static char * g_openstack_server_name;
 UINT4 g_openstack_port = 9696;
@@ -317,10 +321,13 @@ void initOpenstackFabric(){
 		getOpenstackInfo(g_openstack_ip,"/v2.0/ports",g_openstack_port,"port");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/security-group-rules",g_openstack_port,"security-group-rules");
+<<<<<<< HEAD
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener");
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		LOG_PROC("INFO", "Init Openstack service finished");
 	}else{
 		LOG_PROC("INFO", "Init Openstack service Failed");
@@ -356,10 +363,13 @@ void createPortFabric( char *jsonString,const char *stringType){
 	json_t *json=NULL,*temp=NULL;
 	char* networkType="network",*subnetType="subnet",*portType="port",*floatingType="floating";
 	char* securityType = "security-group-rules";
+<<<<<<< HEAD
 	char* lbpools = "pools";
 	char* lbvips = "vips";
 	char* lbmembers = "lbmem";
 	char* lblistener = "lblistener";
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	char tenant_id[48] ={0};
 	char network_id[48] = {0};
 	char subnet_id[48] = {0};
@@ -602,7 +612,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 
 						if(strcmp(port_type,computer)==0|| strcmp(port_type,floating)==0){
 //							LOG_PROC("INFO","PORT UPDATE!");
+<<<<<<< HEAD
 							update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
+=======
+							update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 						}else if(strcmp(port_type,dhcp)==0){
 //							LOG_PROC("INFO","DHCP UPDATE!");
 							update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
@@ -758,6 +772,7 @@ void createPortFabric( char *jsonString,const char *stringType){
 					totalNum=0;
 				}
 			}
+<<<<<<< HEAD
 			else if(strcmp(stringType,lbpools)==0){
 				char lb_pool_id[48] = {0};
 				UINT1 lb_status=0;
@@ -1068,6 +1083,8 @@ void createPortFabric( char *jsonString,const char *stringType){
 					totalNum=0;
 				}
 			}
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		}
 	}
 }

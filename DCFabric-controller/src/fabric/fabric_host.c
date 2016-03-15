@@ -64,7 +64,11 @@ void *g_fabric_flow_queue_mem_id = NULL;
  * UINT4 ip:		the host's ip address
  */
 
+<<<<<<< HEAD
 p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw, UINT4 port, UINT1* mac, UINT4 ip, UINT1* ipv6)
+=======
+p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw, UINT4 port, UINT1* mac, UINT4 ip)
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 {
 	p_fabric_host_node ret = NULL;
 	//ret = (p_fabric_host_node)gn_malloc(sizeof(t_fabric_host_node));
@@ -76,8 +80,11 @@ p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw, UINT4 port, UIN
 		//ret->ip_list[ip_count]=ip
 		add_fabric_host_ip(ret,ip);
 		memcpy(ret->mac, mac, 6);
+<<<<<<< HEAD
 		if (ipv6)
 			memcpy(ret->ipv6[0], ipv6, 16);
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	}
 	else {
 		LOG_PROC("ERROR", "Fabric host: Fail to create list node, Can't get memory");
@@ -97,7 +104,10 @@ p_fabric_host_node copy_fabric_host_node(p_fabric_host_node node_p)
 			ret->ip_count= node_p->ip_count;
 			add_fabric_host_ip(ret, node_p->ip_list[0]);
 			memcpy(ret->mac, node_p->mac, 6);
+<<<<<<< HEAD
 			memcpy(ret->ipv6[0], node_p->ipv6[0], 16);
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		}
 	}
 	else {
@@ -163,6 +173,7 @@ p_fabric_host_node get_fabric_host_from_list_by_ip(UINT4 ip){
 	return NULL;
 };
 
+<<<<<<< HEAD
 
 /*
  * temp added for ipv6
@@ -189,6 +200,8 @@ p_fabric_host_node get_fabric_host_from_list_by_ipv6(UINT1* ip)
 };
 #endif
 
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 p_fabric_host_node get_fabric_host_from_list_by_sw_port(UINT8 dpid, UINT4 port)
 {
 	p_fabric_host_node ret = NULL;
@@ -241,7 +254,11 @@ void insert_fabric_host_into_list(p_fabric_host_node node){
  * UINT* mac:		the host's mac address
  * UINT4 ip:		the host's ip address
  */
+<<<<<<< HEAD
 p_fabric_host_node insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT8 dpid,UINT4 port,UINT1* mac,UINT4 ip,UINT1* ipv6){
+=======
+p_fabric_host_node insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT8 dpid,UINT4 port,UINT1* mac,UINT4 ip){
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	p_fabric_host_node node = NULL;
 	pthread_mutex_lock(&g_fabric_host_thread_mutex);
 	node = create_fabric_host_list_node(sw,port,mac,ip,ipv6);

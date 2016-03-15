@@ -65,6 +65,24 @@ void init_forward_param_list()
 }
 
 
+void *g_param_set_id = NULL;
+void *g_security_param_id = NULL;
+
+void init_param_list()
+{
+	if (NULL != g_param_set_id) {
+		mem_destroy(g_param_set_id);
+	}
+
+	if (NULL != g_security_param_id) {
+		mem_destroy(g_security_param_id);
+	}
+
+	g_param_set_id = mem_create(sizeof(param_set_t), 30);
+	g_security_param_id = mem_create(sizeof(security_param_t), 30);
+}
+
+
 static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
 	if (0 != g_openstack_on)
@@ -255,6 +273,17 @@ static INT4 fabric_ip_packet_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 //		printf("udp port is %d\n", ntohs(udp->dport));
 //	}
 
+<<<<<<< HEAD
+=======
+#if 0
+//	if (OFPP13_CONTROLLER == packet_in_info->inport)
+//	{
+//		destory_param_set(param);
+//		return GN_ERR;
+//	}
+#endif
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	//save arp_request src info
 	src_port = g_default_ip_handler.save_src_port_ip(sw,p_ip->eth_head.src,p_ip->src,packet_in_info->inport);
 
@@ -561,8 +590,13 @@ INT1 register_handler_ether_packets(UINT2 eth_type, packet_in_proc_t packet_hand
 
 void init_handler(){
 	if(get_fabric_state()){
+<<<<<<< HEAD
 
 		init_forward_param_list();
+=======
+		// initialize param list
+		init_param_list();
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 		g_default_forward_handler.ip=fabric_ip_packet_handle;
 		g_default_forward_handler.arp=fabric_arp_packet_handler;

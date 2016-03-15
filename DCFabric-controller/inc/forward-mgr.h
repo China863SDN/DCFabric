@@ -100,9 +100,12 @@ typedef struct param_set
 	external_floating_ip_p floatingip;
 	security_param_p src_security;
 	security_param_p dst_security;
+<<<<<<< HEAD
 	UINT4 vip;
 	UINT1 vip_mac[6];
 	UINT4 vip_tcp_port_no;
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 }param_set_t, *param_set_p;
 
 typedef p_fabric_host_node (*save_src_info)(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 inport);
@@ -157,7 +160,10 @@ INT4 packet_in_process(gn_switch_t *sw, packet_in_info_t *packet_in_info);
 INT4 init_forward_mgr();
 void fini_forward_mgr();
 void init_handler();
+<<<<<<< HEAD
 
 // initialize forward param
 void init_forward_param_list();
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 #endif /* FORWARD_MGR_H_ */

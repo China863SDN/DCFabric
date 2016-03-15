@@ -1104,6 +1104,16 @@ INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *
 
 			param_set->dst_sw = host->sw;
 			param_set->dst_inport = host->port;
+<<<<<<< HEAD
+=======
+
+//			param_set->dst_sw = output_sw;
+//			param_set->dst_inport = nat_icmp_p->inport;
+			return CONTROLLER_FORWARD;
+		}
+	}
+}
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 //			param_set->dst_sw = output_sw;
 //			param_set->dst_inport = nat_icmp_p->inport;

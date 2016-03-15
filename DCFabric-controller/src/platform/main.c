@@ -51,7 +51,10 @@
 #include "../fabric/fabric_impl.h"
 #include "../openstack/fabric_openstack_external.h"
 #include "../fabric/fabric_floating_ip.h"
+<<<<<<< HEAD
 #include "openstack_lbaas_app.h"
+=======
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 #define START_DATE __DATE__  // compile date.
 #define START_TIME __TIME__  // compile time.
@@ -138,12 +141,20 @@ void init_openstack_fabric_auto_start()
 	init_external_flows();
 
 	// set floating flood
+<<<<<<< HEAD
 	init_host_check_mgr();
+=======
+	init_floating_mgr();
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 	// kill timer
     timer_kill(auto_test_p, &g_auto_timer);
 
+<<<<<<< HEAD
 	start_openstack_lbaas_listener();
+=======
+    // openstack_show_all_port_security();
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 }
 
 

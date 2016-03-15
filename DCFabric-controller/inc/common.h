@@ -297,6 +297,7 @@ UINT4 ip2number(const INT1* ip);
 // convert number to ip
 INT1* number2ip(INT4 ip_num, INT1* ip);
 
+<<<<<<< HEAD
 // convert ipv6 to number
 UINT1* ipv6_str_to_number(char* str, UINT1* ipv6);
 
@@ -317,5 +318,14 @@ BOOL is_digit(const INT1 *str, INT4 base);
  * 计算校验和
  */
 UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size);
+=======
+/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
+//convert str dpid to uint8
+INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret);
+BOOL is_digit(const INT1 *str, INT4 base);
+/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
+
+
+>>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 #endif /* COMMON_H_ */
