@@ -33,10 +33,11 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "gn_inet.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "openstack/openstack_host.h"
+#include "fabric_flows.h"
 
 convertter_t of10_convertter;
 msg_handler_t of10_message_handler[OFP10_MAX_MSG];
@@ -179,11 +180,16 @@ convertter_t of10_convertter =
 
 static INT4 of10_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_hello);
-    init_sendbuff(sw, OFP10_VERSION, OFPT_HELLO, total_len, 0);
-    send_of_msg(sw, total_len);
-
-    sw->msg_driver.msg_handler[OFPT_FEATURES_REQUEST](sw, of_msg);
+    if (of_msg)
+	{
+    	sw->msg_driver.msg_handler[OFPT_FEATURES_REQUEST](sw, of_msg);
+	}
+	else
+	{
+		UINT2 total_len = sizeof(struct ofp_hello);
+	    init_sendbuff(sw, OFP10_VERSION, OFPT_HELLO, total_len, 0);
+	    send_of_msg(sw, total_len);
+	}
 
     return GN_OK;
 }
@@ -276,6 +282,7 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     sw->msg_driver.msg_handler[OFPT_GET_CONFIG_REQUEST](sw, of_msg);
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.type = OFPST_DESC;
     sw->msg_driver.msg_handler[OFPT_STATS_REQUEST](sw, (UINT1 *)&stats_req_info);
 
@@ -297,7 +304,7 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     {
         (sw->msg_driver.convertter->port_convertter)((UINT1 *)&osf->ports[i], &new_sw_ports);
 
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //é»˜è®¤æœ€å¤§é€ŸçŽ‡1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         if (new_sw_ports.port_no == OFPP_LOCAL)
         {
@@ -309,13 +316,13 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
         port++;
     }
 
-    sw->n_ports = port; //²»°üÀ¨lo
+    sw->n_ports = port; //ä¸åŒ…æ‹¬lo
 
     {
         UINT1 dpid[8];
         ulli64_to_uc8(sw->dpid, dpid);
-        LOG_PROC("INFO", "New Openflow10 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d]", dpid[0],
-                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port));
+        LOG_PROC("INFO", "New Openflow10 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d], dpid:%llu", dpid[0],
+                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port), sw->dpid);
     }
     return GN_OK;
 }
@@ -383,9 +390,9 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of10_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
+        set_fabric_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //é»˜è®¤æœ€å¤§é€ŸçŽ‡1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
@@ -401,10 +408,10 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
     }
 
-    //É¾³ýÄ¿µÄ×ª·¢¿ÚdownµôµÄÁ÷±í
+    //åˆ é™¤ç›®çš„è½¬å‘å£downæŽ‰çš„æµè¡¨
 //    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
 
-    //¸üÐÂÍØÆË
+    //æ›´æ–°æ‹“æ‰‘
     for (port = 0; port < sw->n_ports; port++)
     {
         if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
@@ -736,7 +743,7 @@ static INT4 of10_msg_stats_request(gn_switch_t *sw, UINT1 *stats_req)
     stats_req_info_t *stats_req_info = (stats_req_info_t *)stats_req;
 
     UINT2 total_len  = sizeof(struct ofp_stats_request);
-    UINT1 *data = init_sendbuff(sw, OFP10_VERSION, OFPT_STATS_REQUEST, total_len, 0);
+    UINT1 *data = init_sendbuff(sw, OFP10_VERSION, OFPT_STATS_REQUEST, total_len, stats_req_info->xid);
 
     struct ofp_stats_request *ofp_sr = (struct ofp_stats_request *)data;
     ofp_sr->type  = htons(stats_req_info->type);
@@ -843,6 +850,7 @@ static INT4 of10_msg_barrier_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     //delete all flow entries.
+	install_delete_fabric_flow(sw);
     return GN_OK;
 }
 

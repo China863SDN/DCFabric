@@ -32,6 +32,7 @@
 #include "gnflush-types.h"
 #include "fabric_openstack_external.h"
 #include "openstack_host.h"
+#include "forward-mgr.h"
 
 /*
  * 定义结构体nat_port
@@ -46,6 +47,7 @@ typedef struct _nat_port {
 	UINT2 internal_port_no;				///< 内部端口号
 	UINT1 internal_mac[6];				///< 内部mac
 	UINT8 gateway_dpid;					///< 网关的交换机的dpid
+	UINT8 src_dpid;						///< src dpid
 	struct _nat_port* next;				///< 指向下一个结点的指针
 } nat_port, *nat_port_p;
 
@@ -167,7 +169,7 @@ nat_port_p find_nat_port_by_mac_and_port(UINT1* internal_mac, UINT2 internal_por
  * @return 创建的NAT映射条目(如果为空,表示创建失败)
  */
 UINT2 create_nat_connect(UINT4 internal_ip, UINT4 host_ip, UINT2 internal_port_no,
-		UINT1 proto_type, UINT1* ineternal_mac, UINT8 gateway_dpid);
+		UINT1 proto_type, UINT1* internal_mac, UINT8 gateway_dpid, UINT8 src_dpid);
 
 /*
  * 根据{外部IP,转换后的端口号,协议类型}查找并且删除该条目
@@ -183,7 +185,7 @@ void destroy_nat_connect(UINT4 host_ip, UINT2 external_port_no, UINT1 proto_type
  * @param external_port_no	: 转换后的端口号
  * @param proto_type  		: 协议类型
  */
-void destroy_nat_connect_by_mac_and_port(UINT4 host_ip, UINT1* internal_mac, UINT2 internal_port_no, UINT1 proto_type);
+void destroy_nat_connect_by_mac_and_port(gn_switch_t* sw, UINT4 host_ip, UINT1* internal_mac, UINT2 internal_port_no, UINT1 proto_type);
 
 /*
  * 根据{外部IP,转换后的端口号,协议类型}查找条目
@@ -201,7 +203,7 @@ nat_port_p find_nat_connect(UINT4 external_ip, UINT2 external_port_no, UINT1 pro
  * @param packet_in			: 指定的包
  * @param from_inside		: TRUE:从内网到外网; FALSE:从外网到内网
  */
-void  fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside);
+INT4 fabric_openstack_ip_nat_comute_foward(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside, param_set_p param_set);
 
 /*
  * 处理ouput包
@@ -209,7 +211,7 @@ void  fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_i
  * @param packet_in			: 指定的包
  * @param outport			: 指定的port
  */
-void fabric_openstack_nat_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info, UINT4 outport);
+// void fabric_openstack_nat_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info, UINT4 outport);
 
 /*
  * 处理NAT icmp相关的包
@@ -217,31 +219,7 @@ void fabric_openstack_nat_packet_output(gn_switch_t *sw, packet_in_info_t *packe
  * @param packet_in			: 指定的包
  * @param from_inside		: TRUE:从内网到外网; FALSE:从外网到内网
  */
-void fabric_openstack_nat_icmp_handler(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside);
-
-/*
- * 下发流表规则
- */
-void install_fabric_nat_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw);
-
-void install_fabric_nat_from_external_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw);
-
-void install_fabric_nat_from_external_fabric_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, UINT4 out_port);
-
-void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw);
-
-/*
- * 计算校验和
- */
-UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size);
+INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside, param_set_p param_set);
 
 /*
  * 设置是否使用物理交换机的flag
@@ -253,9 +231,7 @@ void update_nat_physical_switch_flag(UINT1 flag);
  */
 UINT1 get_nat_physical_switch_flag();
 
-/*
- * 测试用
- */
-void nat_show_ip(UINT4 ip);
-void nat_show_mac(UINT1* mac);
+
+UINT4 get_nat_connect_count_by_ip(UINT4 internal_ip, UINT2* port_list, UINT4* externalip_list, UINT2* proto_list);
+
 #endif /* INC_FABRIC_FABRIC_OPENSTACK_NAT_H_ */

@@ -39,4 +39,6 @@ extern msg_handler_t of10_message_handler[];
 extern msg_handler_t of13_message_handler[];
 
 void message_process(gn_switch_t *sw, UINT1 *ofmsg);
+INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg);
+
 #endif /* MSG_HANDLER_H_ */

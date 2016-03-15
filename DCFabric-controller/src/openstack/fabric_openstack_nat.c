@@ -37,10 +37,11 @@
 #include "fabric_flows.h"
 #include "openstack_app.h"
 #include "ini.h"
+#include "fabric_openstack_arp.h"
 
 // 定义NAT最大连接数
 #define NAT_HOST_MAX_NUM 		1000
-#define NAT_PORT_MAX_VALUE		49700
+#define NAT_PORT_MAX_VALUE		59200
 #define NAT_PORT_MIN_VALUE		49200
 #define NAT_PORT_MAX_COUNT		10000
 
@@ -421,7 +422,7 @@ void remove_nat_port_by_port_no(UINT2 external_port_no, nat_port_p head_p)
 
 
 // 根据port number删除条目
-void remove_nat_port_by_mac_and_port(UINT1* internal_mac, UINT2 internal_port_no, nat_port_p head_p)
+void remove_nat_port_by_mac_and_port(UINT8 sw_dpid, UINT1* internal_mac, UINT2 internal_port_no, nat_port_p head_p)
 {
 	// LOG_PROC("INFO", "NAT: Start Remove port by id:%d", internal_port_no);
 
@@ -440,7 +441,8 @@ void remove_nat_port_by_mac_and_port(UINT1* internal_mac, UINT2 internal_port_no
 	while (NULL != next_p) {
 
 		if ((0 == memcmp(next_p->internal_mac, internal_mac, 6))
-				&&(next_p->internal_port_no == internal_port_no))
+				&&(next_p->internal_port_no == internal_port_no)
+				&&(next_p->src_dpid == sw_dpid))
 		{
 			prev_p->next = next_p->next;
 			next_p = NULL;
@@ -513,6 +515,29 @@ nat_port_p find_nat_port_by_ip_and_port(UINT4 internal_ip, UINT2 internal_port_n
 	return NULL;
 }
 
+UINT4 find_nat_port_by_internal_ip(UINT4 internal_ip, UINT2* port_list, UINT4* externalip_list,
+		UINT2* proto_list, UINT4 externalip, UINT4 port_number, UINT2 proto, nat_port_p head_p)
+{
+	// 定义指针
+	nat_port_p prev_p = head_p;
+	nat_port_p next_p = prev_p->next;
+
+	// 循环判断
+	while (NULL != next_p) {
+		if (next_p->internal_ip == internal_ip)
+		{
+			// LOG_PROC("INFO", "NAT: Success to find port by ip and port");
+			port_number++;
+			port_list[port_number] = next_p->external_port_no;
+			proto_list[port_number] = proto;
+			externalip_list[port_number] = externalip;
+		}
+		prev_p = prev_p->next;
+		next_p = prev_p->next;
+	}
+
+	return port_number;
+}
 
 // 根据ip信息查找条目
 nat_port_p find_nat_port_by_mac_and_port(UINT1* internal_mac, UINT2 internal_port_no, nat_port_p head_p)
@@ -542,7 +567,7 @@ nat_port_p find_nat_port_by_mac_and_port(UINT1* internal_mac, UINT2 internal_por
 
 // 根据{内部IP,外部IP,内部端口号,协议类型}创建新的可以使用的nat端口号,并保存相应数据
 UINT2 create_nat_connect(UINT4 internal_ip, UINT4 host_ip, UINT2 internal_port_no,
-		UINT1 proto_type, UINT1* internal_mac, UINT8 gateway_dpid)
+		UINT1 proto_type, UINT1* internal_mac, UINT8 gateway_dpid, UINT8 src_dpid)
 {
 	// LOG_PROC("INFO", "NAT: create NAT connect!");
 
@@ -597,6 +622,7 @@ UINT2 create_nat_connect(UINT4 internal_ip, UINT4 host_ip, UINT2 internal_port_n
 	if (NULL != port_p) {
 		// 创建成功
 		external_port_no = port_p->external_port_no;
+		port_p->src_dpid = src_dpid;
 	}
 	else {
 		// output log
@@ -647,14 +673,14 @@ void destroy_nat_connect(UINT4 host_ip, UINT2 external_port_no, UINT1 proto_type
 	if ((NULL == host_p->tcp_port_list->next)
 			&&(NULL == host_p->udp_port_list->next)){
 		// 删除该host
-		// // LOG_PROC("INFO", "NAT: all the port removed, remove host");
+		// LOG_PROC("INFO", "NAT: all the port removed, remove host");
 		remove_nat_host_by_ip(host_p->host_ip);
 	}
 
 	// LOG_PROC("INFO", "NAT: Success destroy NAT connect!");
 }
 
-void destroy_nat_connect_by_mac_and_port(UINT4 host_ip, UINT1* internal_mac, UINT2 internal_port_no, UINT1 proto_type)
+void destroy_nat_connect_by_mac_and_port(gn_switch_t* sw, UINT4 host_ip, UINT1* internal_mac, UINT2 internal_port_no, UINT1 proto_type)
 {
 	// LOG_PROC("INFO", "NAT: Start destroy NAT connect!");
 
@@ -673,12 +699,12 @@ void destroy_nat_connect_by_mac_and_port(UINT4 host_ip, UINT1* internal_mac, UIN
 	// 如果TCP协议
 	if (IPPROTO_TCP == proto_type) {
 		// 删除对应的port(以外部端口号为Key)存在
-		remove_nat_port_by_mac_and_port(internal_mac, internal_port_no, host_p->tcp_port_list);
+		remove_nat_port_by_mac_and_port(sw->dpid, internal_mac, internal_port_no, host_p->tcp_port_list);
 	}
 	// 如果UDP协议
 	else if (IPPROTO_UDP == proto_type) {
 		// 删除对应的port(以外部端口号为Key)存在
-		remove_nat_port_by_mac_and_port(internal_mac, internal_port_no, host_p->udp_port_list);
+		remove_nat_port_by_mac_and_port(sw->dpid, internal_mac, internal_port_no, host_p->udp_port_list);
 	}
 	else {
 		// output log
@@ -690,7 +716,7 @@ void destroy_nat_connect_by_mac_and_port(UINT4 host_ip, UINT1* internal_mac, UIN
 	if ((NULL == host_p->tcp_port_list->next)
 			&&(NULL == host_p->udp_port_list->next)){
 		// 删除该host
-		// // LOG_PROC("INFO", "NAT: all the port removed, remove host");
+		// LOG_PROC("INFO", "NAT: all the port removed, remove host");
 		remove_nat_host_by_ip(host_p->host_ip);
 	}
 
@@ -731,16 +757,40 @@ nat_port_p find_nat_connect(UINT4 external_ip, UINT2 external_port_no, UINT1 pro
 	// LOG_PROC("INFO", "NAT: Success find NAT connect!");
 }
 
+
+UINT4 get_nat_connect_count_by_ip(UINT4 internal_ip, UINT2* port_list, UINT4* externalip_list, UINT2* proto_list)
+{
+	// LOG_PROC("INFO", "NAT: Start find NAT connect!");
+	nat_host_p host_p = NULL;
+	nat_port_p head_p = NULL;
+	UINT4 port_number = 0;
+
+	host_p = g_nat_host_list_head;
+
+	while (NULL != host_p) {
+		head_p = host_p->tcp_port_list;
+		port_number = find_nat_port_by_internal_ip(internal_ip, port_list, externalip_list, proto_list, host_p->host_ip, port_number, IPPROTO_TCP, head_p);
+
+		head_p = host_p->udp_port_list;
+		port_number = find_nat_port_by_internal_ip(internal_ip, port_list, externalip_list, proto_list, host_p->host_ip, port_number, IPPROTO_UDP, head_p);
+
+		host_p = host_p->next;
+	}
+
+	return port_number;
+}
+
+
 // 处理NAT相关的包
-void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside)
+INT4 fabric_openstack_ip_nat_comute_foward(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside, param_set_p param_set)
 {
 	// LOG_PROC("INFO", "NAT: Start fabric_openstack_ip_nat_handle");
-
+	// printf("%s\n", FN);
 	// 取得packet_in的信息
 	if (NULL == packet_in) {
 		// output error log "packet in is NULL!"
 		LOG_PROC("INFO", "NAT: Handle IP NAT packet failed! packet is NULL!");
-		return;
+		return IP_DROP;
 	}
 
 	// 取得需要的数据
@@ -776,12 +826,8 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 		packetin_src_port = packetin_udp->sport;
 		packetin_dst_port = packetin_udp->dport;
 	}
-	else if (IPPROTO_ICMP == packetin_ip->proto){
-		fabric_openstack_nat_icmp_handler(sw, packet_in, from_inside);
-		return;
-	}
 	else {
-		return ;
+		return IP_DROP;
 	}
 
 	// 取得外部网关
@@ -789,7 +835,7 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 	if (NULL == export_p) {
 		// 输出错误信息, 取得网关信息失败
 		LOG_PROC("INFO", "fabric_openstack_ip_nat_handle: fail to get external port!");
-		return;
+		return IP_DROP;
 	}
 
 	// 取得外部网关交换机
@@ -797,7 +843,7 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 
 	if (NULL == gateway_sw) {
 		LOG_PROC("INFO", "NAT: Fail to get external gateway Fail!");
-		return ;
+		return IP_DROP;
 	}
 
 	// define external port number
@@ -806,7 +852,7 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 	if (TRUE == from_inside) {
 		// 调用create_nat_connect, 返回值为0是表示创建失败, 其他则为port_no
 		external_port_no = create_nat_connect(packetin_src_ip, packetin_dst_ip,
-				packetin_src_port, packetin_proto_type, packetin_src_mac, export_p->external_dpid);
+				packetin_src_port, packetin_proto_type, packetin_src_mac, export_p->external_dpid, sw->dpid);
 	}
 	else {
 		// judge nat connect exist
@@ -821,27 +867,32 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 			packetin_src_port = port_p->internal_port_no;
 			packetin_dst_port = ntohs(packetin_src_port);
 			external_port_no = port_p->external_port_no;
-			openstack_port_p openstack_p = find_openstack_app_host_by_mac(packetin_src_mac);
+			p_fabric_host_node openstack_p = get_fabric_host_from_list_by_mac(packetin_src_mac);
 
 			if (NULL == openstack_p) {
 				LOG_PROC("INFO", "openstack port not exist");
-				return;
+				return IP_DROP;
 			}
 
 			packetin_inport = openstack_p->port;
 			src_sw = openstack_p->sw;
+
+			if ((NULL == src_sw) || (0 == packetin_inport))
+			{
+				p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(openstack_p);
+				fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], openstack_p->ip_list[0], gateway_p->mac);
+				return IP_DROP;
+			}
+
 			gateway_sw = find_sw_by_dpid(export_p->external_dpid);
 
 			if (NULL == gateway_sw) {
 				LOG_PROC("INFO", "NAT: Fail to get external gateway!");
-				return ;
+				return IP_DROP;
 			}
 
 			sw = gateway_sw;
-
-			// LOG_PROC("INFO", "NAT: srcIp: dstIp:!");
-			nat_show_ip(packetin_src_ip);
-			nat_show_ip(packetin_dst_ip);
+			port_p->src_dpid = src_sw->dpid;
 		}
 	}
 
@@ -849,25 +900,44 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 	UINT4 src_vlan_vid = of131_fabric_impl_get_tag_sw(src_sw);
 	UINT4 gateway_vlan_vid = of131_fabric_impl_get_tag_sw(gateway_sw);
 
-	LOG_PROC("INFO", "NAT: create nat port id %d", external_port_no);
+	// LOG_PROC("INFO", "NAT: create nat port id %d", external_port_no);
 
 	// 如果创建成功
 	if (0 != external_port_no) {
+
 		// 从主机所在交换机到网关的流表
-		install_fabric_nat_from_inside_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
-				packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
-				external_port_no, gateway_vlan_vid, src_vlan_vid, export_p->external_port, src_sw, gateway_sw);
+//		install_fabric_nat_from_inside_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
+//				packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
+//				external_port_no, gateway_vlan_vid, src_vlan_vid, export_p->external_port, src_sw, gateway_sw);
+
+		param_set->src_ip = packetin_src_ip;
+		param_set->dst_ip = packetin_dst_ip;
+		param_set->src_port_no = packetin_src_port;
+		param_set->proto = packetin_proto_type;
+		memcpy(param_set->src_mac, packetin_src_mac, 6);
+		param_set->outer_ip = export_p->external_outer_interface_ip;
+		memcpy(param_set->outer_gateway_mac, export_p->external_gateway_mac, 6);
+		memcpy(param_set->outer_mac, export_p->external_outer_interface_mac, 6);
+		param_set->dst_port_no = external_port_no;
+		param_set->dst_vlanid = gateway_vlan_vid;
+		param_set->src_vlanid = src_vlan_vid;
+		param_set->dst_inport = export_p->external_port;
+		param_set->src_sw = src_sw;
+		param_set->dst_sw = gateway_sw;
+		param_set->src_inport = packetin_inport;
+
 
 		// 不使用物理交换机
 		if (0 == get_nat_physical_switch_flag())
 		{
 			// 从网关到主机所在交换机的流表
-			install_fabric_nat_from_external_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
-					packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
-					external_port_no, gateway_vlan_vid, src_vlan_vid, export_p->external_port, src_sw, gateway_sw);
+//			install_fabric_nat_from_external_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
+//					packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
+//					external_port_no, gateway_vlan_vid, src_vlan_vid, export_p->external_port, src_sw, gateway_sw);
 
 			// 主机所在交换机的流表
-			install_fabric_output_flow(src_sw, packetin_src_mac, packetin_inport);
+			// install_fabric_output_flow(src_sw, packetin_src_mac, packetin_inport);
+			// param_set->flow_type = Nat_ip_flow;
 		}
 		// 使用物理交换机
 		else
@@ -877,56 +947,82 @@ void fabric_openstack_ip_nat_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 
 			if (0 == gateway_to_src_port_no) {
 				LOG_PROC("ERROR", "NAT: Can't find the output port from gateway switch to source switch!");
-				return ;
+				return IP_DROP;
+			}
+			else {
+				// 从网关到主机所在交换机的流表
+//				install_fabric_nat_from_external_fabric_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
+//						packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
+//						external_port_no, gateway_vlan_vid, src_vlan_vid, export_p->external_port, src_sw, gateway_sw, gateway_to_src_port_no);
+
+				// 主机所在交换机的流表
+//				install_fabric_nat_from_external_fabric_host_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
+//						packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
+//						external_port_no, gateway_vlan_vid, src_vlan_vid, packetin_inport, src_sw, gateway_sw);
+
+				param_set->dst_gateway_output = gateway_to_src_port_no;
+				// param_set->flow_type = Nat_ip_flow;
 			}
 
-			// 从网关到主机所在交换机的流表
-			install_fabric_nat_from_external_fabric_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
-					packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
-					external_port_no, gateway_vlan_vid, src_vlan_vid, export_p->external_port, src_sw, gateway_sw, gateway_to_src_port_no);
-
-			// 主机所在交换机的流表
-			install_fabric_nat_from_external_fabric_host_flow(packetin_src_ip, packetin_dst_ip, packetin_src_port, packetin_proto_type,
-					packetin_src_mac, export_p->external_outer_interface_ip, export_p->external_gateway_mac, export_p->external_outer_interface_mac,
-					external_port_no, gateway_vlan_vid, src_vlan_vid, packetin_inport, src_sw, gateway_sw);
 		}
 
 		// 重新处理第一个包
-		fabric_openstack_nat_packet_output(sw, packet_in, OFPP13_TABLE);
+		// fabric_openstack_nat_packet_output(sw, packet_in, OFPP13_TABLE);
+		return Nat_ip_flow;
 	}
 	// 如果创建失败
 	else {
+
 		// output error log "create NAT tuple node failed!"
-		LOG_PROC("INFO", "NAT: Handle IP NAT packet failed! create NAT node failed!");
+//		LOG_PROC("INFO", "NAT: Handle IP NAT packet failed! create NAT node failed!");
+//		nat_host_p host_p = g_nat_host_list_head;
+//		while (NULL != host_p) {
+//			nat_show_ip(host_p->host_ip);
+//			nat_port_p tcp_p = host_p->tcp_port_list;
+//			nat_port_p udp_p = host_p->udp_port_list;
+//			while (NULL != tcp_p) {
+//				printf("tcp:%d ", tcp_p->external_port_no);
+//				tcp_p = tcp_p->next;
+//			}
+//			printf("\n");
+//			while (NULL != udp_p) {
+//				printf("udp:%d ", udp_p->external_port_no);
+//				udp_p = udp_p->next;
+//			}
+//			printf("\n");
+//			host_p = host_p->next;
+//		}
+
+		return IP_DROP;
 	}
 }
 
 // deal with packet out action
-void fabric_openstack_nat_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport)
-{
-	// LOG_PROC("INFO", "NAT: call function fabric_openstack_nat_packet_output");
-	packout_req_info_t pakout_req;
-	pakout_req.buffer_id = packet_in_info->buffer_id;
-	pakout_req.inport = OFPP13_CONTROLLER;
-	pakout_req.outport = outport;
-	pakout_req.max_len = 0xff;
-	pakout_req.xid = packet_in_info->xid;
-	pakout_req.data_len = packet_in_info->data_len;
-	pakout_req.data = packet_in_info->data;
-	sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
-};
+//void fabric_openstack_nat_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport)
+//{
+//	// LOG_PROC("INFO", "NAT: call function fabric_openstack_nat_packet_output");
+//	packout_req_info_t pakout_req;
+//	pakout_req.buffer_id = packet_in_info->buffer_id;
+//	pakout_req.inport = OFPP13_CONTROLLER;
+//	pakout_req.outport = outport;
+//	pakout_req.max_len = 0xff;
+//	pakout_req.xid = packet_in_info->xid;
+//	pakout_req.data_len = packet_in_info->data_len;
+//	pakout_req.data = packet_in_info->data;
+//	sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
+//};
 
-void fabric_openstack_nat_icmp_handler(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside)
+INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *packet_in, UINT1 from_inside, param_set_p param_set)
 {
 	// LOG_PROC("INFO", "NAT: call function fabric_openstack_nat_icmp_handler");
-
+	// printf("%s\n", FN);
 	nat_icmp_iden_p nat_icmp_p = NULL;
 	external_port_p epp = NULL;
 
 	ip_t* ipt = (ip_t*)(packet_in->data);
 	if (NULL == ipt) {
 		LOG_PROC("INFO", "NAT: icmp: no ip data");
-		return;
+		return IP_DROP;
 	}
 
 	// get icmp data
@@ -939,13 +1035,13 @@ void fabric_openstack_nat_icmp_handler(gn_switch_t *sw, packet_in_info_t *packet
 		epp = get_external_port_by_host_mac(ipt->eth_head.src);
 		if(NULL == epp) {
 			 LOG_PROC("INFO", "NAT: icmp: no valid external port!");
-			 return ;
+			 return IP_DROP;
 		}
 		// get gateway info
 		gn_switch_t *gateway_sw = find_sw_by_dpid(epp->external_dpid);
 		if (NULL == gateway_sw) {
 			LOG_PROC("INFO", "NAT: icmp: gateway switch is NULL!");
-			return ;
+			return IP_DROP;
 		}
 
 		// judge nat_icmp create
@@ -964,14 +1060,17 @@ void fabric_openstack_nat_icmp_handler(gn_switch_t *sw, packet_in_info_t *packet
 		ipt->cksum = calc_ip_checksum((UINT2*)&ipt->hlen, 20);
 
 		// packet out data to external
-		fabric_openstack_nat_packet_output(gateway_sw, packet_in, epp->external_port);
+		param_set->dst_sw = gateway_sw;
+		param_set->dst_inport = epp->external_port;
+		return CONTROLLER_FORWARD;
 	}
 	// if from external
 	else {
 		// judge nat_icmp create
 		if (NULL == nat_icmp_p) {
 			// do nothing
-			LOG_PROC("INFO", "NAT ICMP not created!");
+			// LOG_PROC("INFO", "NAT ICMP not created!");
+			return IP_DROP;
 		}
 		else {
 			// modify dst_ip, dst_mac
@@ -985,574 +1084,32 @@ void fabric_openstack_nat_icmp_handler(gn_switch_t *sw, packet_in_info_t *packet
 			gn_switch_t* output_sw = find_sw_by_dpid(nat_icmp_p->sw_dpid);
 			if (NULL == output_sw) {
 				LOG_PROC("INFO", "NAT: output switch is NULL");
-				return;
+				return IP_DROP;
 			}
 
 			// packet out the data to the host
-			fabric_openstack_nat_packet_output(output_sw, packet_in, nat_icmp_p->inport);
+			// fabric_openstack_nat_packet_output(output_sw, packet_in, nat_icmp_p->inport);
+			p_fabric_host_node host = get_fabric_host_from_list_by_ip(nat_icmp_p->host_ip);
+
+			if (NULL == host) {
+				return IP_DROP;
+			}
+
+			if ((NULL == host->sw) || (0 == host->port))
+			{
+				p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(host);
+				fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], host->ip_list[0], gateway_p->mac);
+				return IP_DROP;
+			}
+
+			param_set->dst_sw = host->sw;
+			param_set->dst_inport = host->port;
+
+//			param_set->dst_sw = output_sw;
+//			param_set->dst_inport = nat_icmp_p->inport;
+			return CONTROLLER_FORWARD;
 		}
 	}
-}
-
-// 下发流表规则
-void install_fabric_nat_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-								UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-								UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw)
-{
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow !");
-	/*
-	 * Table 1
-	 *
-	 * Match:
-	 * SRC_MAC  = VM.MAC
-	 * DST_IP   = 外网IP
-	 * Proto    = VM.Proto
-	 * SRC_Port = VM.Port
-	 *
-	 * Action:
-	 * SRC_MAC   = External.MAC
-	 * SRC_IP    = External.IP
-	 * SRC_Port  = new-port
-	 * DST_MAC   = Gateway.MAC
-	 * Vlan		 = Gateway.Vlan
-	 *
-	 * Goto:
-	 * Table 2
-	 ********************************************
-	 * Table 1 (current switch is gateway switch)
-	 *
-	 * Match:
-	 * SRC_MAC  = VM.MAC
-	 * DST_IP   = 外网IP
-	 * Proto    = VM.Proto
-	 * SRC_Port = VM.Port
-	 *
-	 * Action:
-	 * SRC_MAC   = External.MAC
-	 * SRC_IP    = External.IP
-	 * SRC_Port  = new-port
-	 * output
-	 */
-	// This function is created to process NAT related flow table
-	flow_mod_req_info_t flow_mod_req;
-    gn_flow_t flow;
-    gn_instruction_actions_t instruction;
-
-    gn_action_set_field_t act_set_out_src_mac;
-    gn_action_set_field_t act_set_out_src_ip;
-    gn_action_set_field_t act_set_out_src_port;
-    gn_action_set_field_t act_set_out_dst_mac;
-    gn_action_set_field_t act_set_out_dst_vlan;
-    gn_instruction_goto_table_t act_set_out_goto_table;
-    gn_action_t act_out_push_vlan;
-    gn_action_output_t act_out_output;
-
-    memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-	flow.table_id = FABRIC_PUSHTAG_TABLE;
-	flow.match.type = OFPMT_OXM;
-
-	memcpy(flow.match.oxm_fields.eth_src, packetin_src_mac, 6);
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
-
-	flow.match.oxm_fields.ipv4_dst = ntohl(packetin_dst_ip);
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-    flow.match.oxm_fields.eth_type = ETHER_IP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-	if (IPPROTO_TCP == proto_type) {
-		flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-		flow.match.oxm_fields.tcp_src = ntohs(packetin_src_port);
-		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_SRC);
-	}
-	else if (IPPROTO_UDP == proto_type) {
-		flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-		flow.match.oxm_fields.udp_src = ntohs(packetin_src_port);
-		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_SRC);
-	}
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-    instruction.type = OFPIT_APPLY_ACTIONS;
-    instruction.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction;
-
-    memset(&act_set_out_src_mac, 0, sizeof(gn_action_set_field_t));
-    act_set_out_src_mac.type = OFPAT13_SET_FIELD;
-    memcpy(act_set_out_src_mac.oxm_fields.eth_src, external_mac, 6);
-    act_set_out_src_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
-    act_set_out_src_mac.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_out_src_mac;
-
-    memset(&act_set_out_src_ip, 0, sizeof(gn_action_set_field_t));
-    act_set_out_src_ip.type = OFPAT13_SET_FIELD;
-    act_set_out_src_ip.oxm_fields.ipv4_src = ntohl(external_ip);
-    act_set_out_src_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-    act_set_out_src_ip.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_out_src_ip;
-
-    if (IPPROTO_TCP == proto_type) {
-    	memset(&act_set_out_src_port, 0, sizeof(gn_action_set_field_t));
-		act_set_out_src_port.type = OFPAT13_SET_FIELD;
-		act_set_out_src_port.oxm_fields.tcp_src = external_port_no;
-		act_set_out_src_port.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_SRC);
-		act_set_out_src_port.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_out_src_port;
-    }
-    else if (IPPROTO_UDP == proto_type) {
-    	memset(&act_set_out_src_port, 0, sizeof(gn_action_set_field_t));
-		act_set_out_src_port.type = OFPAT13_SET_FIELD;
-		act_set_out_src_port.oxm_fields.udp_src = external_port_no;
-		act_set_out_src_port.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_SRC);
-		act_set_out_src_port.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_out_src_port;
-    }
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-    if (sw->dpid != gateway_sw->dpid) {
-       	memset(&act_set_out_dst_vlan, 0, sizeof(gn_action_set_field_t));
-       	act_set_out_dst_vlan.type = OFPAT13_SET_FIELD;
-       	act_set_out_dst_vlan.oxm_fields.vlan_vid = (UINT2)gateway_vlan_vid;
-       	act_set_out_dst_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-   		act_set_out_dst_vlan.next = instruction.actions;
-   		instruction.actions = (gn_action_t *)&act_set_out_dst_vlan;
-
-   		memset(&act_out_push_vlan, 0, sizeof(gn_action_t));
-   		act_out_push_vlan.type = OFPAT13_PUSH_VLAN;
-   		act_out_push_vlan.next = instruction.actions;
-   		instruction.actions = (gn_action_t *)&act_out_push_vlan;
-
-   		memset(&act_set_out_goto_table, 0, sizeof(gn_instruction_goto_table_t));
-   		act_set_out_goto_table.type = OFPIT_GOTO_TABLE;
-   		act_set_out_goto_table.table_id = FABRIC_SWAPTAG_TABLE;
-   		act_set_out_goto_table.next = flow.instructions;
-   		flow.instructions = (gn_instruction_t *)&act_set_out_goto_table;
-       }
-       else {
-   		memset(&act_out_output, 0, sizeof(gn_action_output_t));
-   		act_out_output.next = NULL;
-   		act_out_output.type = OFPAT13_OUTPUT;
-   		act_out_output.port = gateway_out_port;
-   		act_out_output.next = instruction.actions;
-   		act_out_output.max_len = 0xffff;
-   		instruction.actions = (gn_action_t *)&act_out_output;
-       }
-
-    memset(&act_set_out_dst_mac, 0, sizeof(gn_action_set_field_t));
-    act_set_out_dst_mac.type = OFPAT13_SET_FIELD;
-    memcpy(act_set_out_dst_mac.oxm_fields.eth_dst, gateway_mac, 6);
-    act_set_out_dst_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-    act_set_out_dst_mac.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_out_dst_mac;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_ADD;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-
-    // LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from inside !");
-}
-
-// 下发流表规则
-void install_fabric_nat_from_external_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw)
-{
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow from external!");
-	// This function is created to process NAT related flow table
-	flow_mod_req_info_t flow_mod_req;
-    gn_flow_t flow;
-    gn_instruction_actions_t instruction;
-
-    /*
-     * 匹配规则:
-     * SRC_IP 		= external.IP
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * DST_MAC		= VM.MAC
-     * DST_IP		= VM.IP
-     * DST_Port		= VM.Port
-     * Vlan			= VM.Vlan
-     *
-     * Goto:
-     * Table 2
-     *********************************************
-     * (Current switch is gateway switch)
-     *
-     * SRC_IP 		= external.IP
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * DST_MAC		= VM.MAC
-     * DST_IP		= VM.IP
-     * DST_Port		= VM.Port
-     * output
-     */
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-	flow.table_id = FABRIC_PUSHTAG_TABLE;
-	flow.match.type = OFPMT_OXM;
-
-    gn_action_set_field_t act_set_in_dst_mac;
-    gn_action_set_field_t act_set_in_dst_ip;
-    gn_action_set_field_t act_set_in_dst_port;
-    gn_action_set_field_t act_set_in_dst_vlan;
-    gn_instruction_goto_table_t act_set_in_goto_table;
-    gn_action_t act_in_push_vlan;
-    gn_action_output_t act_in_output;
-
-    flow.match.oxm_fields.ipv4_src = ntohl(packetin_dst_ip);
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-    flow.match.oxm_fields.eth_type = ETHER_IP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-	if (IPPROTO_TCP == proto_type) {
-	    flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-	    flow.match.oxm_fields.tcp_dst = external_port_no;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-	}
-	else if (IPPROTO_UDP == proto_type) {
-	    flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-	    flow.match.oxm_fields.udp_dst = external_port_no;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-	}
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-	instruction.type = OFPIT_APPLY_ACTIONS;
-	instruction.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction;
-
-	if (sw->dpid != gateway_sw->dpid) {
-		memset(&act_set_in_dst_vlan, 0, sizeof(gn_action_set_field_t));
-		act_set_in_dst_vlan.type = OFPAT13_SET_FIELD;
-		act_set_in_dst_vlan.oxm_fields.vlan_vid = (UINT2)src_vlan_vid;
-		act_set_in_dst_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-		act_set_in_dst_vlan.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_in_dst_vlan;
-
-		memset(&act_in_push_vlan, 0, sizeof(gn_action_t));
-		act_in_push_vlan.type = OFPAT13_PUSH_VLAN;
-		act_in_push_vlan.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_in_push_vlan;
-
-		memset(&act_set_in_goto_table, 0, sizeof(gn_instruction_goto_table_t));
-		act_set_in_goto_table.type = OFPIT_GOTO_TABLE;
-		act_set_in_goto_table.table_id = FABRIC_SWAPTAG_TABLE;
-		act_set_in_goto_table.next = flow.instructions;
-		flow.instructions = (gn_instruction_t *)&act_set_in_goto_table;
-	}
-	else {
-		memset(&act_in_output, 0, sizeof(gn_action_output_t));
-		act_in_output.next = NULL;
-		act_in_output.type = OFPAT13_OUTPUT;
-		act_in_output.port = gateway_out_port;
-		act_in_output.next = instruction.actions;
-		act_in_output.max_len = 0xffff;
-		instruction.actions = (gn_action_t *)&act_in_output;
-	}
-
-    memset(&act_set_in_dst_mac, 0, sizeof(gn_action_set_field_t));
-    act_set_in_dst_mac.type = OFPAT13_SET_FIELD;
-    memcpy(act_set_in_dst_mac.oxm_fields.eth_dst, packetin_src_mac, 6);
-    act_set_in_dst_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-    act_set_in_dst_mac.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_in_dst_mac;
-
-    memset(&act_set_in_dst_ip, 0, sizeof(gn_action_set_field_t));
-    act_set_in_dst_ip.type = OFPAT13_SET_FIELD;
-    act_set_in_dst_ip.oxm_fields.ipv4_dst = ntohl(packetin_src_ip);
-    act_set_in_dst_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-    act_set_in_dst_ip.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_in_dst_ip;
-
-    if (IPPROTO_TCP == proto_type) {
-    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-		act_set_in_dst_port.oxm_fields.tcp_dst = ntohs(packetin_src_port);
-		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-		act_set_in_dst_port.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-    }
-    else if (IPPROTO_UDP == proto_type) {
-    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-		act_set_in_dst_port.oxm_fields.udp_dst = ntohs(packetin_src_port);
-		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-		act_set_in_dst_port.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-    }
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-  	flow_mod_req.xid = 0;
-  	flow_mod_req.buffer_id = 0xffffffff;
-  	flow_mod_req.out_port = 0xffffffff;
-  	flow_mod_req.out_group = 0xffffffff;
-  	flow_mod_req.command = OFPFC_ADD;
-  	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-  	flow_mod_req.flow = &flow;
-
-  	gateway_sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](gateway_sw, (UINT1 *)&flow_mod_req);
-
-    // LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from external !");
-}
-
-// 下发流表规则
-void install_fabric_nat_from_external_fabric_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, UINT4 out_port)
-{
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow from external!");
-	// This function is created to process NAT related flow table
-	flow_mod_req_info_t flow_mod_req;
-    gn_flow_t flow;
-    gn_instruction_actions_t instruction;
-    gn_action_output_t act_in_output;
-
-    /*
-     * 匹配规则:
-     * DST_MAC 		= external.MAC
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * Vlan			= VM.Vlan
-     *
-     * Goto:
-     * Table 2
-     */
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-	flow.table_id = FABRIC_INPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-
-    gn_action_set_field_t act_set_in_dst_vlan;
-    gn_action_t act_in_push_vlan;
-
-    memcpy(flow.match.oxm_fields.eth_dst, external_mac, 6);
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-
-    flow.match.oxm_fields.eth_type = ETHER_IP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-	if (IPPROTO_TCP == proto_type) {
-	    flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-	    flow.match.oxm_fields.tcp_dst = external_port_no;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-	}
-	else if (IPPROTO_UDP == proto_type) {
-	    flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-	    flow.match.oxm_fields.udp_dst = external_port_no;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-	}
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-	instruction.type = OFPIT_APPLY_ACTIONS;
-	instruction.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction;
-
-	memset(&act_in_output, 0, sizeof(gn_action_output_t));
-	act_in_output.type = OFPAT13_OUTPUT;
-	act_in_output.port = out_port;
-	act_in_output.next = instruction.actions;
-	act_in_output.max_len = 0xffff;
-	instruction.actions = (gn_action_t *)&act_in_output;
-
-	memset(&act_set_in_dst_vlan, 0, sizeof(gn_action_set_field_t));
-	act_set_in_dst_vlan.type = OFPAT13_SET_FIELD;
-	act_set_in_dst_vlan.oxm_fields.vlan_vid = (UINT2)src_vlan_vid;
-	act_set_in_dst_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-	act_set_in_dst_vlan.next = instruction.actions;
-	instruction.actions = (gn_action_t *)&act_set_in_dst_vlan;
-
-	memset(&act_in_push_vlan, 0, sizeof(gn_action_t));
-	act_in_push_vlan.type = OFPAT13_PUSH_VLAN;
-	act_in_push_vlan.next = instruction.actions;
-	instruction.actions = (gn_action_t *)&act_in_push_vlan;
-
-  	flow_mod_req.xid = 0;
-  	flow_mod_req.buffer_id = 0xffffffff;
-  	flow_mod_req.out_port = 0xffffffff;
-  	flow_mod_req.out_group = 0xffffffff;
-  	flow_mod_req.command = OFPFC_ADD;
-  	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-  	flow_mod_req.flow = &flow;
-
-  	gateway_sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](gateway_sw, (UINT1 *)&flow_mod_req);
-
-    LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from external !");
-}
-
-// 下发流表规则
-void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
-		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
-		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw)
-{
-	LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow from external!");
-	// This function is created to process NAT related flow table
-	flow_mod_req_info_t flow_mod_req;
-    gn_flow_t flow;
-    gn_instruction_actions_t instruction;
-
-    /*
-     * 匹配规则:
-     * SRC_IP 		= external.IP
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * DST_MAC		= VM.MAC
-     * DST_IP		= VM.IP
-     * DST_Port		= VM.Port
-     * output
-     */
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-	flow.table_id = FABRIC_OUTPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-
-    gn_action_set_field_t act_set_in_dst_mac;
-    gn_action_set_field_t act_set_in_dst_ip;
-    gn_action_set_field_t act_set_in_dst_port;
-    gn_action_output_t act_in_output;
-
-    flow.match.oxm_fields.ipv4_src = ntohl(packetin_dst_ip);
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-    flow.match.oxm_fields.eth_type = ETHER_IP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-	if (IPPROTO_TCP == proto_type) {
-	    flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-	    flow.match.oxm_fields.tcp_dst = external_port_no;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-	}
-	else if (IPPROTO_UDP == proto_type) {
-	    flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-	    flow.match.oxm_fields.udp_dst = external_port_no;
-	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-	}
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-	instruction.type = OFPIT_APPLY_ACTIONS;
-	instruction.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction;
-
-	memset(&act_in_output, 0, sizeof(gn_action_output_t));
-	act_in_output.type = OFPAT13_OUTPUT;
-	act_in_output.port = gateway_out_port;
-	act_in_output.next = instruction.actions;
-	act_in_output.max_len = 0xffff;
-	instruction.actions = (gn_action_t *)&act_in_output;
-
-    memset(&act_set_in_dst_mac, 0, sizeof(gn_action_set_field_t));
-    act_set_in_dst_mac.type = OFPAT13_SET_FIELD;
-    memcpy(act_set_in_dst_mac.oxm_fields.eth_dst, packetin_src_mac, 6);
-    act_set_in_dst_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-    act_set_in_dst_mac.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_in_dst_mac;
-
-    memset(&act_set_in_dst_ip, 0, sizeof(gn_action_set_field_t));
-    act_set_in_dst_ip.type = OFPAT13_SET_FIELD;
-    act_set_in_dst_ip.oxm_fields.ipv4_dst = ntohl(packetin_src_ip);
-    act_set_in_dst_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-    act_set_in_dst_ip.next = instruction.actions;
-    instruction.actions = (gn_action_t *)&act_set_in_dst_ip;
-
-    if (IPPROTO_TCP == proto_type) {
-    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-		act_set_in_dst_port.oxm_fields.tcp_dst = ntohs(packetin_src_port);
-		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-		act_set_in_dst_port.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-    }
-    else if (IPPROTO_UDP == proto_type) {
-    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-		act_set_in_dst_port.oxm_fields.udp_dst = ntohs(packetin_src_port);
-		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-		act_set_in_dst_port.next = instruction.actions;
-		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-    }
-	else {
-		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-		return ;
-	}
-
-  	flow_mod_req.xid = 0;
-  	flow_mod_req.buffer_id = 0xffffffff;
-  	flow_mod_req.out_port = 0xffffffff;
-  	flow_mod_req.out_group = 0xffffffff;
-  	flow_mod_req.command = OFPFC_ADD;
-  	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-  	flow_mod_req.flow = &flow;
-
-  	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-
-    LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from external !");
-}
-
-// calculate checksum
-UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size)
-{
-	UINT4 cksum = 0;
-	while(size >1)
-	{
-		cksum += *buffer++;
-		size -= sizeof(UINT2);
-	}
-	if(size )
-	{
-		cksum += *(UINT1*)buffer;
-	}
-
-	cksum = (cksum >> 16) + (cksum & 0xffff);
-	cksum += (cksum >>16);
-	return (UINT2)(~cksum);
 }
 
 // update natphysical switch flag
@@ -1576,20 +1133,3 @@ UINT1 get_nat_physical_switch_flag()
 	return g_nat_physical_switch_flag;
 }
 
-// show ip
-void nat_show_ip(UINT4 ip)
-{
-	struct in_addr addr;
-	memcpy(&addr, &ip, 4);
-	LOG_PROC("INFO","IP: %s  |",inet_ntoa(addr));
-	return;
-}
-
-// show mac
-void nat_show_mac(UINT1* mac)
-{
-	char temp[16] = {0};
-	mac2str(mac, temp);
-	LOG_PROC("INFO","MAC: %s  |",temp);
-	return;
-}

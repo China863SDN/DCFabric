@@ -305,3 +305,153 @@ INT1* number2ip(INT4 ip_num, INT1* ip)
    return ip;
 }
 
+UINT1* ipv6_str_to_number(char* str, UINT1* ipv6)
+{
+	struct in6_addr ip;
+	inet_pton(AF_INET6, str, &ip);
+	memcpy(ipv6, ip.s6_addr, 16);
+	return ipv6;
+}
+
+// show ip
+void nat_show_ip(UINT4 ip)
+{
+	struct in_addr addr;
+	memcpy(&addr, &ip, 4);
+	LOG_PROC("INFO","IP: %s  |",inet_ntoa(addr));
+	return;
+}
+
+// show mac
+void nat_show_mac(UINT1* mac)
+{
+	char temp[16] = {0};
+	mac2str(mac, temp);
+	LOG_PROC("INFO","MAC: %s  |",temp);
+	return;
+}
+
+void nat_show_ipv6(UINT1* ip)
+{
+	UINT1 temp[16] = {0};
+	memcpy(temp, ip , 16);
+	int i = 0;
+	printf("[INFO] ipv6 is: ");
+	for (;i < 16;i++) {
+		if (i && !(i%2)) {
+			printf(":");
+		}
+		printf("%02x", temp[i]);
+	}
+	printf("\n");
+	// LOG_PROC("INFO", "IP: %s |", temp);
+}
+
+
+//00:00:00:00:00:00:01:91 --> 401
+INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret)
+{
+    if (NULL == dpid)
+    {
+        return -1;
+    }
+    
+    INT4 len = strlen(dpid);
+    if (len < 23)
+    {
+        return -1;
+    }
+
+    INT4 i = 0;
+    INT4 j = 0;
+    UINT1 tmp[17] = {0};
+    for (; i <23 && j < 16; i++)
+    {
+        if (':' != dpid[i])
+        {
+            if (!((dpid[i] <= '9' && dpid[i] >= '0') 
+                || (dpid[i] <= 'f' && dpid[i] >= 'a') 
+                || (dpid[i] <= 'F' && dpid[i] >= 'A')))
+            {
+                return -1;
+            }
+            tmp[j] = dpid[i];
+            j++;
+        }
+    }
+
+    *ret = strtoul((const char*)tmp, NULL, 16);
+
+    return 0;
+}
+
+
+//is digit, just support base=10/16
+BOOL is_digit(const INT1 *str, INT4 base)
+{
+    if (NULL == str || (10 != base && 16 != base))
+    {
+        return -1;
+    }
+    
+    UINT8 len = strlen(str);
+    int i = 0;
+    switch (base)
+    {
+        case 10:
+        {
+            for (i = 0; i < len; i++)
+            {
+                if (str[i] < '0' || str[i] > '9') 
+                {                        
+                    return FALSE;                
+                }
+            }
+            break;
+        }
+        case 16:
+        {
+            if(0 != strncmp("0x", str, 2))
+            {
+                return FALSE;
+            }
+            
+            for (i = 2; i < len; i++)
+            {
+                if (!((str[i] <= '9' && str[i] >= '0') 
+                        || (str[i] <= 'f' && str[i] >= 'a') 
+                        || (str[i] <= 'F' && str[i] >= 'A')))
+                {                        
+                    return FALSE;                
+                }
+            }
+            break;
+        }
+        default:
+        {
+            return FALSE;
+        }
+    }
+    
+    return TRUE; 
+}
+
+
+// calculate checksum
+UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size)
+{
+	UINT4 cksum = 0;
+	while(size >1)
+	{
+		cksum += *buffer++;
+		size -= sizeof(UINT2);
+	}
+	if(size )
+	{
+		cksum += *(UINT1*)buffer;
+	}
+
+	cksum = (cksum >> 16) + (cksum & 0xffff);
+	cksum += (cksum >>16);
+	return (UINT2)(~cksum);
+}

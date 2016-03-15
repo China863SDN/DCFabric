@@ -48,7 +48,7 @@ typedef struct external_port
 	UINT8 external_dpid; //openflow route dpid
 	UINT4 external_port; //openflow route port
 	UINT4 ID;	// 标识符
-}external_port_t,* external_port_p;
+}external_port_t,*external_port_p;
 
 //floating ip struct
 typedef struct _external_floating_ip
@@ -57,7 +57,7 @@ typedef struct _external_floating_ip
 	UINT4 floating_ip;//outer ip
 	char port_id[48];
 	char router_id[48];
-}external_floating_ip, * external_floating_ip_p;
+}external_floating_ip, *external_floating_ip_p;
 
 //identifier host ip struct
 typedef struct _nat_icmp_iden
@@ -135,5 +135,11 @@ nat_icmp_iden_p create_nat_imcp_iden_p(
 void update_floating_ip_mem_info();
 
 void read_external_port_config();
+
+openstack_external_node_p get_floating_list();
+
+external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip);
+external_floating_ip_p find_external_floating_ip_by_fixed_ip(UINT4 fixed_ip);
+external_floating_ip_p find_external_floating_ip_by_floating_ip(UINT4 floating_ip);
 
 #endif

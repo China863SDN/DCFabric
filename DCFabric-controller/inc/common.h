@@ -297,4 +297,25 @@ UINT4 ip2number(const INT1* ip);
 // convert number to ip
 INT1* number2ip(INT4 ip_num, INT1* ip);
 
+// convert ipv6 to number
+UINT1* ipv6_str_to_number(char* str, UINT1* ipv6);
+
+// show ipv4 log
+void nat_show_ip(UINT4 ip);
+
+// show mac address log
+void nat_show_mac(UINT1* mac);
+
+// show ipv6 log
+void nat_show_ipv6(UINT1* ip);
+
+//convert str dpid to uint8
+INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret);
+BOOL is_digit(const INT1 *str, INT4 base);
+
+/*
+ * 计算校验和
+ */
+UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size);
+
 #endif /* COMMON_H_ */

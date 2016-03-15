@@ -75,6 +75,9 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
         g_adac_matrix.src_port[src_sw->index][neigh_sw->index] = rx_port;
         g_adac_matrix.sw[src_sw->index][neigh_sw->index] = src_sw;
     }
+	else {
+		return GN_ERR;
+	}
 
 
     //通过交换机的port_no，找到端口序号

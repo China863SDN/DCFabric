@@ -29,6 +29,8 @@
 #include "fabric_host.h"
 #include "mem_pool.h"
 #include <pthread.h>
+#include "openstack_host.h"
+
 /*********************************
  * Global verbs
  *********************************/
@@ -61,19 +63,49 @@ void *g_fabric_flow_queue_mem_id = NULL;
  * UINT* mac:		the host's mac address
  * UINT4 ip:		the host's ip address
  */
-p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip){
+
+p_fabric_host_node create_fabric_host_list_node(gn_switch_t* sw, UINT4 port, UINT1* mac, UINT4 ip, UINT1* ipv6)
+{
 	p_fabric_host_node ret = NULL;
 	//ret = (p_fabric_host_node)gn_malloc(sizeof(t_fabric_host_node));
 	ret = (p_fabric_host_node)mem_get(g_fabric_host_list_mem_id);
-	ret->sw = sw;
-	ret->port = port;
-	ret->ip_count=0;
-	//ret->ip_list[ip_count]=ip
-	add_fabric_host_ip(ret,ip);
-	memcpy(ret->mac, mac, 6);
-
+	if (NULL != ret) {
+		ret->sw = sw;
+		ret->port = port;
+		ret->ip_count=0;
+		//ret->ip_list[ip_count]=ip
+		add_fabric_host_ip(ret,ip);
+		memcpy(ret->mac, mac, 6);
+		if (ipv6)
+			memcpy(ret->ipv6[0], ipv6, 16);
+	}
+	else {
+		LOG_PROC("ERROR", "Fabric host: Fail to create list node, Can't get memory");
+	}
 	return ret;
 };
+
+p_fabric_host_node copy_fabric_host_node(p_fabric_host_node node_p)
+{
+	p_fabric_host_node ret = NULL;
+	ret = (p_fabric_host_node)mem_get(g_fabric_host_list_mem_id);
+	if (NULL != ret) {
+		memset(ret, 0, sizeof(t_fabric_host_node));
+		if (NULL != node_p) {
+			ret->sw = node_p->sw;
+			ret->port = node_p->port;
+			ret->ip_count= node_p->ip_count;
+			add_fabric_host_ip(ret, node_p->ip_list[0]);
+			memcpy(ret->mac, node_p->mac, 6);
+			memcpy(ret->ipv6[0], node_p->ipv6[0], 16);
+		}
+	}
+	else {
+		LOG_PROC("ERROR", "Fabric host: Fail to create list node, Can't get memory");
+	}
+	return ret;
+}
+
 
 /*
  * delete a host node
@@ -130,6 +162,46 @@ p_fabric_host_node get_fabric_host_from_list_by_ip(UINT4 ip){
 	}
 	return NULL;
 };
+
+
+/*
+ * temp added for ipv6
+ * by lxf@2016.1.11
+ */
+#if 1
+/*
+ * get the host object by ipv6 address
+ * if not found, return NULL
+ * UINT4 ip : host's ipv6 address
+ */
+p_fabric_host_node get_fabric_host_from_list_by_ipv6(UINT1* ip)
+{
+	p_fabric_host_node ret = NULL;
+	ret = g_fabric_host_list.list;
+	while(ret != NULL)
+	{
+		if ((NULL != ret->ipv6[0]) && (0 == memcmp(ret->ipv6[0], ip, 16)))
+			return ret;
+
+		ret = ret->next;
+	}
+	return NULL;
+};
+#endif
+
+p_fabric_host_node get_fabric_host_from_list_by_sw_port(UINT8 dpid, UINT4 port)
+{
+	p_fabric_host_node ret = NULL;
+	ret = g_fabric_host_list.list;
+	while(ret != NULL)
+	{
+		if ((NULL != ret->sw) && (ret->sw->dpid == dpid) && (ret->port == port))
+			return ret;
+		ret = ret->next;
+	}
+	return NULL;
+};
+
 /*
  * get the host object by mac address
  * if not found, return NULL
@@ -169,17 +241,17 @@ void insert_fabric_host_into_list(p_fabric_host_node node){
  * UINT* mac:		the host's mac address
  * UINT4 ip:		the host's ip address
  */
-void insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip){
+p_fabric_host_node insert_fabric_host_into_list_paras(gn_switch_t* sw,UINT8 dpid,UINT4 port,UINT1* mac,UINT4 ip,UINT1* ipv6){
 	p_fabric_host_node node = NULL;
 	pthread_mutex_lock(&g_fabric_host_thread_mutex);
-	node = create_fabric_host_list_node(sw,port,mac,ip);
+	node = create_fabric_host_list_node(sw,port,mac,ip,ipv6);
 	if(node != NULL){
 		node->next = g_fabric_host_list.list;
 		g_fabric_host_list.list = node;
 		g_fabric_host_list.list_num++;
 	}
 	pthread_mutex_unlock(&g_fabric_host_thread_mutex);
-	return;
+	return node;
 };
 /*
  * remove the host object by ip address
@@ -277,11 +349,16 @@ UINT4 is_fabric_host_list_empty(){
 p_fabric_host_node create_fabric_host_queue_node(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip){
 	p_fabric_host_node ret = NULL;
 	ret = mem_get(g_fabric_host_queue_mem_id);
-	ret->sw = sw;
-	ret->port = port;
-	ret->ip_count=0;
-	add_fabric_host_ip(ret,ip);
-	memcpy(ret->mac, mac, 6);
+	if (NULL != ret) {
+		ret->sw = sw;
+		ret->port = port;
+		ret->ip_count=0;
+		add_fabric_host_ip(ret,ip);
+		memcpy(ret->mac, mac, 6);
+	}
+	else {
+		LOG_PROC("ERROR", "Create fabric host queue node: Can't get memory");
+	}
 	return ret;
 };
 void delete_fabric_host_queue_node(p_fabric_host_node node){
@@ -358,9 +435,14 @@ p_fabric_arp_request_node create_fabric_arp_request_list_node(p_fabric_host_node
 
 	p_fabric_arp_request_node ret = NULL;
 	ret = (p_fabric_arp_request_node)mem_get(g_fabric_arp_request_list_mem_id);
-	ret->src_req = src;
-	ret->dst_IP = dst_IP;
-	ret->src_IP=src_IP;
+	if (NULL != ret) {
+		ret->src_req = src;
+		ret->dst_IP = dst_IP;
+		ret->src_IP=src_IP;
+	}
+	else {
+		LOG_PROC("ERROR", "Create fabric arp request list node: Can't get memory.");
+	}
 	return ret;
 };
 /*
@@ -460,10 +542,15 @@ p_fabric_arp_flood_node create_fabric_arp_flood_node(packet_in_info_t * packet_i
 	if(packet_in_info != NULL){
 		ret = (p_fabric_arp_flood_node)mem_get(g_fabric_arp_flood_queue_mem_id);
 		//arp_data =  (arp_t *)(packet_in_info->data);
-		ret->ip = ip;
-		//memcpy(&ret->arp_data,arp_data, sizeof(arp_t));
-		memcpy(&ret->packet_in_info,packet_in_info, sizeof(packet_in_info_t));
-		//ret->packet_in_info.data = (UINT1*)&ret->arp_data;
+		if (NULL != ret) {
+			ret->ip = ip;
+			//memcpy(&ret->arp_data,arp_data, sizeof(arp_t));
+			memcpy(&ret->packet_in_info,packet_in_info, sizeof(packet_in_info_t));
+			//ret->packet_in_info.data = (UINT1*)&ret->arp_data;
+		}
+		else {
+			LOG_PROC("ERROR", "Create fabric arp flood node: Can't get memory.");
+		}
 	}
 	return ret;
 };
@@ -577,11 +664,16 @@ p_fabric_ip_flood_node create_fabric_ip_flood_node(packet_in_info_t * packet_in_
 	ip_t *ip_data = NULL;
 	if(packet_in_info != NULL){
 		ret = (p_fabric_ip_flood_node)mem_get(g_fabric_ip_flood_queue_mem_id);
-		ip_data =  (ip_t *)(packet_in_info->data);
-		ret->ip = ip;
-		memcpy(&ret->ip_data,ip_data, sizeof(ip_t));
-		memcpy(&ret->packet_in_info,packet_in_info, sizeof(packet_in_info_t));
-		ret->packet_in_info.data = (UINT1*)&ret->ip_data;
+		if (NULL != ret) {
+			ip_data =  (ip_t *)(packet_in_info->data);
+			ret->ip = ip;
+			memcpy(&ret->ip_data,ip_data, sizeof(ip_t));
+			memcpy(&ret->packet_in_info,packet_in_info, sizeof(packet_in_info_t));
+			ret->packet_in_info.data = (UINT1*)&ret->ip_data;
+		}
+		else {
+			LOG_PROC("ERROR", "Create fabric ip flood node: Can't get memory.");
+		}
 	}
 	return ret;
 };
@@ -695,12 +787,18 @@ p_fabric_flow_node create_fabric_flow_node(p_fabric_host_node src_host,
 		UINT4 dst_tag){
 	p_fabric_flow_node ret = NULL;
 	ret = (p_fabric_flow_node)mem_get(g_fabric_flow_queue_mem_id);
-	ret->src_host = src_host;
-	ret->src_tag = src_tag;
-	ret->src_IP=src_IP;
-	ret->dst_host = dst_host;
-	ret->dst_tag = dst_tag;
-	ret->dst_IP=dst_IP;
+	if (NULL != ret) {
+		ret->src_host = src_host;
+		ret->src_tag = src_tag;
+		ret->src_IP=src_IP;
+		ret->dst_host = dst_host;
+		ret->dst_tag = dst_tag;
+		ret->dst_IP=dst_IP;
+	}
+	else {
+		LOG_PROC("ERROR", "Fabric Flow node: Create failed, Can't get memory.");
+	}
+
 	return ret;
 
 };
@@ -823,4 +921,21 @@ BOOL check_IP_in_fabric_host(p_fabric_host_node node,UINT4 IP)
 	   if(node->ip_list[i]==IP)
 		   return TRUE;
 	return FALSE;
+}
+
+void set_fabric_host_port_portno(const UINT1 *mac, UINT4 ofport_no)
+{
+	p_fabric_host_node ret = NULL;
+	ret = g_fabric_host_list.list;
+	pthread_mutex_lock(&g_fabric_host_thread_mutex);
+	while(ret != NULL)
+	{
+		 if(memcmp(ret->mac, mac, 6) == 0)
+		{
+			 ret->port = ofport_no;
+			return;
+		}
+		ret = ret->next;
+	}
+	pthread_mutex_unlock(&g_fabric_host_thread_mutex);
 }

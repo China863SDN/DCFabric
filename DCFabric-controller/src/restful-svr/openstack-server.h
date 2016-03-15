@@ -39,4 +39,7 @@ void getNewTokenId(char *ip,char *tenantName,char *username,char *password);
 void getOpenstackInfo(char *ip,char *url,int port,char *string);
 void initOpenstackFabric();
 void updateOpenstackFloating();
+void reload_security_group_info();
+void reoad_lbaas_info();
+
 #endif

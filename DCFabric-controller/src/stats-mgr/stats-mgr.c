@@ -317,6 +317,7 @@ static void of_send_port_stats(gn_switch_t *sw)
     port_stats_req_data_t port_stats_req_data;
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.data = (UINT1 *)&port_stats_req_data;
 
     if(sw->ofp_version == OFP10_VERSION)
@@ -339,6 +340,7 @@ static void of_send_flow_stats(gn_switch_t *sw)
     flow_stats_req_data_t flow_stats_req_data;
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.data = (UINT1 *)&flow_stats_req_data;
 
     if(sw->ofp_version == OFP10_VERSION)

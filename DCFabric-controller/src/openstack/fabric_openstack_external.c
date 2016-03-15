@@ -31,6 +31,8 @@
 #include "mem_pool.h"
 #include "../restful-svr/openstack-server.h"
 #include "../fabric/fabric_flows.h"
+#include "openstack_host.h"
+#include "../fabric/fabric_host.h"
 
 
 void *g_openstack_external_id = NULL;
@@ -42,6 +44,8 @@ openstack_external_node_p g_openstack_floating_list = NULL;
 openstack_external_node_p g_nat_icmp_iden_list=NULL;
 
 UINT1 g_openstack_external_init_flag = 0;
+static const UINT4 external_min_seq = 1;
+static const UINT4 external_max_seq = 20;
 
 extern void find_openstack_network_by_floating_ip(UINT4 floating_ip,char* network_id);
 extern UINT4 g_openstack_on;
@@ -98,10 +102,10 @@ nat_icmp_iden_p update_nat_icmp_iden(
 		UINT4 inport);
 void destory_openstack_external();
 external_port_p find_openstack_external_by_outer_ip(UINT4 external_outer_interface_ip);
-external_floating_ip_p find_external_floating_ip_by_fixed_ip(UINT4 fixed_ip);
+
 external_port_p find_openstack_external_by_gatway_ip(UINT4 external_gateway_ip);
 external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip);
-external_floating_ip_p find_external_floating_ip_by_floating_ip(UINT4 floating_ip);
+
 external_port_p find_openstack_external_by_outer_mac(UINT1* external_gateway_mac);
 nat_icmp_iden_p find_nat_icmp_iden_by_host_ip(UINT4 host_ip);
 nat_icmp_iden_p find_nat_icmp_iden_by_host_mac(UINT1* host_mac);
@@ -203,31 +207,34 @@ void init_external_flows()
 
 	// define the pointer
 	external_port_p epp = NULL;
-
-	// get the external object
-	epp = get_external_port();
 	gn_switch_t *sw = NULL;
 
-	// if pointer is NULL
-	if (NULL == epp) {
-		LOG_PROC("ERROR", "External: init exteranl flow failed, external port not exist");
-		return ;
-	}
+	openstack_external_node_p node_p  = g_openstack_external_list;
 
-	// get sw info
-	get_sw_from_dpid(epp->external_dpid,&sw);
+	// loop to get external port
+	while(NULL != node_p)
+	{
+		epp = (external_port_p)node_p->data;
+		if(epp->external_dpid && epp->external_port)
+		{
+			// get sw info
+			get_sw_from_dpid(epp->external_dpid,&sw);
 
-	// install the flows
-	if (sw) {
-		install_fabric_openstack_external_output_flow(sw, epp->external_port, epp->external_gateway_mac, epp->external_outer_interface_ip, 1);
-		install_fabric_openstack_external_output_flow(sw, epp->external_port, epp->external_gateway_mac, epp->external_outer_interface_ip, 2);
-	}
-	else {
-		LOG_PROC("ERROR", "can not find any sw match external_dpid:[%llu]!\n", epp->external_dpid);
-		return;
-	}
+			// install the flows
+			if (sw) {
+				install_fabric_openstack_external_output_flow(sw, epp->external_port, epp->external_gateway_mac, epp->external_outer_interface_ip, 1);
+				install_fabric_openstack_external_output_flow(sw, epp->external_port, epp->external_gateway_mac, epp->external_outer_interface_ip, 2);
+			}
+			else {
+				LOG_PROC("ERROR", "can not find any sw match external_dpid:[%llu]!\n", epp->external_dpid);
+			}
 
-	LOG_PROC("INFO", "External: Finish installing external flow");
+		}
+		else {
+			LOG_PROC("ERROR", "External: init exteranl flow failed, external port not exist");
+		}
+		node_p=node_p->next;
+	}
 
 	// set the flag
 	g_openstack_external_init_flag = 1;
@@ -241,14 +248,36 @@ void update_external_config(
 		UINT8 external_dpid,
 		UINT4 external_port,
 		char* network_id){
+
+	UINT1 seq_num = external_min_seq;
+	char para_title[48] = {0};
+	INT1 *value = NULL;
+
+	for (; seq_num <= external_max_seq; seq_num++) {
+		sprintf(para_title, "[external_switch_%d]", seq_num);
+		value = get_value(g_controller_configure, para_title, "external_gateway_ip");
+		if (NULL == value) {
+			break;
+		}
+
+		if (ip2number(value) == external_gateway_ip) {
+			break;
+		}
+	}
+
+	if (seq_num > external_max_seq) {
+		LOG_PROC("INFO", "External: The external switch is max!");
+		return;
+	}
+
 	// config
-	set_value_ip(g_controller_configure, "[openvstack_conf]", "external_gateway_ip",external_gateway_ip);
-	set_value_mac(g_controller_configure, "[openvstack_conf]", "external_gateway_mac", external_gateway_mac);
-	set_value_ip(g_controller_configure, "[openvstack_conf]", "external_outer_interface_ip",external_outer_interface_ip);
-	set_value_mac(g_controller_configure, "[openvstack_conf]", "external_outer_interface_mac",external_outer_interface_mac);
-	set_value_int(g_controller_configure, "[openvstack_conf]", "external_dpid",external_dpid);
-	set_value_int(g_controller_configure, "[openvstack_conf]", "external_port",external_port);
-	set_value(g_controller_configure, "[openvstack_conf]", "external_network_id",network_id);
+	set_value_ip(g_controller_configure, para_title, "external_gateway_ip",external_gateway_ip);
+	set_value_mac(g_controller_configure, para_title, "external_gateway_mac", external_gateway_mac);
+	set_value_ip(g_controller_configure, para_title, "external_outer_interface_ip",external_outer_interface_ip);
+	set_value_mac(g_controller_configure, para_title, "external_outer_interface_mac",external_outer_interface_mac);
+	set_value_int(g_controller_configure, para_title, "external_dpid",external_dpid);
+	set_value_int(g_controller_configure, para_title, "external_port",external_port);
+	set_value(g_controller_configure, para_title, "external_network_id",network_id);
 	g_controller_configure = save_ini(g_controller_configure,CONFIGURE_FILE);
 }
 void create_floatting_ip_by_rest(
@@ -592,7 +621,7 @@ external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_i
 	external_port_p epp = NULL;
 	openstack_external_node_p node_p = g_openstack_external_list;
     char network_id[48];
-    find_openstack_network_by_floating_ip(external_floating_ip,network_id);
+    find_fabric_network_by_floating_ip(external_floating_ip,network_id);
 	while(node_p != NULL ){
 		epp = (external_port_p)node_p->data;
 		if(epp->external_dpid  && epp->external_port){
@@ -727,7 +756,7 @@ void test(UINT1 type){
 			nat_icmp_iden_p p = (nat_icmp_iden_p)(node->data);
 			if(NULL!=p){
 				node = node->next;
-				printf("g_nat_icmp_iden_list : id:[%d]  | ip:[%d]  | \n",p ->identifier,p->host_ip);
+				// printf("g_nat_icmp_iden_list : id:[%d]  | ip:[%d]  | \n",p ->identifier,p->host_ip);
 				num++;
 			}else{
 				printf("node data: %s \n",node->data);
@@ -736,7 +765,7 @@ void test(UINT1 type){
 		}
 	}
 
-	LOG_PROC("INFO", "external number: %d \n",num);
+	LOG_PROC("INFO", "external number: %d",num);
 	return;
 }
 
@@ -765,44 +794,59 @@ void read_external_port_config()
 	UINT8 external_dpid = 0;
 	UINT4 external_port = 0;
 
-	// get configure
-	INT1 *value = NULL;
-	value = get_value(g_controller_configure, "[openvstack_conf]", "external_network_id");
-	while (NULL != value) {
-		memset(network_id, 0, 48);
-		memcpy(network_id, value, 48);
+	char para_title[48] = {0};
 
-		value = get_value(g_controller_configure, "[openvstack_conf]", "external_gateway_ip");
-		external_gateway_ip = ip2number(value);
+	UINT4 seq_num = 0;
 
-		value = get_value(g_controller_configure, "[openvstack_conf]", "external_outer_interface_ip");
-		external_outer_interface_ip = ip2number(value);
+	for (seq_num = external_min_seq ; seq_num <= external_max_seq; seq_num++) {
+		sprintf(para_title, "[external_switch_%d]", seq_num);
 
-		value = get_value(g_controller_configure, "[openvstack_conf]", "external_gateway_mac");
-		memset(external_gateway_mac, 0, 6);
-		macstr2hex(value, external_gateway_mac);
+		// get configure
+		INT1 *value = NULL;
+		value = get_value(g_controller_configure, para_title, "external_network_id");
+		while (NULL != value) {
+			memset(network_id, 0, 48);
+			memcpy(network_id, value, 48);
 
-		value = get_value(g_controller_configure, "[openvstack_conf]", "external_outer_interface_mac");
-		memset(external_outer_interface_mac, 0, 6);
-		macstr2hex(value, external_outer_interface_mac);
+			value = get_value(g_controller_configure, para_title, "external_gateway_ip");
+			external_gateway_ip = ip2number(value);
 
-		value = get_value(g_controller_configure, "[openvstack_conf]", "external_dpid");
-		external_dpid = atoll(value);
+			value = get_value(g_controller_configure, para_title, "external_outer_interface_ip");
+			external_outer_interface_ip = ip2number(value);
 
-		value = get_value(g_controller_configure, "[openvstack_conf]", "external_port");
-		external_port = atoi(value);
+			value = get_value(g_controller_configure, para_title, "external_gateway_mac");
+			memset(external_gateway_mac, 0, 6);
+			macstr2hex(value, external_gateway_mac);
 
-		update_external_port(external_gateway_ip, external_gateway_mac, external_outer_interface_ip, external_outer_interface_mac,
-				external_dpid, external_port, network_id);
+			value = get_value(g_controller_configure, para_title, "external_outer_interface_mac");
+			memset(external_outer_interface_mac, 0, 6);
+			macstr2hex(value, external_outer_interface_mac);
 
-		break;
-	}
-	if (NULL == value) {
-		LOG_PROC("INFO", "External: configure is empty!");
+			value = get_value(g_controller_configure, para_title, "external_dpid");
+			external_dpid = atoll(value);
+
+			value = get_value(g_controller_configure, para_title, "external_port");
+			external_port = atoi(value);
+
+			update_external_port(external_gateway_ip, external_gateway_mac, external_outer_interface_ip, external_outer_interface_mac,
+					external_dpid, external_port, network_id);
+
+			LOG_PROC("INFO", "External: read config of switch: %d!", seq_num);
+			break;
+
+		}
+
+		if ((NULL == value) && (external_min_seq == seq_num)) {
+			LOG_PROC("INFO", "External: configure is empty!");
+		}
+
 	}
 
 
 }
 
-
+openstack_external_node_p get_floating_list()
+{
+	return g_openstack_floating_list;
+}
 

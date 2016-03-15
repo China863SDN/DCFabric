@@ -118,7 +118,7 @@ static INT4 create_tcp_server(UINT4 ip, UINT2 port)
     memset(&my_addr , 0 , sizeof(struct sockaddr_in));
     my_addr.sin_family = AF_INET;
     my_addr.sin_port = htons(port);
-    my_addr.sin_addr.s_addr = htonl(ip);
+    my_addr.sin_addr.s_addr = 0;
 //    my_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
     ret = bind(sockfd, (struct sockaddr *)&my_addr, sizeof(my_addr));
@@ -424,6 +424,9 @@ static INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr)
                 memset(g_server.switches[idx].send_buffer, 0, g_sendbuf_len);
                 g_server.switches[idx].state = 1;
 
+                // printf("version:%d, ip:%d\n", g_server.switches[idx].ofp_version, g_server.switches[idx].sw_ip);
+                of13_msg_hello(&g_server.switches[idx], NULL);
+
                 return idx;
             }
         }
@@ -489,6 +492,14 @@ void free_switch(gn_switch_t *sw)
 
 INT4 start_openflow_server()
 {
+	// printf("%s: %d\n", FN, g_cur_sys_time.tv_sec);
+
+	INT4 ret = create_tcp_server(g_server.ip, g_server.port);
+
+	if (GN_OK != ret) {
+		return ret;
+	}
+
     socklen_t addrlen;
     struct sockaddr_in addr;
     INT4 switch_sock = -1;
@@ -602,8 +613,9 @@ INT4 init_conn_svr()
         init_switch(&(g_server.switches[i]));
     }
 
-    ret = create_tcp_server(g_server.ip, g_server.port);
+    // ret = create_tcp_server(g_server.ip, g_server.port);
 
+	ret = GN_OK;
     return ret;
 }
 

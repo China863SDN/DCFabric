@@ -36,13 +36,16 @@
 #include "gn_inet.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../event/event_service.h"
 #include "openstack/openstack_host.h"
 #include "fabric_impl.h"
 #include "fabric_flows.h"
 #include "openstack/fabric_openstack_nat.h"
+#include "fabric_openstack_arp.h"
+#include "fabric_stats.h"
+#include "openstack_lbaas_app.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
@@ -399,13 +402,15 @@ convertter_t of13_convertter =
     .oxm_convertter = of13_oxm_convertter
 };
 
-static INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
+INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_hello);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_HELLO, total_len, 0);
-    send_of_msg(sw, total_len);
-
-    sw->msg_driver.msg_handler[OFPT13_FEATURES_REQUEST](sw, of_msg);
+    if (of_msg)
+    	sw->msg_driver.msg_handler[OFPT13_FEATURES_REQUEST](sw, of_msg);
+	else {
+		UINT2 total_len = sizeof(struct ofp_hello);
+	    init_sendbuff(sw, OFP13_VERSION, OFPT13_HELLO, total_len, 0);
+	    send_of_msg(sw, total_len);
+	}
 
     return GN_OK;
 }
@@ -596,6 +601,7 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     sw->msg_driver.msg_handler[OFPT13_GET_CONFIG_REQUEST](sw, of_msg);
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.type = OFPMP_DESC;
     sw->msg_driver.msg_handler[OFPT13_MULTIPART_REQUEST](sw, (UINT1 *)&stats_req_info);
 
@@ -614,8 +620,8 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     {
         UINT1 dpid[8];
         ulli64_to_uc8(sw->dpid, dpid);
-        LOG_PROC("INFO", "New Openflow13 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d]", dpid[0],
-                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port));
+        LOG_PROC("INFO", "New Openflow13 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d], dpid:%llu", dpid[0],
+                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port), sw->dpid);
         // event add a switch
         event_add_switch_on(sw);
         // event end
@@ -765,6 +771,25 @@ static INT4 of13_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 
     memset(&flow, 0, sizeof(gn_flow_t));
 
+    if (FABRIC_PRIORITY_LOADBALANCE_FLOW == flow_priority) {
+    	// LOG_PROC("INFO", "Load balance flow timeout!!");
+
+    	of13_parse_match_nat(&(ofp_fr->match), &(flow.match));
+
+    	if ((get_fabric_state()) && (0 != g_openstack_on)) {
+			if (IPPROTO_TCP == flow.match.oxm_fields.ip_proto) {
+				flow_port = flow.match.oxm_fields.tcp_src;
+			}
+
+			if (0 != flow_port) {
+				// printf("remove %d, %d\n", ntohl(flow.match.oxm_fields.ipv4_src), flow_port);
+
+				remove_openstack_lbaas_connect_by_ext_ip_portno(ntohl(flow.match.oxm_fields.ipv4_src), flow_port);
+			}
+    	}
+    }
+
+
     if (FABRIC_PRIORITY_NAT_FLOW != flow_priority) {
     	of13_parse_match(&(ofp_fr->match), &(flow.match));
 
@@ -787,7 +812,7 @@ static INT4 of13_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 			}
 
 			if (0 != flow_port) {
-				destroy_nat_connect_by_mac_and_port(ntohl(flow.match.oxm_fields.ipv4_dst), flow.match.oxm_fields.eth_src, ntohs(flow_port), flow.match.oxm_fields.ip_proto);
+				destroy_nat_connect_by_mac_and_port(sw, ntohl(flow.match.oxm_fields.ipv4_dst), flow.match.oxm_fields.eth_src, ntohs(flow_port), flow.match.oxm_fields.ip_proto);
 			}
 		}
 
@@ -878,7 +903,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
 
-        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
+        set_fabric_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
         //1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
@@ -891,6 +916,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         }
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
+        // remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
         return GN_OK;
     }
     else if (ops->reason == OFPPR_DELETE)
@@ -902,6 +928,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
             if (sw->ports[port_index].port_no == port_no)
             {
             	sw->ports[port_index].state = port_state;
+            	remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
             	of13_delete_line(sw,port_index);
                 break;
             }
@@ -930,6 +957,7 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 			{
 				sw->ports[port_index].state = port_state;
 				if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED){
+					// remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
 					of13_delete_line(sw,port_index);
 				}else if( port_state == OFPPS13_LIVE){
 					// send lldp
@@ -2851,7 +2879,7 @@ static INT4 of13_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
 
     ofm->match.type = htons(mod_info->flow->match.type);        //Default OFPMT_OXM
     match_len = of13_add_match(&ofm->match, &(mod_info->flow->match));
-    ofm->match.length = ntohs(match_len);
+    ofm->match.length = htons(match_len);
     tot_len = tot_len - sizeof(struct ofpx_match) + ALIGN_8(match_len);
 
 //    if(DEBUG)
@@ -2927,7 +2955,7 @@ static INT4 of13_msg_multipart_request(gn_switch_t *sw, UINT1 *mtp_req)
 {
     stats_req_info_t *stats_req_info = (stats_req_info_t *)mtp_req;
     UINT2 total_len = sizeof(struct ofp_multipart_request);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_MULTIPART_REQUEST, total_len, 0);
+    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_MULTIPART_REQUEST, total_len, stats_req_info->xid);
     struct ofp_multipart_request *ofp_mr = (struct ofp_multipart_request *)data;
     ofp_mr->type = htons(stats_req_info->type);
     ofp_mr->flags = htons(stats_req_info->flags);
@@ -3048,6 +3076,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
         case OFPMP_FLOW:
         {
             of13_proc_flow_stats(sw, ofp_mr->body, body_len);
+            update_fabric_flow_entries(sw, ofp_mr->body, body_len, ofp_mr->flags, ofp_mr->header.xid);
             break;
         }
 
@@ -3088,6 +3117,7 @@ static INT4 of13_msg_barrier_reply(gn_switch_t *sw, UINT1 *of_msg)
     //sw->msg_driver.msg_handler[OFPT13_PORT_MOD](sw, (UINT1 *)&omr);
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.type = OFPMP_PORT_STATS;
     stats_req_info.data = (UINT1 *)&port_stats_req_data;
     port_stats_req_data.port_no = OFPP13_ANY;

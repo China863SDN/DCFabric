@@ -34,7 +34,7 @@
 #include "../conn-svr/conn-svr.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../tenant-mgr/tenant-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../meter-mgr/meter-mgr.h"
@@ -50,6 +50,15 @@
 #include "openstack_app.h"
 #include "fabric_openstack_external.h"
 #include "fabric_openstack_nat.h"
+#include "../inc/fabric/fabric_flows.h"
+#include "../inc/fabric/fabric_stats.h"
+#include "debug_svr.h"
+
+
+//save flows recved from rest client
+flow_entry_json_t *g_flow_entry_json_list = NULL;
+UINT g_flow_entry_json_length = 0;
+
 
 //从url中解析附带的参数
 static void get_url_argument(const char *url, key_value_t *arg)
@@ -111,6 +120,9 @@ INT1 *json_to_reply(json_t *obj, INT4 code)
     //LOG_PROC("INFO", "Reply: %s", reply);
     return reply;
 }
+
+
+
 
 /****************************************************
  * switch
@@ -3020,7 +3032,7 @@ static INT1 *get_path(const const INT1 *url, json_t *root)
         {
             return json_to_reply(NULL, EC_SW_NO_PATH);
         }
-        //锟斤拷前锟斤拷锟斤拷锟斤拷锟斤拷锟�
+        //锟斤拷前锟斤拷锟斤拷锟斤拷锟斤拷锟?
         port_pre = g_adac_matrix.src_port[src_index_id][index_tmp];
 
         //锟斤拷一锟斤拷锟斤拷锟斤拷锟斤拷
@@ -3769,6 +3781,8 @@ static INT1 *setup_fabric_entries_parts(const INT1 *url, json_t *root){
 	of131_fabric_impl_setup_by_dpids(dpids,len);
 	return json_to_reply(NULL, GN_OK);
 }
+
+
 static INT1* get_fabric_path(const INT1 *url, json_t *root)
 {
     json_t *obj = json_new_object();
@@ -3865,6 +3879,1694 @@ static INT1* get_fabric_path(const INT1 *url, json_t *root)
 	return json_to_reply(obj, GN_OK);
 }
 
+
+
+
+
+
+
+
+/****************************************************
+ * DCFabric 2016-01-21
+ ****************************************************/
+INT1 *json_to_reply_desc(json_t *obj, INT4 code, const INT1 *desc)
+{
+    INT1 *reply = NULL;
+    INT1 json_tmp[32];
+    json_t *key, *value;
+
+    if (NULL == obj)
+    {
+        obj = json_new_object();
+    }
+
+    key = json_new_string("retCode");
+    sprintf(json_tmp, "%d", code);
+    value = json_new_number(json_tmp);
+    json_insert_child(key, value);
+    json_insert_child(obj, key);
+
+    key = json_new_string("retMsg");
+    value = json_new_string(get_error_msg(code));
+    json_insert_child(key, value);
+    json_insert_child(obj, key);
+
+    if (NULL != desc)
+    {
+        key = json_new_string("desc");
+        value = json_new_string(desc);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    json_tree_to_string(obj, &reply);
+    json_free_value(&obj);
+
+    //LOG_PROC("INFO", "Reply: %s", reply);
+    return reply;
+}
+
+
+
+static BOOL clear_fabric_flow_entries(const INT1 *flow_name, const gn_switch_t *sw)
+{
+    flow_entry_json_t *entry_list = g_flow_entry_json_list->next;
+    flow_entry_json_t *cur_entry = NULL;
+    while (NULL != entry_list)
+    {
+        if (0 == strncmp(flow_name, entry_list->flow_name, REST_MAX_PARAM_LEN) && sw == entry_list->sw)
+        {
+            if (NULL != entry_list->next)
+            {
+                entry_list->next->pre = entry_list->pre;
+                
+            }
+            entry_list->pre->next = entry_list->next;
+            cur_entry= entry_list;
+            entry_list = entry_list->next;
+            g_flow_entry_json_length--;
+            
+            install_fabric_flows(cur_entry->sw, cur_entry->idle_timeout, cur_entry->hard_timeout, cur_entry->priority, cur_entry->table_id, OFPFC_DELETE, cur_entry->flow_param);
+            gn_free((void **)(&cur_entry->flow_name));
+            clear_flow_param(cur_entry->flow_param);
+            gn_free((void **)(&cur_entry->data));
+            gn_free((void **)(&cur_entry));
+
+            return TRUE;
+        }
+        
+        entry_list = entry_list->next;
+    }
+
+    return FALSE;
+}
+
+
+
+static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
+{
+    gn_oxm_t *oxm_match = (gn_oxm_t *)gn_malloc(sizeof(gn_oxm_t));
+
+    //in_port
+    json_t *in_port_json = json_find_first_label(match->child, "inPort");
+    if (NULL != in_port_json)
+    {
+        oxm_match->in_port = (UINT4)strtoul(in_port_json->child->text, NULL, 10);
+    }
+
+    //in_phy_port
+    json_t *in_phy_port_json = json_find_first_label(match->child, "inPhyPort");
+    if (NULL != in_phy_port_json)
+    {
+        oxm_match->in_phy_port = (UINT4)strtoul(in_phy_port_json->child->text, NULL, 10);
+    }
+    
+    //metadata
+    json_t *metadata_json = json_find_first_label(match->child, "metadata");
+    if (NULL != metadata_json)
+    {
+        oxm_match->metadata = strtoull(metadata_json->child->text, NULL, 10);
+    }
+    
+    //eth_dst
+    json_t *eth_dst_json = json_find_first_label(match->child, "ethDst");
+    if (NULL != eth_dst_json)
+    {
+        macstr2hex(eth_dst_json->child->text, oxm_match->eth_dst);
+    }
+    
+    //eth_src
+    json_t *eth_src_json = json_find_first_label(match->child, "ethSrc");
+    if (NULL != eth_src_json)
+    {
+        macstr2hex(eth_src_json->child->text, oxm_match->eth_src);
+    }
+
+    //eth_type
+    json_t *eth_type_json = json_find_first_label(match->child, "ethType");
+    if (NULL != eth_type_json)
+    {
+        oxm_match->eth_type = (UINT2)strtoul(eth_type_json->child->text, NULL, 10);
+    }
+    
+    //vlan_vid
+    json_t *vlan_vid_json = json_find_first_label(match->child, "vlanVid");
+    if (NULL != vlan_vid_json)
+    {
+        oxm_match->vlan_vid = (UINT2)strtoul(vlan_vid_json->child->text, NULL, 10);
+    }
+    
+    //vlan_pcp
+    json_t *vlan_pcp_json = json_find_first_label(match->child, "vlanPcp");
+    if (NULL != vlan_pcp_json)
+    {
+        oxm_match->vlan_pcp = (UINT1)strtoul(vlan_pcp_json->child->text, NULL, 10);
+    }
+    
+    //ip_dscp
+    json_t *ip_dscp_json = json_find_first_label(match->child, "ipDscp");
+    if (NULL != ip_dscp_json)
+    {
+        oxm_match->ip_dscp = (UINT1)strtoul(ip_dscp_json->child->text, NULL, 10);
+    }
+    
+    //ip_ecn
+    json_t *ip_ecn_json = json_find_first_label(match->child, "ipEcn");
+    if (NULL != ip_ecn_json)
+    {
+        oxm_match->ip_ecn = (UINT1)strtoul(ip_ecn_json->child->text, NULL, 10);
+    }
+    
+    //ip_proto
+    json_t *ip_proto_json = json_find_first_label(match->child, "ipProto");
+    if (NULL != ip_proto_json)
+    {
+        oxm_match->ip_proto = (UINT1)strtoul(ip_proto_json->child->text, NULL, 10);
+    }
+    
+    //ipv4_src
+    json_t *ipv4_src_json = json_find_first_label(match->child, "ipv4Src");
+    if (NULL != ipv4_src_json)
+    {
+        oxm_match->ipv4_src = ntohl(ip2number(ipv4_src_json->child->text));
+    }
+    
+    //ipv4_dst
+    json_t *ipv4_dst_json = json_find_first_label(match->child, "ipv4Dst");
+    if (NULL != ipv4_dst_json)
+    {
+        oxm_match->ipv4_dst = ntohl(ip2number(ipv4_dst_json->child->text));
+    }
+    
+    //tcp_src
+    json_t *tcp_src_json = json_find_first_label(match->child, "tcpSrc");
+    if (NULL != tcp_src_json)
+    {
+        oxm_match->tcp_src = (UINT2)strtoul(tcp_src_json->child->text, NULL, 10);
+    }
+    
+    //tcp_dst
+    json_t *tcp_dst_json = json_find_first_label(match->child, "tcpDst");
+    if (NULL != tcp_dst_json)
+    {
+        oxm_match->tcp_dst = (UINT2)strtoul(tcp_dst_json->child->text, NULL, 10);
+    }
+    
+    //udp_src
+    json_t *udp_src_json = json_find_first_label(match->child, "udpSrc");
+    if (NULL != udp_src_json)
+    {
+        oxm_match->udp_src = (UINT2)strtoul(udp_src_json->child->text, NULL, 10);
+    }
+    
+    //udp_dst
+    json_t *udp_dst_json = json_find_first_label(match->child, "udpDst");
+    if (NULL != udp_dst_json)
+    {
+        oxm_match->udp_dst = (UINT2)strtoul(udp_dst_json->child->text, NULL, 10);
+    }
+    
+    //sctp_src
+    //json_t *sctp_src_json = json_find_first_label(match->child, "sctpSrc");
+    //if (NULL != sctp_src_json)
+    //{
+    //    oxm_match->sctp_src = (UINT2)strtoul(sctp_src_json->child->text, NULL, 10);
+    //}
+    
+    //sctp_dst
+    //json_t *sctp_dst_json = json_find_first_label(match->child, "sctpDst");
+    //if (NULL != sctp_dst_json)
+    //{
+    //    oxm_match->sctp_dst = (UINT2)strtoul(sctp_dst_json->child->text, NULL, 10);
+    //}
+    
+    //icmpv4_type
+    json_t *icmpv4_type_json = json_find_first_label(match->child, "icmpv4Type");
+    if (NULL != icmpv4_type_json)
+    {
+        oxm_match->icmpv4_type = (UINT1)strtoul(icmpv4_type_json->child->text, NULL, 10);
+    }
+    
+    //icmpv4_code
+    json_t *icmpv4_code_json = json_find_first_label(match->child, "icmpv4Code");
+    if (NULL != icmpv4_code_json)
+    {
+        oxm_match->icmpv4_code = (UINT1)strtoul(icmpv4_code_json->child->text, NULL, 10);
+    }
+    
+    //arp_op
+    json_t *arp_op_json = json_find_first_label(match->child, "arpOp");
+    if (NULL != arp_op_json)
+    {
+        oxm_match->arp_op = (UINT1)strtoul(arp_op_json->child->text, NULL, 10);
+    }
+    
+    //arp_spa
+    json_t *arp_spa_json = json_find_first_label(match->child, "arpSpa");
+    if (NULL != arp_spa_json)
+    {
+        oxm_match->arp_spa = (UINT4)strtoul(arp_spa_json->child->text, NULL, 10);
+    }
+    
+    //arp_tpa
+    json_t *arp_tpa_json = json_find_first_label(match->child, "arpTpa");
+    if (NULL != arp_tpa_json)
+    {
+        oxm_match->arp_tpa = (UINT4)strtoul(arp_tpa_json->child->text, NULL, 10);
+    }
+    
+    //arp_sha
+    json_t *arp_sha_json = json_find_first_label(match->child, "arpSha");
+    if (NULL != arp_sha_json)
+    {
+        memcpy(oxm_match->arp_sha, arp_sha_json->child->text, 6);
+    }
+    
+    //arp_tha
+    json_t *arp_tha_json = json_find_first_label(match->child, "arpTha");
+    if (NULL != arp_tha_json)
+    {
+        memcpy(oxm_match->arp_tha, arp_tha_json->child->text, 6);
+    }
+    
+    //ipv6_src
+    json_t *ipv6_src_json = json_find_first_label(match->child, "ipv6Src");
+    if (NULL != ipv6_src_json)
+    {
+        ipv6_str_to_number(ipv6_src_json->child->text, oxm_match->ipv6_src);
+    }
+
+    //ipv6_dst
+    json_t *ipv6_dst_json = json_find_first_label(match->child, "ipv6Dst");
+    if (NULL != ipv6_dst_json)
+    {
+        ipv6_str_to_number(ipv6_dst_json->child->text, oxm_match->ipv6_dst);
+    }
+
+    //ipv6_flabel
+    //json_t *ipv6_flabel_json = json_find_first_label(match->child, "ipv6Flabel");
+    //if (NULL != ipv6_flabel_json)
+    //{
+    //    oxm_match->ipv6_flabel = (UINT4)strtoul(ipv6_flabel_json->child->text, NULL, 10);
+    //}
+    
+    //icmpv6_type
+    //json_t *icmpv6_type_json = json_find_first_label(match->child, "icmpv6Type");
+    //if (NULL != icmpv6_type_json)
+    //{
+    //    oxm_match->icmpv6_type = (UINT1)strtoul(icmpv6_type_json->child->text, NULL, 10);
+    //}
+    
+    //icmpv6_code
+    //json_t *icmpv6_code_json = json_find_first_label(match->child, "icmpv6Code");
+    //if (NULL != icmpv6_code_json)
+    //{
+    //    oxm_match->icmpv6_code = (UINT1)strtoul(icmpv6_code_json->child->text, NULL, 10);
+    //}
+    
+    //ipv6_nd_target
+    //json_t *ipv6_nd_target_json = json_find_first_label(match->child, "ipv6NdTarget");
+    //if (NULL != ipv6_nd_target_json)
+    //{
+    //    oxm_match->ipv6_nd_target = (UINT1)strtoul(ipv6_nd_target_json->child->text, NULL, 10);
+    //}
+    
+    //ipv6_nd_sll
+    //json_t *ipv6_nd_sll_json = json_find_first_label(match->child, "ipv6NdSll");
+    //if (NULL != ipv6_nd_sll_json)
+    //{
+    //    oxm_match->ipv6_nd_sll = (UINT1)strtoul(ipv6_nd_sll_json->child->text, NULL, 10);
+    //}
+    
+    //ipv6_nd_tll
+    //json_t *ipv6_nd_tll_json = json_find_first_label(match->child, "ipv6NdTll");
+    //if (NULL != ipv6_nd_tll_json)
+    //{
+    //    oxm_match->ipv6_nd_tll = (UINT1)strtoul(ipv6_nd_tll_json->child->text, NULL, 10);
+    //}
+    
+    //mpls_label
+    json_t *mpls_label_json = json_find_first_label(match->child, "mplsLabel");
+    if (NULL != mpls_label_json)
+    {
+        oxm_match->mpls_label = (UINT4)strtoul(mpls_label_json->child->text, NULL, 10);
+    }
+    
+    //mpls_tc
+    //json_t *mpls_tc_json = json_find_first_label(match->child, "mplsTc");
+    //if (NULL != mpls_tc_json)
+    //{
+    //    oxm_match->mpls_tc = (UINT1)strtoul(mpls_tc_json->child->text, NULL, 10);
+    //}
+    
+    //mpls_bos
+    //json_t *mpls_bos_json = json_find_first_label(match->child, "mplsBos");
+    //if (NULL != mpls_bos_json)
+    //{
+    //    oxm_match->mpls_bos = (UINT1)strtoul(mpls_bos_json->child->text, NULL, 10);
+    //}
+    
+    //pbb_isid
+    //json_t *pbb_isid_json = json_find_first_label(match->child, "pbbIsid");
+    //if (NULL != pbb_isid_json)
+    //{
+    //    oxm_match->pbb_isid = (UINT1)strtoul(pbb_isid_json->child->text, NULL, 10);
+    //}
+    
+    //tunnel_id
+    json_t *tunnel_id_json = json_find_first_label(match->child, "tunnelId");
+    if (NULL != tunnel_id_json)
+    {
+        oxm_match->tunnel_id = (UINT4)strtoul(tunnel_id_json->child->text, NULL, 10);
+    }
+    
+    //ipv6_exthdr
+    //json_t *ipv6_exthdr_json = json_find_first_label(match->child, "ipv6Exthdr");
+    //if (NULL != ipv6_exthdr_json)
+    //{
+    //    oxm_match->ipv6_exthdr = (UINT1)strtoul(ipv6_exthdr_json->child->text, NULL, 10);
+    //}
+    
+    return oxm_match;
+}
+
+
+
+
+static void json_fabric_add_oxm(json_t *obj, gn_oxm_t *oxm_fields)
+{
+    INT1 json_temp[1024];
+    json_t *key = NULL, *value = NULL;
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IN_PORT))
+    {
+        sprintf(json_temp, "%u", oxm_fields->in_port);
+        key = json_new_string("inPort");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IN_PHY_PORT))
+    {
+        sprintf(json_temp, "%u", oxm_fields->in_phy_port);
+        key = json_new_string("inPhyPort");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if(oxm_fields->mask & (MASK_SET << OFPXMT_OFB_METADATA))
+    {
+        sprintf(json_temp, "%llu", oxm_fields->metadata);
+        key = json_new_string("metadata");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_DST))
+    {
+        sprintf(json_temp, "%02x:%02x:%02x:%02x:%02x:%02x", oxm_fields->eth_dst[0],
+                oxm_fields->eth_dst[1], oxm_fields->eth_dst[2],
+                oxm_fields->eth_dst[3], oxm_fields->eth_dst[4],
+                oxm_fields->eth_dst[5]);
+        key = json_new_string("ethDst");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_SRC))
+    {
+        sprintf(json_temp, "%02x:%02x:%02x:%02x:%02x:%02x", oxm_fields->eth_src[0],
+                oxm_fields->eth_src[1], oxm_fields->eth_src[2],
+                oxm_fields->eth_src[3], oxm_fields->eth_src[4],
+                oxm_fields->eth_src[5]);
+        key = json_new_string("ethSrc");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ETH_TYPE))
+    {
+        key = json_new_string("ethType");
+        if (oxm_fields->eth_type == ETHER_ARP)
+        {
+            value = json_new_string("ARP");
+        }
+        else if (oxm_fields->eth_type == ETHER_IP)
+        {
+            value = json_new_string("IPV4");
+        }
+        else if (oxm_fields->eth_type == ETHER_IPV6)
+        {
+            value = json_new_string("IPV6");
+        }
+        else if (oxm_fields->eth_type == ETHER_MPLS)
+        {
+            value = json_new_string("MPLS");
+        }
+        else if (oxm_fields->eth_type == ETHER_VLAN)
+        {
+            value = json_new_string("VLAN");
+        }
+        else
+        {
+            value = json_new_string("UNKNOW");
+        }
+
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_VLAN_VID))
+    {
+        sprintf(json_temp, "%d", oxm_fields->vlan_vid);
+        key = json_new_string("vlanVid");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_VLAN_PCP))
+    {
+        sprintf(json_temp, "%d", oxm_fields->vlan_pcp);
+        key = json_new_string("vlanPcp");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IP_DSCP))
+    {
+        sprintf(json_temp, "%d", oxm_fields->ip_dscp);
+        key = json_new_string("ipDscp");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IP_ECN))
+    {
+        sprintf(json_temp, "%d", oxm_fields->ip_ecn);
+        key = json_new_string("ipEcn");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IP_PROTO))
+    {
+        key = json_new_string("ipProto");
+        if (oxm_fields->ip_proto == IPPROTO_ICMP)
+        {
+            value = json_new_string("ICMP");
+        }
+        else if (oxm_fields->ip_proto == IPPROTO_TCP)
+        {
+            value = json_new_string("TCP");
+        }
+        else if (oxm_fields->ip_proto == IPPROTO_UDP)
+        {
+            value = json_new_string("UDP");
+        }
+        else
+        {
+            //
+        }
+
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC))
+    {
+        key = json_new_string("ipv4Src");
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))
+        {
+            sprintf(json_temp, "%s/%u", inet_htoa(oxm_fields->ipv4_src),
+                    oxm_fields->ipv4_src_prefix);
+        }
+        else
+        {
+            sprintf(json_temp, "%s", inet_htoa(oxm_fields->ipv4_src));
+        }
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST))
+    {
+        key = json_new_string("ipv4Dst");
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))
+        {
+            sprintf(json_temp, "%s/%u", inet_htoa(oxm_fields->ipv4_dst),
+                    oxm_fields->ipv4_dst_prefix);
+        }
+        else
+        {
+            sprintf(json_temp, "%s", inet_htoa(oxm_fields->ipv4_dst));
+        }
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TCP_SRC))
+    {
+        sprintf(json_temp, "%d", oxm_fields->tcp_src);
+        key = json_new_string("tcpSrc");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TCP_DST))
+    {
+        sprintf(json_temp, "%d", oxm_fields->tcp_dst);
+        key = json_new_string("tcpDst");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_UDP_SRC))
+    {
+        sprintf(json_temp, "%d", oxm_fields->udp_src);
+        key = json_new_string("udpSrc");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_UDP_DST))
+    {
+        sprintf(json_temp, "%d", oxm_fields->udp_dst);
+        key = json_new_string("udpDst");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_SCTP_SRC))
+//    {
+//
+//    }
+//
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_SCTP_DST))
+//    {
+//
+//    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV4_TYPE))
+    {
+        sprintf(json_temp, "%d", oxm_fields->icmpv4_type);
+        key = json_new_string("icmpv4Type");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ICMPV4_CODE))
+    {
+        sprintf(json_temp, "%d", oxm_fields->icmpv4_code);
+        key = json_new_string("icmpv4Code");
+        value = json_new_number(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_OP))
+    {
+        sprintf(json_temp, "%d", oxm_fields->arp_op);
+        key = json_new_string("arpOp");
+        if (oxm_fields->arp_op == 1)
+        {
+            value = json_new_string("Request");
+        }
+        else
+        {
+            value = json_new_string("Reply");
+        }
+
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_SPA))
+    {
+        key = json_new_string("arpSpa");
+        value = json_new_string(inet_htoa(oxm_fields->arp_spa));
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_TPA))
+    {
+        key = json_new_string("arpTpa");
+        value = json_new_string(inet_htoa(oxm_fields->arp_tpa));
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_SHA))
+    {
+        sprintf(json_temp, "%02x:%02x:%02x:%02x:%02x:%02x", oxm_fields->arp_sha[0],
+                oxm_fields->arp_sha[1], oxm_fields->arp_sha[2],
+                oxm_fields->arp_sha[3], oxm_fields->arp_sha[4],
+                oxm_fields->arp_sha[5]);
+        key = json_new_string("arpSha");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_ARP_THA))
+    {
+        sprintf(json_temp, "%02x:%02x:%02x:%02x:%02x:%02x", oxm_fields->arp_tha[0],
+                oxm_fields->arp_tha[1], oxm_fields->arp_tha[2],
+                oxm_fields->arp_tha[3], oxm_fields->arp_tha[4],
+                oxm_fields->arp_tha[5]);
+        key = json_new_string("arpTha");
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC))
+    {
+        char sipv6[40] = { 0 };
+        inet_ntop(AF_INET6, (char *) (oxm_fields->ipv6_src), sipv6, 40);
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX))
+        {
+            sprintf(json_temp, "%s/%u", sipv6, oxm_fields->ipv6_src_prefix);
+            value = json_new_string(json_temp);
+        }
+        else
+        {
+            value = json_new_string(sipv6);
+        }
+
+        key = json_new_string("ipv6Src");
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST))
+    {
+        char sipv6[40] = { 0 };
+        inet_ntop(AF_INET6, (char *) (oxm_fields->ipv6_dst), sipv6, 40);
+        if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX))
+        {
+            sprintf(json_temp, "%s/%u", sipv6, oxm_fields->ipv6_dst_prefix);
+            value = json_new_string(json_temp);
+        }
+        else
+        {
+            value = json_new_string(sipv6);
+        }
+
+        key = json_new_string("ipv6Dst");
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_FLABEL))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_ICMPV6_TYPE))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_ICMPV6_CODE))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_ND_TARGET))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_ND_SLL))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_ND_TLL))
+//    {
+//    }
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_MPLS_LABEL))
+    {
+        key = json_new_string("mplsLabel");
+        sprintf(json_temp, "%u", oxm_fields->mpls_label);
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_MPLS_TC))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFP_MPLS_BOS))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_PBB_ISID))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_TUNNEL_ID))
+//    {
+//    }
+//    if(oxm_fields->wildcards & (mask_set << OFPXMT_OFB_IPV6_EXTHDR))
+//    {
+//    }
+    if (oxm_fields->mask & (MASK_SET << OFPXMT_OFB_TUNNEL_ID))
+    {
+        key = json_new_string("tunnelId");
+        sprintf(json_temp, "%u", oxm_fields->tunnel_id);
+        value = json_new_string(json_temp);
+        json_insert_child(key, value);
+        json_insert_child(obj, key);
+    }
+
+}
+
+
+static INT1 *json_fabric_parse_flow(json_t *Obj, stats_fabric_flow_t *list)
+{
+    UINT1 dpid[8];
+    INT1 json_temp[1024];
+    gn_switch_t *sw = NULL;
+    gn_flow_t *flow = NULL;
+    json_t *key, *value, *sw_array, *sw_obj, *flow_array, *flow_obj, *tmp_obj = NULL;
+
+    key = json_new_string("switchFlowEntries");
+    sw_array = json_new_array();
+    json_insert_child(key, sw_array);
+    json_insert_child(Obj, key);
+
+    while (NULL != list && NULL != list->sw && NULL != list->flow)
+    {
+        if (1 == list->sw->state)
+        {
+            sw_obj = json_new_object();
+            json_insert_child(sw_array, sw_obj);
+
+            sw = list->sw;
+            ulli64_to_uc8(sw->dpid, dpid);
+            sprintf(json_temp, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", dpid[0],
+                    dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6],
+                    dpid[7]);
+
+            key = json_new_string("DPID");
+            value = json_new_string(json_temp);
+            json_insert_child(key, value);
+            json_insert_child(sw_obj, key);
+
+            key = json_new_string("flowEntries");
+            flow_array = json_new_array();
+            json_insert_child(key, flow_array);
+            json_insert_child(sw_obj, key);
+
+            flow = list->flow;
+            while (flow)
+            {            
+                flow_obj = json_new_object();
+                json_insert_child(flow_array, flow_obj);
+                /*
+                key = json_new_string("uuid");
+                value = json_new_string(flow->uuid);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("creater");
+                value = json_new_string(flow->creater);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("createTime");
+                sprintf(json_temp, "%llu", flow->create_time);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+                */
+
+                key = json_new_string("tableId");
+                sprintf(json_temp, "%d", flow->table_id);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("idleTimeout");
+                sprintf(json_temp, "%d", flow->idle_timeout);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("hardTimeout");
+                sprintf(json_temp, "%d", flow->hard_timeout);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("priority");
+                sprintf(json_temp, "%d", flow->priority);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("durationSec");
+                sprintf(json_temp, "%u", flow->stats.duration_sec);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("byteCount");
+                sprintf(json_temp, "%llu", flow->stats.byte_count);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("packetCount");
+                sprintf(json_temp, "%llu", flow->stats.packet_count);
+                value = json_new_string(json_temp);
+                json_insert_child(key, value);
+                json_insert_child(flow_obj, key);
+
+                key = json_new_string("match");
+                tmp_obj = json_new_object();
+                json_insert_child(key, tmp_obj);
+                json_insert_child(flow_obj, key);
+                json_fabric_add_oxm(tmp_obj, &(flow->match.oxm_fields));
+
+                key = json_new_string("instructions");
+                tmp_obj = json_new_object();
+                json_insert_child(key, tmp_obj);
+                json_insert_child(flow_obj, key);
+
+                json_add_instructions(tmp_obj, flow->instructions);
+
+                flow = flow->next;
+            }
+        }
+
+        list = list->next;
+    }
+
+    return json_to_reply_desc(Obj, GN_OK, NULL);
+}
+
+
+
+
+/****************************************************
+ * Get all switches's properties
+ * GET URL eg: http://Controllerhost:8081/dcf/get/all/switchinfo/json
+ ****************************************************/
+static INT1 *get_fabric_all_switch_info(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+
+    json_t *nodes = json_new_string("nodeProperties");
+    json_t *nodes_array = json_new_array();
+    json_insert_child(nodes, nodes_array);
+    json_insert_child(obj, nodes);
+
+    json_t *node = NULL;
+    json_t *node_header = NULL;
+    json_t *node_body = NULL;
+    json_t *body_child = NULL;
+    json_t *key = NULL;
+    json_t *value = NULL;
+    gn_switch_t *sw = NULL;
+    UINT1 buf[8] = {0};
+    INT1 json_tmp[1024] = {0};
+
+    int i = 0;
+    for (; i < g_server.max_switch; i++)
+    {
+        sw = &g_server.switches[i];
+        if (1 == sw->state)
+        {
+            node = json_new_object();
+            json_insert_child(nodes_array,node);
+
+            //header
+            {
+                key = json_new_string("node");
+                node_header = json_new_object();
+                json_insert_child(key, node_header);
+                json_insert_child(node, key);
+                //id
+                ulli64_to_uc8(sw->dpid, buf);
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", buf[0],
+                    buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7]);
+                key = json_new_string("id");
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(node_header, key);
+
+                //type
+                key = json_new_string("type");
+                value = json_new_string("OF");
+                json_insert_child(key, value);
+                json_insert_child(node_header, key);
+            }
+
+            //body
+            {
+                key = json_new_string("properties");
+                node_body = json_new_object();
+                json_insert_child(key, node_body);
+                json_insert_child(node, key);
+
+                //tables
+                key = json_new_string("tables");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%u", sw->n_tables);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+                
+                //description
+                key = json_new_string("description");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%s %s", sw->sw_desc.mfr_desc, sw->sw_desc.sw_desc);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //actions
+                key = json_new_string("actions");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                value = json_new_string("-1");
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //macAddress
+                key = json_new_string("macAddress");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%02x:%02x:%02x:%02x:%02x:%02x",
+                        sw->lo_port.hw_addr[0], sw->lo_port.hw_addr[1],
+                        sw->lo_port.hw_addr[2], sw->lo_port.hw_addr[3],
+                        sw->lo_port.hw_addr[4], sw->lo_port.hw_addr[5]);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //capabilities
+                key = json_new_string("capabilities");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%u", sw->capabilities);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //timeStamp
+                key = json_new_string("timeStamp");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                value = json_new_string("-1");
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                key = json_new_string("name");
+                value = json_new_string("");
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+
+                //buffers
+                key = json_new_string("buffers");
+                body_child = json_new_object();
+                json_insert_child(key, body_child);
+                json_insert_child(node_body, key);
+
+                key = json_new_string("value");
+                memset(json_tmp, 0, 1024);
+                sprintf(json_tmp, "%u", sw->n_buffers);
+                value = json_new_string(json_tmp);
+                json_insert_child(key, value);
+                json_insert_child(body_child, key);
+            }
+        }
+    }
+
+    return json_to_reply(obj, GN_OK);
+}
+
+
+
+/****************************************************
+ * Get switch info by dpid
+ * GET URL eg: http://Controllerhost:8081/dcf/get/switchinfo/json/00:00:00:00:00:00:00:01
+ ****************************************************/
+static INT1 *get_fabric_switch_info(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    
+    //Get node id
+    INT1 *url_head = "/dcf/get/switchinfo/json/";
+    UINT url_head_len = strlen(url_head);
+    UINT url_len = strlen(url);
+    if (url_len <= url_head_len)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid url!");
+    }
+
+    UINT8 node_id = 0;
+    const INT1 *dpid = url + url_head_len;
+    if (-1 == dpidStr2Uint8(dpid, &node_id))
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid dpid!");
+    }
+
+    //find the switch by nodeid
+    int i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        sw = &g_server.switches[i];
+        if (node_id == sw->dpid && 1 == sw->state)
+        {
+            break;
+        }
+    }
+
+    //if not exist
+    if (i >= g_server.max_switch)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:can't find the switch!");
+    }
+
+    //arrange json retvalue
+    json_t *node = json_new_string("nodeConnectorProperties");
+    json_t *node_array = json_new_array();
+    json_insert_child(node, node_array);
+    json_insert_child(obj, node);
+
+    json_t *port = NULL;
+    json_t *header = NULL;
+    json_t *body = NULL;
+    json_t *key = NULL;
+    json_t *value = NULL;
+    json_t *child = NULL;
+    INT1 json_tmp[1024] = {0};
+    for (i = 0; i < sw->n_ports; i++)
+    {
+        gn_port_t *gn_port = &sw->ports[i];
+        //one port info
+        port = json_new_object();
+        json_insert_child(node_array, port);
+
+        //port header
+        {
+            key = json_new_string("nodeconnector");
+            header = json_new_object();
+            json_insert_child(key, header);
+            json_insert_child(port, key);
+
+            //node
+            key = json_new_string("node");
+            child = json_new_object();
+            json_insert_child(key, child);
+            json_insert_child(header, key);
+
+            //node id
+            key = json_new_string("id");
+            value = json_new_string(dpid);
+            json_insert_child(key, value);
+            json_insert_child(child, key);
+
+            //node type
+            key = json_new_string("type");
+            value = json_new_string("OF");
+            json_insert_child(key, value);
+            json_insert_child(child, key);
+
+            //id
+            key = json_new_string("id");
+            memset(json_tmp, 0 , 1024);
+            sprintf(json_tmp, "%u", gn_port->port_no);
+            value = json_new_string(json_tmp);
+            json_insert_child(key, value);
+            json_insert_child(header, key);
+
+            //node type
+            key = json_new_string("type");
+            value = json_new_string("OF");
+            json_insert_child(key, value);
+            json_insert_child(header, key);
+        }
+
+        //port body
+        {
+            key = json_new_string("properties");
+            body = json_new_object();
+            json_insert_child(key, body);
+            json_insert_child(port, key);
+
+            //state
+            key = json_new_string("state");
+            memset(json_tmp, 0 , 1024);
+            sprintf(json_tmp, "%u", gn_port->state);
+            value = json_new_string(json_tmp);
+            json_insert_child(key, value);
+            json_insert_child(body, key);
+
+            //config
+            key = json_new_string("config");
+            memset(json_tmp, 0 , 1024);
+            sprintf(json_tmp, "%u", gn_port->config);
+            value = json_new_string(json_tmp);
+            json_insert_child(key, value);
+            json_insert_child(body, key);
+
+            //name
+            key = json_new_string("name");
+            value = json_new_string(gn_port->name);
+            json_insert_child(key, value);
+            json_insert_child(body, key);
+        }
+    }
+
+    return json_to_reply(obj, GN_OK);
+
+}
+
+
+
+
+/****************************************************
+ * Add flow
+ * PUT URL eg: http://Controllerhost:8081/dcf/put/flowentries/json
+ ****************************************************/
+static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
+{   
+    json_t *obj = json_new_object();
+    
+    json_t *flowconfig = json_find_first_label(root, "flowConfig");
+	if (NULL == flowconfig)
+	{
+		return json_to_reply_desc(obj, GN_ERR, "[ERROR]:there is no flowConfig label!");
+	}
+
+    json_t *flow_entry = flowconfig->child;
+	if (NULL == flow_entry)
+	{
+		return json_to_reply_desc(obj, GN_ERR, "[ERROR]:empty flowConfig!");
+	}
+    //installInHw
+    json_t *installInHw_json = json_find_first_label(flow_entry, "installInHw");
+    if (NULL != installInHw_json)
+    {
+        if (0 != strcmp("true", installInHw_json->child->text) 
+            && 0 != strcmp("TRUE", installInHw_json->child->text))
+        {
+            return json_to_reply_desc(obj, GN_OK, "[WARN]:installInHw is not true or TRUE, just drop it");
+        }
+    }
+
+    //name
+    json_t *name_json = json_find_first_label(flow_entry, "name");
+    if (NULL == name_json)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:there is no name label in flowConfig!");
+    }
+    INT4 len = strlen(name_json->child->text);
+    if (len >= REST_MAX_PARAM_LEN)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:name is too long!");
+    }
+    
+    //dpid
+    json_t *node = json_find_first_label(flow_entry, "node");
+    if (NULL == node)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:there is no node label in flowConfig!");
+
+    }
+
+    json_t *id = json_find_first_label(node->child, "id");
+    if (NULL == id)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:there is no id label in node!");
+    }
+
+    UINT8 dpid = 0;
+    if (-1 == dpidStr2Uint8(id->child->text, &dpid))
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid id in node!");
+
+    }
+
+    //find the switch by nodeid
+    INT4 i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        sw = &g_server.switches[i];
+        if (dpid == sw->dpid && 1 == sw->state)
+        {
+            break;
+        }
+    }
+
+    //if not exist
+    if (i >= g_server.max_switch)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:can't find the switch!");
+    }
+
+    //check if same flow has been installed by sw and name
+    INT1 *desc = NULL;
+    if (clear_fabric_flow_entries(name_json->child->text, sw))
+    {
+        desc = "[WARN]:same flow has been installed, overwrite it.";
+    }
+
+    //priority
+    json_t *priority_json = json_find_first_label(flow_entry, "priority");
+    UINT2 priority = 0;
+    if (NULL != priority_json)
+    {
+        priority = (UINT2)strtoul(priority_json->child->text, NULL, 10);
+    }
+
+    //idle_timeout
+    json_t *idle_json = json_find_first_label(flow_entry, "idleTimeout");
+    UINT2 idle_timeout = 0;
+    if (NULL != idle_json)
+    {
+        idle_timeout = (UINT2)strtoul(idle_json->child->text, NULL, 10);
+    }
+
+    //hard_timeout
+    json_t *hard_json = json_find_first_label(flow_entry, "hardTimeout");
+    UINT2 hard_timeout = 0;
+    if (NULL != hard_json)
+    {
+        hard_timeout = (UINT2)strtoul(hard_json->child->text, NULL, 10);
+    }
+
+    //table_id
+    json_t *table_id_json = json_find_first_label(flow_entry, "tableId");
+    UINT1 table_id = 0;
+    if (NULL != table_id_json)
+    {
+        table_id = (UINT1)strtoul(table_id_json->child->text, NULL, 10);
+    }
+
+    //prepare flow_param
+    flow_param_t *flow_param = init_flow_param();
+
+    //match
+    json_t *match = json_find_first_label(flow_entry, "match");
+    gn_oxm_t *oxm_match = NULL;
+    if (NULL != match)
+    {
+        oxm_match = json_fabric_parse_oxm(match);
+    }
+
+    flow_param->match_param = oxm_match;
+    
+    //instructions
+    json_t *instructions_json = json_find_first_label(flow_entry, "instructions");
+    UINT8 *value_list = gn_malloc(REST_MAX_ACTION_NUM * sizeof(UINT8));
+    INT4 value_index = 0;
+    if ((NULL != instructions_json) && (NULL != instructions_json->child) && (NULL != instructions_json->child->child))
+    {
+        json_t *instruction_json = instructions_json->child->child;
+        
+        while (NULL != instruction_json && value_index < REST_MAX_ACTION_NUM)
+        {
+            json_t *type_json = json_find_first_label(instruction_json, "type");
+            if (NULL == type_json)
+            {
+                instruction_json = instruction_json->next;
+                continue;
+            }
+            UINT2 type = (UINT2)strtoul(type_json->child->text, NULL, 10);
+            UINT8 value = 0;
+            json_t *value_json = json_find_first_label(instruction_json, "value");
+            if (NULL == value_json)
+            {
+                if (OFPIT_WRITE_ACTIONS != type 
+                        && OFPIT_APPLY_ACTIONS != type 
+                        && OFPIT_CLEAR_ACTIONS != type)
+                {
+                    instruction_json = instruction_json->next;
+                    continue;
+                }
+            }
+            else
+            {
+                value = strtoull(value_json->child->text, NULL, 10);
+            }
+            
+            switch (type)
+            {
+                case OFPIT_GOTO_TABLE:
+                {
+                    value_list[value_index] = value;
+                    add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)(value_list + value_index));
+                    value_index++;
+                    break;
+                }
+                case OFPIT_WRITE_METADATA:
+                {
+                    json_t *metadata_mask_json = json_find_first_label(instruction_json, "metadataMask");
+                    if (NULL == metadata_mask_json)
+                    {
+                        break;
+                    }
+                    
+                    value_list[value_index] = value;
+                    add_action_param(&flow_param->instruction_param, OFPIT_WRITE_METADATA, (void*)(value_list + value_index));
+                    value_index++;
+                    value_list[value_index] = strtoull(metadata_mask_json->child->text, NULL, 10);
+                    value_index++;
+                    
+                    break;
+                }
+                case OFPIT_METER:
+                {
+                    value_list[value_index] = value;
+                    add_action_param(&flow_param->instruction_param, OFPIT_METER, (void*)(value_list + value_index));
+                    value_index++;
+                    break;
+                }
+                case OFPIT_EXPERIMENTER:
+                {   
+                    value_list[value_index] = value;
+                    add_action_param(&flow_param->instruction_param, OFPIT_EXPERIMENTER, (void*)(value_list + value_index));
+                    value_index++;
+                    break;
+                }
+                case OFPIT_WRITE_ACTIONS:
+                case OFPIT_APPLY_ACTIONS:
+                case OFPIT_CLEAR_ACTIONS:
+                {
+                    //get all actions
+                    json_t *actions = json_find_first_label(instruction_json, "actions");
+                    if (NULL == actions || NULL == actions->child || NULL == actions->child->child)
+                    {
+                        break;
+                    }
+
+                    json_t *action_json = actions->child->child;
+                    while (NULL != action_json)
+                    {
+                        json_t *action_type_json = json_find_first_label(action_json, "type");
+                        if (NULL == action_type_json)
+                        {
+                            action_json = action_json->next;
+                            continue;
+                        }
+                        UINT2 action_type = (UINT2)strtoul(action_type_json->child->text, NULL, 10);
+
+                        json_t *action_value_json = json_find_first_label(action_json, "value");
+                        UINT8 action_value = 0;
+                        if (NULL == action_value_json)
+                        {
+                            if (OFPAT13_SET_FIELD != action_type)
+                            {
+                                action_json = action_json->next;
+                                continue;
+                            }
+                        }
+                        else
+                        {
+                            action_value = strtoull(action_value_json->child->text, NULL, 10);
+                        }
+
+                        switch (action_type)
+                        {
+                            case OFPAT13_OUTPUT:
+                            case OFPAT13_MPLS_TTL:
+                            case OFPAT13_POP_MPLS:
+                            case OFPAT13_SET_QUEUE:
+                            case OFPAT13_GROUP:
+                            case OFPAT13_SET_NW_TTL:
+                            case OFPAT13_PUSH_PBB:
+                            case OFPAT13_PUSH_VLAN:
+                            case OFPAT13_PUSH_MPLS:
+                            case OFPAT13_EXPERIMENTER:
+                            {
+                                value_list[value_index] = action_value;
+                                if (type == OFPIT_APPLY_ACTIONS)
+                                {
+                                    add_action_param(&flow_param->action_param, action_type, (void*)(value_list + value_index));
+                                }
+                                else 
+                                {
+                                    add_action_param(&flow_param->write_action_param, action_type, (void*)(value_list + value_index));
+                                }
+                                
+                                value_index++;
+                                break;
+                            }
+                            case OFPAT13_SET_FIELD:
+                            {
+                                //field
+                                json_t *field_json = json_find_first_label(action_json, "field");
+                                gn_oxm_t *field = NULL;
+                                if (NULL != field_json)
+                                {
+                                    field = json_fabric_parse_oxm(field_json);
+                                }
+
+                                if (NULL != field)
+                                {
+                                    add_action_param(&flow_param->action_param, action_type, (void*)field);
+                                }
+                                
+                                break;
+                            }
+                            case OFPAT13_POP_PBB:
+                            case OFPAT13_DEC_NW_TTL:
+                            case OFPAT13_POP_VLAN:
+                            case OFPAT13_COPY_TTL_OUT:
+                            case OFPAT13_COPY_TTL_IN:
+                            case OFPAT13_DEC_MPLS_TTL:
+                                break;
+                            default:
+                                break;
+                        }
+                        
+                        action_json = action_json->next;
+                    }
+                    
+                    add_action_param(&flow_param->instruction_param, type, NULL);
+                    break;
+                }
+                default:
+                    break;
+            }
+
+            instruction_json = instruction_json->next;
+        }
+    }
+    
+    //one flow_entry_json_t
+    flow_entry_json_t *flow_entry_son = (flow_entry_json_t*)gn_malloc(sizeof(flow_entry_json_t));
+    flow_entry_son->flow_name = (INT1 *)gn_malloc(sizeof(len + 1));
+    memcpy(flow_entry_son->flow_name, name_json->child->text, len + 1);
+    flow_entry_son->sw = sw;
+    flow_entry_son->hard_timeout = hard_timeout;
+    flow_entry_son->idle_timeout = idle_timeout;
+    flow_entry_son->table_id = table_id;
+    flow_entry_son->priority = priority;
+    flow_entry_son->data = value_list;
+    flow_entry_son->flow_param = flow_param;
+
+    //install flow
+	install_fabric_flows(flow_entry_son->sw, flow_entry_son->idle_timeout, flow_entry_son->hard_timeout, flow_entry_son->priority,
+					 flow_entry_son->table_id, OFPFC_ADD, flow_entry_son->flow_param);
+    
+
+    //install flow success, save flow json to g_flow_entry_json_list
+    flow_entry_son->next = g_flow_entry_json_list->next;
+    flow_entry_son->pre = g_flow_entry_json_list;
+    if (NULL != g_flow_entry_json_list->next)
+    {
+        g_flow_entry_json_list->next->pre = flow_entry_son;
+    }
+    g_flow_entry_json_list->next = flow_entry_son;
+    g_flow_entry_json_length++;
+
+    return json_to_reply_desc(root, GN_OK, desc);
+}
+
+
+
+/****************************************************
+ * Del flow by node's dpid
+ * GET URL eg: http://Controllerhost:8081/dcf/del/flowentries/json/00:00:00:00:00:00:00:01/flowname
+ ****************************************************/
+static INT1 *del_fabric_flow_entries(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+
+    //Get flowname
+    INT1 *url_head = "/dcf/del/flowentries/json/00:00:00:00:00:00:00:01/";
+    UINT url_head_len = strlen(url_head);
+    UINT url_len = strlen(url);
+    if (url_len <= url_head_len)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid url!");
+    }
+    const INT1 *flow_name = url + url_head_len;
+
+    //Get dpid
+    url_head = "/dcf/del/flowentries/json/";
+    url_head_len = strlen(url_head);
+    const INT1 *dpid_str = url + url_head_len;
+    UINT8 dpid = 0;
+    if (-1 == dpidStr2Uint8(dpid_str, &dpid))
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid dpid in url!");
+    }
+
+    //get switch by dpid
+    INT4 i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        if (1 == g_server.switches[i].state && dpid == g_server.switches[i].dpid)
+        {
+            sw = &g_server.switches[i];
+            break;
+        }
+    }
+
+    //if can not find switch , just ret failure
+    if (NULL == sw)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:can't find the switch");
+    }
+
+    clear_fabric_flow_entries(flow_name, sw);
+    
+    return json_to_reply(obj, GN_OK);
+}
+
+
+
+
+/****************************************************
+ * Get flow entries by node's dpid and table_id
+ * GET URL eg: http://Controllerhost:8081/dcf/get/flowentries/json/00:00:00:00:00:00:00:01/table_id
+ ****************************************************/
+static INT1 *get_fabric_flow_entries(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    
+    //Get table id
+    INT1 *url_head = "/dcf/get/flowentries/json/00:00:00:00:00:00:00:01/";
+    UINT url_head_len = strlen(url_head);
+    UINT url_len = strlen(url);
+    if (url_len < url_head_len - 1)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid dpid's length in url!");
+    }
+
+    UINT1 table_id = OFPTT_ALL;
+    if (url_len > url_head_len)
+    {
+        table_id = (UINT1)atoi(url + url_head_len);
+    } 
+
+    if (OFPTT_ALL != table_id && table_id > FABRIC_OUTPUT_TABLE)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid table_id in url!");
+    }
+
+    //Get dpid
+    url_head = "/dcf/get/flowentries/json/";
+    url_head_len = strlen(url_head);
+    const INT1 *dpid_str = url + url_head_len;
+    UINT8 dpid = 0;
+    if (-1 == dpidStr2Uint8(dpid_str, &dpid))
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid dpid in url!");
+    }
+
+    //find the switch by nodeid
+    int i = 0;
+    gn_switch_t *sw = NULL;
+    for (; i < g_server.max_switch; i++)
+    {
+        sw = &g_server.switches[i];
+        if (dpid == sw->dpid && 1 == sw->state)
+        {
+            break;
+        }
+    }
+
+    //if not exist
+    if (i >= g_server.max_switch)
+    {
+        return json_to_reply_desc(obj, GN_ERR, "[ERROR]:can't find the switch!");
+    }
+
+    //query flow entries
+    stats_fabric_flow_t *list = query_fabric_flow_entries_by_switch(sw, OFPG_ANY, OFPP13_ANY, table_id);
+
+    //arrange json
+    INT1 * ret = json_fabric_parse_flow(obj, list);
+    //clear cache
+    clear_fabric_stats();
+    
+    return ret;
+}
+
+
+
+/****************************************************
+ * Get all nodes flow entries
+ * GET URL eg: http://Controllerhost:8081/dcf/get/all/flowentries/json
+ ****************************************************/
+static INT1 *get_fabric_all_flow_entries(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    
+    //query flow entries
+    stats_fabric_flow_t *list = query_fabric_all_flow_entries();
+    //arrange json
+    INT1 * ret = json_fabric_parse_flow(obj, list);
+    //clear cache
+    clear_fabric_stats();
+    
+    return ret;
+}
+
+
+
+
+
+
 /****************************************************
  * neutron
  ****************************************************/
@@ -3953,6 +5655,9 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 	char subnet_id[48] = {0};
 	char cidr[30] = {0};
 	INT4 gateway_ip = 0, start_ip = 0, end_ip = 0;
+	UINT1 gateway_ipv6[16] = {0};
+	UINT1 start_ipv6[16] = {0};
+	UINT1 end_ipv6[16] = {0};
 	subnets = json_find_first_label(root, "subnet");
 	UINT4 longtemp=0;
 	if(subnets){
@@ -3984,8 +5689,15 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 			}
 			temp = json_find_first_label(subnet, "gateway_ip");
 			if(temp){
-				longtemp = inet_addr(temp->child->text) ;
-				gateway_ip = longtemp;
+				memset(gateway_ipv6, 0, 16);
+				gateway_ip = 0;
+				if (strchr(temp->child->text, ':')) {
+					ipv6_str_to_number(temp->child->text, gateway_ipv6);
+				}
+				else {
+					longtemp = inet_addr(temp->child->text) ;
+					gateway_ip = longtemp;
+				}
 //				printf("gateway_ip:%u \n",gateway_ip);
 				json_free_value(&temp);
 			}
@@ -3995,15 +5707,29 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 				while(allocation){
 					temp = json_find_first_label(allocation, "start");
 					if(temp){
-						longtemp  = inet_addr(temp->child->text) ;
-						start_ip = longtemp;
+						memset(start_ipv6, 0, 16);
+						start_ip = 0;
+						if (strchr(temp->child->text, ':')) {
+							ipv6_str_to_number(temp->child->text, start_ipv6);
+						}
+						else {
+							UINT4 longtemp = inet_addr(temp->child->text) ;
+							start_ip = longtemp;
+						}
 //						printf("start_ip:%u \n",start_ip);
 						json_free_value(&temp);
 					}
 					temp = json_find_first_label(allocation, "end");
 					if(temp){
-						longtemp = inet_addr(temp->child->text) ;
-						end_ip = longtemp;
+						memset(end_ipv6, 0, 16);
+						end_ip = 0;
+						if (strchr(temp->child->text, ':')) {
+							ipv6_str_to_number(temp->child->text, end_ipv6);
+						}
+						else {
+							longtemp = inet_addr(temp->child->text) ;
+							end_ip = longtemp;
+						}
 //						printf("end_ip:%u \n",end_ip);
 						json_free_value(&temp);
 					}
@@ -4014,7 +5740,7 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 			json_free_value(&subnet);
 		}
 	}
-    update_openstack_app_subnet(tenant_id,network_id,subnet_id,gateway_ip,start_ip,end_ip,cidr);
+    update_openstack_app_subnet(tenant_id,network_id,subnet_id,gateway_ip,start_ip,end_ip,gateway_ipv6, start_ipv6, end_ipv6, cidr);
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
 
@@ -4034,6 +5760,8 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 	char* dhcp="network:dhcp";
 	char* floatip="network:floatingip";
 	INT4 ip = 0;
+	UINT1 type = 0;
+	UINT1 ipv6[16] = {0};
 	UINT1 mac[6]={0};
 	UINT4 port_number = 0;
 	ports = json_find_first_label(root, "port");
@@ -4083,9 +5811,18 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 					}
 					temp = json_find_first_label(fix_ip, "ip_address");
 					if(temp){
+						memset(ipv6, 0, 16);
+						ip = 0;
+						if (strchr(temp->child->text, ':')) {
+							// printf("ipv6: %s\n", temp->child->text);
+							ipv6_str_to_number(temp->child->text, ipv6);
+							// nat_show_ipv6(ipv6);
+						}
+						else {
+							UINT4 longtemp = inet_addr(temp->child->text) ;
+							ip = longtemp;
+						}
 //						printf("ip_address:%s \n",temp->child->text);
-						UINT4 longtemp = inet_addr(temp->child->text) ;
-						ip = longtemp;
 //						printf("ip_address:%u \n",ip);
 						json_free_value(&temp);
 					}
@@ -4095,15 +5832,17 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 			}
 			json_free_value(&port);
 		}
+
+		type = get_openstack_port_type(port_type);
 		if(strcmp(port_type,computer)==0){
-			update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+			update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
 		}else if(strcmp(port_type,dhcp)==0){
-			update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+			update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
 		}else if(strcmp(port_type,floatip)==0){
-			update_openstack_app_dhcp_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+			update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
 			create_floatting_ip_by_rest(0,ip,NULL,NULL);
 		}else{
-			update_openstack_app_gateway_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id);
+			update_openstack_app_gateway_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
 		}
 	}
 
@@ -4304,35 +6043,11 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_GET, "/gn/path/json", get_path);
     ret += register_restful_handler(HTTP_GET, "/gn/path/stats/json", get_path_stats);
     ret += register_restful_handler(HTTP_GET, "/gn/path/status/json", get_path_status);
-
-    ret += register_restful_handler(HTTP_GET, "/gn/tenant/json", get_tenant);
-    ret += register_restful_handler(HTTP_POST, "/gn/tenant/json", post_tenant);
-    ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/json", del_tenant);
-    ret += register_restful_handler(HTTP_GET, "/gn/tenant/member/json", get_tenant_member);
-    ret += register_restful_handler(HTTP_POST, "/gn/tenant/member/json", post_tenant_member);
-    ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/member/json", del_tenant_member);
-
-    ret += register_restful_handler(HTTP_GET, "/gn/neutron/networks", get_neutron_network);
-    ret += register_restful_handler(HTTP_POST, "/gn/neutron/networks", post_neutron_network);
-    ret += register_restful_handler(HTTP_PUT, "/gn/neutron/neutron/networks", put_neutron_network);
-    ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/networks", del_neutron_network);
-
-    ret += register_restful_handler(HTTP_GET, "/gn/neutron/subnets", get_neutron_subnet);
-    ret += register_restful_handler(HTTP_POST, "/gn/neutron/subnets", post_neutron_subnet);
-    ret += register_restful_handler(HTTP_PUT, "/gn/neutron/subnets", put_neutron_subnet);
-    ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/subnets", del_neutron_subnet);
-
-    ret += register_restful_handler(HTTP_GET, "/gn/neutron/ports", get_neutron_port);
-    ret += register_restful_handler(HTTP_POST, "/gn/neutron/ports", post_neutron_port);
-    ret += register_restful_handler(HTTP_PUT, "/gn/neutron/ports", put_neutron_port);
-    ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/ports", del_neutron_port);
-
+	
     // fabric
     ret += register_restful_handler(HTTP_GET, "/gn/fabric/switchname/json",get_switch_name);
     ret += register_restful_handler(HTTP_DELETE, "/gn/fabric/delete/json", del_fabric_entries);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/setup/json", setup_fabric_entries);
-    ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/json", setup_fabric_external);
-    ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/update/json", update_fabric_external);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/getpath/json", get_fabric_path);
     ret += register_restful_handler(HTTP_POST, "/gn/fabric/setupparts/json", setup_fabric_entries_parts);
 
@@ -4342,6 +6057,76 @@ INT4 init_json_server()
     //config
     ret += register_restful_handler(HTTP_GET, "/gn/config/getall/json", get_all_config_info);
     ret += register_restful_handler(HTTP_POST, "/gn/config/setall/json", set_all_config_info);
+
+    //dcfabric
+    ret += register_restful_handler(HTTP_GET, "/dcf/get/all/switchinfo/json", get_fabric_all_switch_info);
+    ret += register_restful_handler(HTTP_GET, "/dcf/get/switchinfo/json", get_fabric_switch_info);
+    ret += register_restful_handler(HTTP_PUT, "/dcf/put/flowentries/json", put_fabric_flow_entries);
+    ret += register_restful_handler(HTTP_GET, "/dcf/del/flowentries/json", del_fabric_flow_entries);
+    ret += register_restful_handler(HTTP_GET, "/dcf/get/flowentries/json", get_fabric_flow_entries);
+    ret += register_restful_handler(HTTP_GET, "/dcf/get/all/flowentries/json", get_fabric_all_flow_entries);
+
+	// debug
+	ret += register_restful_handler(HTTP_GET, "/dcf/debug/host", fabric_debug_get_all_host);
+	// ret += register_restful_handler(HTTP_GET, "/dcf/debug/host/", fabric_debug_get_host);
+	ret += register_restful_handler(HTTP_GET, "/dcf/debug/sw", fabric_debug_get_all_sw);
+	// ret += register_restful_handler(HTTP_GET, "/dcf/debug/sw/", fabric_debug_get_sw);
+	// ret += register_restful_handler(HTTP_GET, "/dcf/debug/nat", fabric_debug_get_all_nat);
+	// ret += register_restful_handler(HTTP_GET, "/dcf/debug/nat/", fabric_debug_get_nat);
+	// ret += register_restful_handler(HTTP_GET, "/dcf/debug/security", fabric_debug_get_all_security);
+	// ret += register_restful_handler(HTTP_GET, "/dcf/debug/security/", fabric_debug_get_security);
+	ret += register_restful_handler(HTTP_GET, "/dcf/debug/path", fabric_debug_get_all_path);
+
+	// ret += register_restful_handler(HTTP_POST, "/dcf/debug/reload/security", fabric_debug_reload_security);
+	
+	INT1 *value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
+	UINT4 flag_openstack_on = (NULL == value)?0:atoi(value);
+
+	if (flag_openstack_on) {
+		ret += register_restful_handler(HTTP_GET, "/gn/tenant/json", get_tenant);
+		ret += register_restful_handler(HTTP_POST, "/gn/tenant/json", post_tenant);
+		ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/json", del_tenant);
+		ret += register_restful_handler(HTTP_GET, "/gn/tenant/member/json", get_tenant_member);
+		ret += register_restful_handler(HTTP_POST, "/gn/tenant/member/json", post_tenant_member);
+		ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/member/json", del_tenant_member);
+	
+		ret += register_restful_handler(HTTP_GET, "/gn/neutron/networks", get_neutron_network);
+		ret += register_restful_handler(HTTP_POST, "/gn/neutron/networks", post_neutron_network);
+		ret += register_restful_handler(HTTP_PUT, "/gn/neutron/neutron/networks", put_neutron_network);
+		ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/networks", del_neutron_network);
+	
+		ret += register_restful_handler(HTTP_GET, "/gn/neutron/subnets", get_neutron_subnet);
+		ret += register_restful_handler(HTTP_POST, "/gn/neutron/subnets", post_neutron_subnet);
+		ret += register_restful_handler(HTTP_PUT, "/gn/neutron/subnets", put_neutron_subnet);
+		ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/subnets", del_neutron_subnet);
+	
+		ret += register_restful_handler(HTTP_GET, "/gn/neutron/ports", get_neutron_port);
+		ret += register_restful_handler(HTTP_POST, "/gn/neutron/ports", post_neutron_port);
+		ret += register_restful_handler(HTTP_PUT, "/gn/neutron/ports", put_neutron_port);
+		ret += register_restful_handler(HTTP_DELETE, "/gn/neutron/ports", del_neutron_port);
+
+		ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/json", setup_fabric_external);
+    	ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/update/json", update_fabric_external);
+
+		// debug
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/loadbalance/pool", fabric_debug_get_all_loadbalance_pool);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/loadbalance/member", fabric_debug_get_all_loadbalance_member);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/loadbalance/listener", fabric_debug_get_all_loadbalance_listener);
+		ret += register_restful_handler(HTTP_POST, "/dcf/debug/loadbalance/clear", fabric_debug_clear_all_loadbalance);
+		ret += register_restful_handler(HTTP_POST, "/dcf/debug/loadbalance/reload", fabric_debug_reload_all_loadbalance);
+		
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/security/group", fabric_debug_get_all_securitygroup);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/security/host", fabric_debug_get_all_hostsecurity);
+		ret += register_restful_handler(HTTP_POST, "/dcf/debug/security/clear", fabric_debug_clear_all_security);
+		ret += register_restful_handler(HTTP_POST, "/dcf/debug/security/reload", fabric_debug_reload_all_security);
+	}
+    
+    if (NULL == g_flow_entry_json_list)
+    {
+        g_flow_entry_json_list = (flow_entry_json_t *)gn_malloc(sizeof(flow_entry_json_t));
+    }
+    g_flow_entry_json_length = 0;
+
     if(GN_OK != ret)
     {
         ret = GN_ERR;
