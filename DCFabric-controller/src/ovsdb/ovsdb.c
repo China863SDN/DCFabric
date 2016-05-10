@@ -10,6 +10,9 @@
 
 #include "ovsdb.h"
 #include "openflow-common.h"
+#include <stdlib.h>
+#include "../conn-svr/conn-svr.h"
+#include "openstack_host.h"
 
 struct sockaddr_in g_ovsdb_addr;
 INT4 g_ovsdb_sockfd;
@@ -20,7 +23,7 @@ UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovs锟斤拷open
 UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstack锟斤拷锟斤拷锟斤拷锟斤拷 gre/vxlan
 
 UINT1 g_ovsdb_clients[OVSDB_MAX_CONNECTION] = { 0 };
-UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clients锟侥憋拷锟斤拷  锟斤拷锟斤拷删锟斤拷丝锟斤拷锟斤拷拥慕锟斤拷锟斤拷锟�
+UINT1 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clients锟侥憋拷锟斤拷  锟斤拷锟斤拷删锟斤拷丝锟斤拷锟斤拷拥慕锟斤拷锟斤拷锟?
 UINT4 g_ovsdb_clients_ip[OVSDB_MAX_CONNECTION] = { 0 };
 
 ovsdb_server_t g_ovsdb_nodes[OVSDB_MAX_CONNECTION];
@@ -131,6 +134,114 @@ void search_from_ovsdb_table_all(INT4 conn_fd)
     json_free_value(&obj);
     send(conn_fd, text, strlen(text), 0);
 }
+
+void search_host_in_ovsdb_by_mac(UINT1* mac)
+{
+	INT4 index = 0;
+	INT1 mac_str[48] = {0};
+	if (NULL == mac) {
+		return ;
+	}
+	
+	mac2str(mac, mac_str);
+	if (0 == strlen(mac_str)) {
+		return ;
+	}
+	
+	for (index = 0; index < OVSDB_MAX_CONNECTION; index++) {
+		INT4 conn_fd = g_ovsdb_clients[index];
+
+		if (conn_fd) {
+			INT1 *text;
+		    json_t *array, *obj, *key, *value, *table_obj, *named_array, *_named_array, *map_array, *mac_list_array, *mac_array;
+
+		    obj = json_new_object();
+
+		    key = json_new_string("id");
+		    value = json_new_string(SEARCH_HOST_BY_MAC);
+		    json_insert_child(key, value);
+		    json_insert_child(obj, key);
+
+		    key = json_new_string("method");
+		    value = json_new_string("transact");
+		    json_insert_child(key, value);
+		    json_insert_child(obj, key);
+
+		    key = json_new_string("params");
+		    array = json_new_array();
+		    json_insert_child(key, array);
+		    json_insert_child(obj, key);
+
+		    value = json_new_string("Open_vSwitch");
+		    json_insert_child(array, value);
+
+		    value = json_new_object();
+		    json_insert_child(array, value);
+
+		    key = json_new_string("op");
+		    table_obj = json_new_string("select");
+		    json_insert_child(key, table_obj);
+		    json_insert_child(value, key);
+
+		    key = json_new_string("table");
+		    table_obj = json_new_string("Interface");
+		    json_insert_child(key, table_obj);
+		    json_insert_child(value, key);
+
+		    _named_array = json_new_array();
+		   	key = json_new_string("where");
+			json_insert_child(key, _named_array);
+			json_insert_child(value, key);
+
+			named_array = json_new_array();
+			json_insert_child(_named_array, named_array);
+
+			key = json_new_string("external_ids");
+			json_insert_child(named_array, key);
+
+			key = json_new_string("includes");
+			json_insert_child(named_array, key);
+
+			map_array = json_new_array();
+			json_insert_child(named_array, map_array);
+
+			key = json_new_string("map");
+			json_insert_child(map_array, key);
+
+			mac_list_array = json_new_array();
+			json_insert_child(map_array, mac_list_array);
+
+			mac_array = json_new_array();
+			json_insert_child(mac_list_array, mac_array);
+
+			key = json_new_string("attached-mac");
+			json_insert_child(mac_array, key);
+			
+			key = json_new_string(mac_str);
+			json_insert_child(mac_array, key);
+
+			named_array = json_new_array();
+		   	key = json_new_string("columns");
+			json_insert_child(key, named_array);
+			json_insert_child(value, key);
+
+			key = json_new_string("external_ids");
+		    json_insert_child(named_array, key);
+
+			key = json_new_string("ofport");
+		    json_insert_child(named_array, key);
+
+			key = json_new_string("mac_in_use");
+		    json_insert_child(named_array, key);
+
+			json_tree_to_string(obj, &text);
+		    json_free_value(&obj);
+			// printf("send: %s\n", text);
+		    send(conn_fd, text, strlen(text), 0);
+		}
+	}
+}
+
 
 //{"id": "d0d14471-5a66-412c-bcae-0e594f5ee9af","method": "transact","params": ["Open_vSwitch",{"op": "mutate","table": "Bridge","where": [["_uuid","==",["uuid","6656bc46-915c-4eef-8e07-3c53cf916387"]]],"mutations": [["ports","insert",["named-uuid","new_port"]]]},{"op": "insert","table": "Port","row": {"name": "gre-10.8.1.212","interfaces": ["set",[["named-uuid","new_interface"]]]},"uuid-name": "new_port"},{"op": "insert","table": "Interface","row": {"name": "gre-10.8.1.212","options": ["map",[["local_ip","10.8.1.211"],["remote_ip","10.8.1.212"],["key","flow"]]],"type": "gre"},"uuid-name": "new_interface"}]}
 void add_port_and_portoption(INT4 conn_fd, INT1 *_uuid_br, INT1 *port_name,
@@ -982,6 +1093,59 @@ void echo_reply_ovsdb(INT4 conn_fd)
     send(conn_fd, text, strlen(text), 0);
 }
 
+BOOL handle_search_host_by_mac(INT4 client_ip, INT4 seq, json_t *result)
+{
+    json_t *tmp, *row, *ofport, *externalids, *in_use_mac, *attach_mac = NULL;
+	UINT4 port = 0;
+	UINT1 host_mac[6] = {0};
+	UINT1 phy_mac[6] = {0};
+
+	if ((result) && (result->child) && (result->child->child)) {
+		tmp = result->child->child;
+    	row = json_find_first_label(tmp, "rows");
+	}
+    if ((row) && (row->child) && (row->child->child))
+    {	
+    	tmp = row->child->child;
+		if (tmp) {
+			ofport = json_find_first_label(tmp, "ofport");
+			if ((ofport) && (ofport->child)) {
+				port = strtoul(ofport->child->text, 0, 10);
+			}
+
+			in_use_mac = json_find_first_label(tmp, "mac_in_use");
+			if ((in_use_mac) && (in_use_mac->child)) {
+				macstr2hex(in_use_mac->child->text, phy_mac);
+			}
+			
+			externalids = json_find_first_label(tmp, "external_ids");
+			if ((externalids) && (externalids->child) && (externalids->child->child) && (externalids->child->child->next)
+				&& (externalids->child->child->next->child) && (externalids->child->child->next->child->child))
+			{
+				tmp = externalids->child->child->next->child->child;
+				if (tmp) {
+					if (0 == strcmp(tmp->text, "attached-mac")) {
+						attach_mac = tmp->next;
+					}
+					if (attach_mac) {
+						macstr2hex(attach_mac->text, host_mac);
+					}
+				}
+			}
+		}
+    }
+
+	if (port) {
+		gn_switch_t* sw = find_sw_by_port_physical_mac(phy_mac);
+		
+		if (sw) {
+			update_openstack_host_port_by_mac(host_mac, sw, port);
+		}
+	}
+		
+    return TRUE;
+}
+
 BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
 {
     json_t *controller = NULL;
@@ -990,11 +1154,12 @@ BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
     controller = json_find_first_label(result->child, "Controller");
     if (controller)
     {
-        return FALSE;
+        return TRUE;
     }
 
-    return TRUE;
+    return FALSE;
 }
+
 
 void handle_openvswitch_table(INT4 client_fd, INT4 seq, json_t *result)
 {
@@ -1060,7 +1225,7 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
             br_ctrl = json_find_first_label(br_uuid->child->child->child, "controller");
             if(br_ctrl)
             {
-                if(0 != strcmp(br_ctrl->child->child->text, "uuid"))
+                if ((FALSE == have_controller) && (0 != strcmp(br_ctrl->child->child->text, "uuid")))
                 {
                     sprintf(controller_ip, "tcp:%s:%d", inet_htoa(g_controller_ip), g_controller_south_port);
                     set_controller(client_fd, g_ovsdb_nodes[seq].bridge[br_idx]._uuid, controller_ip);
@@ -1143,7 +1308,7 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                         br = json_find_first_label(params->child->child->next, "Bridge");
                         if (br)
                         {
-                            printf("%s\n", ovsdb_msg);
+                            // printf("%s\n", ovsdb_msg);
                             while(br_idx < NEUTRON_BRIDGE_MAX_NUM)
                             {
                                 if (g_ovsdb_nodes[seq].bridge[br_idx].is_using == FALSE)
@@ -1209,6 +1374,13 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                 handle_bridge_table(client_fd, seq, result, have_controller);
             }
         }
+		else if (strncmp(id->child->text, SEARCH_HOST_BY_MAC, 1) == 0) 
+		{
+			result = id->next;
+			if (result) {
+				handle_search_host_by_mac(client_ip, seq, result);
+			}
+		}
         json_free_value(&id);
     }
 
@@ -1278,7 +1450,7 @@ void *ovsdb_recv_msg(void *para)
     INT4 len = 0;
     INT4 offset = 0;
     INT1 ovsdb_buff[OVSDB_BUFF_LEN + 1] = { 0 };
-    INT1 json_string[10240] = {0};
+    INT1 json_string[102400] = {0};
 
     BOOL recv_flag = FALSE;
     INT4 recv_len = 0;
@@ -1348,7 +1520,7 @@ void *ovsdb_recv_msg(void *para)
             {
                 if (FD_ISSET(g_ovsdb_clients[index], &recvmask))
                 {
-                    //一锟斤拷锟斤拷取BUFF_LEN锟斤拷锟街节存到锟斤拷应锟斤拷锟斤拷锟斤拷幕锟斤拷锟斤拷锟�
+                    //一锟斤拷锟斤拷取BUFF_LEN锟斤拷锟街节存到锟斤拷应锟斤拷锟斤拷锟斤拷幕锟斤拷锟斤拷锟?
                     do
                     {
                         recv_len += read(g_ovsdb_clients[index], ovsdb_buff + recv_len, OVSDB_BUFF_LEN - recv_len);
@@ -1414,7 +1586,7 @@ INT4 ovsdb_connect_init()
     tcpsaddr.sin_port = htons(g_ovsdb_port);    //htons(SERV_PORT);
     tcpsaddr.sin_addr.s_addr = htonl(INADDR_ANY);
     value = get_value(g_controller_configure, "[ovsdb_conf]", "ovsdb_tunnel_on");
-    g_ovsdb_turnel_on = (NULL == value)?1:atoi(value);
+    g_ovsdb_turnel_on = (NULL == value)?1:atoll(value);
 
     tcp_serv_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (tcp_serv_fd == -1)

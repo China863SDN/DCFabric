@@ -17,7 +17,7 @@
 #define  NETWORK_TYPE_VXLAN         2
 
 #define  OVSDB_SERVER_PORT          6640
-#define  OVSDB_BUFF_LEN             20480
+#define  OVSDB_BUFF_LEN             204800
 #define  OVSDB_MAX_CONNECTION       50
 
 #define  SEARCH_ALL_TABLE_ID        "1"
@@ -26,6 +26,7 @@
 #define  SET_CONTROLLER_ID          "4"
 #define  ADD_PORT_ID                "5"
 #define  ADD_INTERFACE_OPTION_ID    "6"
+#define  SEARCH_HOST_BY_MAC			"7"
 
 #define  INTERFACE_TYPE_GRE         "gre"
 #define  INTERFACE_TYPE_VLAN        "vlan"
@@ -81,6 +82,8 @@ UINT1 g_ovsdb_of_version;   //openstack ovs的openflow版本
 UINT4 g_ovsdb_port;         //ovsdb接口，默认端口6640
 
 extern ovsdb_server_t g_ovsdb_nodes[];
+
+void search_host_in_ovsdb_by_mac(UINT1* mac);
 
 INT4 init_ovsdb();
 

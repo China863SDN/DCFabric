@@ -44,15 +44,15 @@
 #include "fabric_flows.h"
 #include "openstack/fabric_openstack_nat.h"
 #include "fabric_openstack_arp.h"
-<<<<<<< HEAD
 #include "fabric_stats.h"
 #include "openstack_lbaas_app.h"
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+#include "../group-mgr/group-mgr.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
 extern UINT4 g_openstack_on;
+
+UINT4 DEFAULT_TRANSACTION_XID = 0xFFFFFFFF;
 
 void of13_delete_line(gn_switch_t* sw,UINT4 port_index){
 	gn_switch_t* n_sw = NULL;
@@ -158,7 +158,7 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
         case (OFPXMT_OFB_VLAN_PCP):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_VLAN_PCP);
-            gn_oxm->vlan_pcp = ntohs(*(UINT2 *)(of_oxm->data));
+            gn_oxm->vlan_pcp = (*(UINT1 *)(of_oxm->data));
             break;
         }
         case (OFPXMT_OFB_IP_DSCP):
@@ -179,6 +179,7 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
             gn_oxm->ip_proto = *(UINT1 *)(of_oxm->data);
             break;
         }
+		/*
         case (OFPXMT_OFB_IPV4_SRC):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC);
@@ -204,6 +205,20 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
 
             break;
         }
+		*/
+        case (OFPXMT_OFB_IPV4_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC);
+            gn_oxm->ipv4_src = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		case (OFPXMT_OFB_IPV4_SRC_PREFIX):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX);
+            gn_oxm->ipv4_src_prefix = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		/*
         case (OFPXMT_OFB_IPV4_DST):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST);
@@ -229,6 +244,19 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
 
             break;
         }
+        */
+        case (OFPXMT_OFB_IPV4_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST);
+            gn_oxm->ipv4_dst = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		case (OFPXMT_OFB_IPV4_DST_PREFIX):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX);
+            gn_oxm->ipv4_dst_prefix = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
         case (OFPXMT_OFB_TCP_SRC):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_TCP_SRC);
@@ -408,7 +436,9 @@ convertter_t of13_convertter =
 INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
 {
     if (of_msg)
+    {
     	sw->msg_driver.msg_handler[OFPT13_FEATURES_REQUEST](sw, of_msg);
+    }
 	else {
 		UINT2 total_len = sizeof(struct ofp_hello);
 	    init_sendbuff(sw, OFP13_VERSION, OFPT13_HELLO, total_len, 0);
@@ -495,18 +525,37 @@ static INT4 of13_msg_error(gn_switch_t *sw, UINT1 *of_msg)
     return GN_OK;
 }
 
-static INT4 of13_msg_echo_request(gn_switch_t *sw, UINT1 *echo_req)
+INT4 of13_msg_echo_request(gn_switch_t *sw, UINT1 *echo_req)
 {
-    return sw->msg_driver.msg_handler[OFPT13_ECHO_REPLY](sw, echo_req);
-    return GN_OK;
+    if (NULL == echo_req) 
+    {
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP13_VERSION, OFPT13_ECHO_REQUEST, total_len, DEFAULT_TRANSACTION_XID);
+        return send_of_msg(sw, total_len);
+    }
+    else
+    {
+        return sw->msg_driver.msg_handler[OFPT13_ECHO_REPLY](sw, echo_req);
+    }
+
 }
 
 static INT4 of13_msg_echo_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_ECHO_REPLY, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+    //收到心跳响应
+    if (DEFAULT_TRANSACTION_XID == ((struct ofp_header*)of_msg)->xid) 
+    {
+        pthread_mutex_lock(&sw->sock_state_mutex);
+        sw->sock_state = 1;
+        pthread_mutex_unlock(&sw->sock_state_mutex);
+        return GN_OK;
+    }
+    else 
+    {
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP13_VERSION, OFPT13_ECHO_REPLY, total_len, 0);
+        return send_of_msg(sw, total_len);
+    }
 }
 
 static INT4 of13_msg_experimenter(gn_switch_t *sw, UINT1 *of_msg)
@@ -976,6 +1025,11 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 
 static INT4 of13_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
 {
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return GN_OK;
+	}
+
     packout_req_info_t *packout_req_info = (packout_req_info_t *)pktout_req;
     UINT2 total_len = sizeof(struct ofp13_packet_out) + sizeof(struct ofp13_action_output);
     if (packout_req_info->buffer_id == OFP_NO_BUFFER)
@@ -1111,7 +1165,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
         oxm->oxm_field_hm = OFPXMT_OFB_VLAN_PCP << 1;
         oxm->length = OFPXMT_OFB_VLAN_PCP_SZ;
-        *(UINT1 *)(oxm->data) = htons(oxm_fields->vlan_pcp);
+        *(UINT1 *)(oxm->data) = (oxm_fields->vlan_pcp);
 
         oxm_field_sz += sizeof(*oxm) + oxm->length;
         oxm = (struct ofp_oxm_header *)(buf + oxm_field_sz);
@@ -1163,6 +1217,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
             *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_src);
+			/*
             switch(oxm_fields->ipv4_src_prefix)
             {
                 case 8:
@@ -1182,7 +1237,8 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
                 }
                 default:break;
             }
-
+		*/
+			netmask = ntohl(cidr_to_subnet_mask(oxm_fields->ipv4_src_prefix));
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
@@ -1208,6 +1264,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
             *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_dst);
+			/*
             switch(oxm_fields->ipv4_dst_prefix)
             {
                 case 8:
@@ -1225,9 +1282,15 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
                     netmask = 0xffffff00;
                     break;
                 }
+				case 27:
+				{
+					netmask = 0xffffff00;
+                    break;
+				}
                 default:break;
             }
-
+		*/
+			netmask = ntohl(cidr_to_subnet_mask(oxm_fields->ipv4_dst_prefix));
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
@@ -1896,7 +1959,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
         oxm->oxm_field_hm = OFPXMT_OFB_VLAN_PCP << 1;
         oxm->length = OFPXMT_OFB_VLAN_PCP_SZ;
-        *(UINT1 *)(oxm->data) = htons(oxm_fields->vlan_pcp);
+        *(UINT1 *)(oxm->data) = (oxm_fields->vlan_pcp);
 
         oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
         set_field_len += oxm_field_sz;
@@ -2380,7 +2443,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
         }
-        else   //鏃犳帺锟�?
+        else   //鏃犳帺锟??
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -2859,6 +2922,11 @@ UINT2 of13_add_instruction(UINT1 *buf, gn_flow_t *flow)
 
 static INT4 of13_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
 {
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+        return GN_OK;
+    }
+
     UINT2 match_len = 0;
     UINT2 instruction_len = 0;
     UINT2 tot_len = sizeof(struct ofp13_flow_mod);
@@ -2894,12 +2962,26 @@ static INT4 of13_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
     instruction_len = of13_add_instruction(data + tot_len, mod_info->flow);
     tot_len += ALIGN_8(instruction_len);
     ofm->header.length = htons(tot_len);
+    
+    if(mod_info->command == OFPFC_ADD)
+    {
+        add_flow_entry(sw,mod_info->flow);
+    }
+    else if(mod_info->command == OFPFC_DELETE)
+    {
+        clean_flow_entry(sw,mod_info->flow);
+    }
 
     return send_of_msg(sw, tot_len);
 }
 
 static INT4 of13_msg_group_mod(gn_switch_t *sw, UINT1 *groupmod_req)
 {
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+        return GN_OK;
+    }
+
     group_mod_req_info_t *group_mod_req_info = (group_mod_req_info_t *)groupmod_req;
     UINT2 total_len = sizeof(struct ofp_group_mod);
     UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_GROUP_MOD, total_len, 0);
@@ -2932,6 +3014,11 @@ static INT4 of13_msg_group_mod(gn_switch_t *sw, UINT1 *groupmod_req)
 
 static INT4 of13_msg_port_mod(gn_switch_t *sw, UINT1 *port)
 {
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+        return GN_OK;
+    }
+
     UINT2 total_len = sizeof(struct ofp13_port_mod);
     UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_PORT_MOD, total_len, 0);
     struct ofp13_port_mod *opm_in = (struct ofp13_port_mod *)port;
@@ -2950,6 +3037,11 @@ static INT4 of13_msg_port_mod(gn_switch_t *sw, UINT1 *port)
 
 static INT4 of13_msg_table_mod(gn_switch_t *sw, UINT1 *of_msg)
 {
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+        return GN_OK;
+    }
+
     //todo
     return GN_OK;
 }
@@ -3031,7 +3123,7 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
             {
                 memset(&new_sw_ports, 0x0, sizeof(new_sw_ports));
 
-                //默锟斤拷锟斤拷锟斤拷锟斤拷锟�1000Mbps
+                //默锟斤拷锟斤拷锟斤拷锟斤拷锟?1000Mbps
                 (sw->msg_driver.convertter->port_convertter)((UINT1 *)port, &new_sw_ports);
                 new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
 
@@ -3128,6 +3220,8 @@ static INT4 of13_msg_barrier_reply(gn_switch_t *sw, UINT1 *of_msg)
 
     //only for test
     of13_remove_all_flow(sw, of_msg);
+
+    clear_group_entries(sw);
 
     of13_table_miss(sw, of_msg);
     return GN_OK;

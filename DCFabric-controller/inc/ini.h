@@ -95,6 +95,10 @@ void close_ini(ini_file_t **ini_file);
  *   Return      :
  *   History     :
  */
+
+int remove_selection(ini_file_t *ini_file, const char *selection);
+char *get_selection_by_selection(ini_file_t *ini_file, const char *name);
+char *get_selection_by_name_value(const ini_file_t *ini_file, const char *name, const char *value);
 char *get_value(const ini_file_t *ini_file, const char *selection, const char *item);
 
 int set_value(const ini_file_t *ini_file, const char *selection, const char *item, char* save_value);

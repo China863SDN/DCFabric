@@ -95,7 +95,7 @@ INT4 openstack_security_remote_cidr_check(UINT4 remote_ip, char* remote_ip_prefi
     	}
     	else {
     		// printf("mask is: %s\n", token);
-    	    cidr_mask = (0 == strcmp("0", token)) ? 0:atoi(token);
+    	    cidr_mask = (0 == strcmp("0", token)) ? 0:atoll(token);
     		// printf("%u\n", cidr_mask);
     	}
     	count++;
@@ -163,7 +163,7 @@ INT4 openstack_security_icmp_check(ip_t *ip, openstack_security_rule_p rule_p)
 	icmp_t* icmp = (icmp_t*)ip->data;
 	// printf("%d,%d,%d,%d\n", icmp->type, icmp->code, rule_p->port_range_min, rule_p->port_range_max);
 
-	if ((0 == rule_p->port_range_min) && (0 == rule_p->port_range_min))
+	if ((0 == rule_p->port_range_min) && (0 == rule_p->port_range_max))
 		return GN_OK;
 
 	if ((icmp->type == rule_p->port_range_min) && (icmp->code == rule_p->port_range_max))
@@ -333,7 +333,7 @@ UINT4 get_security_group_on_config()
 	INT1 *value = NULL;
 	UINT4 return_value = 0;
 	value = get_value(g_controller_configure, "[openvstack_conf]", "security_group_on");
-	return_value = ((NULL == value) ? 0 : atoi(value));
+	return_value = ((NULL == value) ? 0 : atoll(value));
 	return return_value;
 }
 
@@ -359,7 +359,8 @@ INT4 openstack_security_group_main_check(p_fabric_host_node src_port, p_fabric_h
 	openstack_node_p dst_security_node_p = NULL;
 
 	// check external network
-	if ((NULL == src_port) || (NULL != find_fabric_host_port_by_subnet_id(src_port->ip_list[0], "0"))) {
+	if ((NULL == src_port) || (OPENSTACK_PORT_TYPE_HOST != src_port->type) 
+		|| (NULL == dst_port) || (OPENSTACK_PORT_TYPE_HOST != dst_port->type)) {
 		return GN_OK;
 	}
 

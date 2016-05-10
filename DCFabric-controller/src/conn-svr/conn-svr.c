@@ -36,6 +36,15 @@
 #include "openflow-13.h"
 #include "../user-mgr/user-mgr.h"
 #include "../event/event_service.h"
+#include "fabric_impl.h"
+#include "../flow-mgr/flow-mgr.h"
+
+void *g_heartbeat_timer = NULL;
+void *g_heartbeat_timerid = NULL;
+UINT4 g_heartbeat_interval = 5;
+UINT4 g_heartbeat_times = 3;
+UINT4 g_heartbeat_count = 0;
+UINT1 g_heartbeat_flag = 0;
 
 gn_server_t g_server;
 UINT4 g_sendbuf_len = 81920;
@@ -93,6 +102,37 @@ gn_switch_t *find_sw_by_dpid(UINT8 dpid)
 
     return NULL;
 }
+
+gn_switch_t* find_sw_by_port_physical_mac(UINT1* mac)
+{
+	gn_switch_t* sw = NULL;
+	UINT4 i_sw = 0;
+	UINT4 i_port = 0;
+	gn_port_t *sw_port = NULL;
+	
+	for (; i_sw < g_server.max_switch; i_sw++)
+    {
+        sw = &g_server.switches[i_sw];
+		
+        if (sw->state == 1) {
+			for (i_port = 0; i_port <= sw->n_ports; i_port++)
+            {
+                sw_port = &(sw->ports[i_port]);
+                if (i_port == sw->n_ports)
+                {
+                    sw_port = &sw->lo_port;
+                }
+
+				if (0 == memcmp(sw_port->hw_addr, mac, 6)) {
+					return sw;
+				}
+			 }
+        }
+	}
+
+	return NULL;
+}
+
 
 //创建TCP server
 static INT4 create_tcp_server(UINT4 ip, UINT2 port)
@@ -423,6 +463,7 @@ static INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr)
                 g_server.switches[idx].send_len = 0;
                 memset(g_server.switches[idx].send_buffer, 0, g_sendbuf_len);
                 g_server.switches[idx].state = 1;
+                g_server.switches[idx].sock_state = 0;
 
                 // printf("version:%d, ip:%d\n", g_server.switches[idx].ofp_version, g_server.switches[idx].sw_ip);
                 of13_msg_hello(&g_server.switches[idx], NULL);
@@ -445,37 +486,16 @@ void free_switch(gn_switch_t *sw)
     LOG_PROC("WARNING", "Switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] disconnected", dpid[0],
             dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7]);
     g_server.cur_switch--;
+    
     sw->sock_fd = 0;
-
-    //reset neighbor
-    for (port_idx = 0; port_idx < MAX_PORTS; port_idx++)
-    {
-        if (sw->neighbor[port_idx])
-        {
-        	of13_delete_line2(sw,port_idx);
-//            sw->neighbor[port_idx]->sw   = NULL;
-//            sw->neighbor[port_idx]->port = 0;
-
-//            free(sw->neighbor[port_idx]);
-//            sw->neighbor[port_idx] = NULL;
-        }
-    }
-    memset(sw->ports, 0, sizeof(gn_port_t) * MAX_PORTS);
-
-    //reset user
-    for (hash_idx = 0; hash_idx < g_macuser_table.macuser_hsize; hash_idx++)
-    {
-        p_macuser = sw->users[hash_idx];
-        del_mac_user(p_macuser);
-    }
-    memset(sw->users, 0, g_macuser_table.macuser_hsize * sizeof(mac_user_t *));
-
+    sw->sock_state = 0;
     //reset driver
     sw->sw_ip = 0;
     sw->sw_port = 0;
     sw->recv_buffer.head = 0;
     sw->recv_buffer.tail = 0;
     sw->state = 0;
+    
     if((sw->msg_driver.msg_handler != of10_message_handler)
             && (sw->msg_driver.msg_handler != of13_message_handler)
             && (sw->msg_driver.msg_handler != of_message_handler))
@@ -488,6 +508,26 @@ void free_switch(gn_switch_t *sw)
     // event delete switch
     event_delete_switch_on(sw);
     // event end
+
+    clean_flow_entries(sw);
+
+    //reset neighbor
+    for (port_idx = 0; port_idx < MAX_PORTS; port_idx++)
+    {
+        if (sw->neighbor[port_idx])
+        {
+        	of13_delete_line2(sw,port_idx);
+        }
+    }
+    memset(sw->ports, 0, sizeof(gn_port_t) * MAX_PORTS);
+
+    //reset user
+    for (hash_idx = 0; hash_idx < g_macuser_table.macuser_hsize; hash_idx++)
+    {
+        p_macuser = sw->users[hash_idx];
+        del_mac_user(p_macuser);
+    }
+    memset(sw->users, 0, g_macuser_table.macuser_hsize * sizeof(mac_user_t *));
 }
 
 INT4 start_openflow_server()
@@ -572,6 +612,71 @@ static INT4 init_switch(gn_switch_t *sw)
     return GN_OK;
 }
 
+
+//控制器与交换机之间的心跳检测
+static void heartbeat_tx_timer(void *para, void *tid)
+{
+    //延迟30s，确保控制器启动完毕
+    if (0 == g_heartbeat_flag)
+    {
+        g_heartbeat_flag = 1;
+        sleep(30);
+        return;
+    }
+    
+    UINT4 num  = 0;
+    gn_switch_t *sw = NULL;
+    for(; num < g_server.max_switch; num++)
+    {
+        if(g_server.switches[num].state)
+        {
+            sw = &g_server.switches[num];
+            if(1 == sw->state)
+            {
+                //超过g_heartbeat_threshold次没收到响应，断开与该交换机的连接
+                if (g_heartbeat_count >= g_heartbeat_times) 
+                {
+                    if (1 != sw->sock_state)
+                    {
+                        //关闭连接
+                        if (0 != sw->sock_fd)
+                        {
+                            close(sw->sock_fd);
+                        }
+
+                        //删除交换机
+                        free_switch(sw);
+                    }
+
+                    pthread_mutex_lock(&sw->sock_state_mutex);
+                    sw->sock_state = 0;
+                    pthread_mutex_unlock(&sw->sock_state_mutex);
+                }
+
+                //发送心跳消息echo
+                if (OFP10_VERSION == sw->ofp_version) 
+                {
+                    of10_msg_echo_request(sw, NULL);
+                }
+                else
+                { 
+                    of13_msg_echo_request(sw, NULL);
+                }
+            }
+        }
+    }
+
+    if (g_heartbeat_count < g_heartbeat_times) 
+    {
+        g_heartbeat_count++;
+    }
+    else
+    {
+        g_heartbeat_count = 0;
+    }
+}
+
+
 INT4 init_conn_svr()
 {
     INT4 ret = 0;
@@ -595,6 +700,12 @@ INT4 init_conn_svr()
     value = get_value(g_controller_configure, "[controller]", "buff_len");
     g_server.buff_len = ((NULL == value) ? 20480 : atoi(value));
 
+    value = get_value(g_controller_configure, "[heartbeat_conf]", "heartbeat_interval");
+    g_heartbeat_interval= ((NULL == value) ? 5 : atoll(value));
+
+    value = get_value(g_controller_configure, "[heartbeat_conf]", "heartbeat_times");
+    g_heartbeat_times= ((NULL == value) ? 3 : atoll(value));
+
     g_server.cpu_num = get_total_cpu();
     g_server.switches = (gn_switch_t *)gn_malloc(g_server.max_switch * sizeof(gn_switch_t));
     if(NULL == g_server.switches)
@@ -609,11 +720,17 @@ INT4 init_conn_svr()
         pthread_mutex_init(&g_server.switches[i].flow_entry_mutex, NULL);
         pthread_mutex_init(&g_server.switches[i].meter_entry_mutex, NULL);
         pthread_mutex_init(&g_server.switches[i].group_entry_mutex, NULL);
+        pthread_mutex_init(&g_server.switches[i].sock_state_mutex, NULL);
         g_server.switches[i].index = i;
         init_switch(&(g_server.switches[i]));
     }
 
     // ret = create_tcp_server(g_server.ip, g_server.port);
+
+    //控制器与交换机之间的心跳检测
+    g_heartbeat_timerid = timer_init(1);
+    timer_creat(g_heartbeat_timerid, g_heartbeat_interval, NULL, &g_heartbeat_timer, heartbeat_tx_timer);
+    
 
 	ret = GN_OK;
     return ret;

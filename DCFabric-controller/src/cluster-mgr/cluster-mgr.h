@@ -34,6 +34,12 @@
 
 #define MAX_CONTROLLER 8
 
+enum CLUSTER_STATE
+{
+	CLUSTER_STOP = 0,
+	CLUSTER_SETUP = 1
+};
+
 #pragma pack(1)
 typedef struct cluster_node
 {
@@ -45,8 +51,13 @@ typedef struct cluster_node
 extern UINT1 g_controller_role;
 extern UINT8 g_election_generation_id;
 extern cluster_node_t g_controller_cluster[];   //控制器集群管理结构
+extern UINT8 g_master_id; 
 
 INT4 update_role(UINT4 role);
+INT4 get_controller_status(UINT4 tmp_id);
+UINT4 set_cluster_onoff(UINT4 onoff);
+UINT4 set_cluster_role(UINT8 controller_id);
+int update_controllers_role(UINT4 controller_id, UINT1 mode);
 INT4 init_cluster_mgr();
 void fini_cluster_mgr();
 

@@ -248,6 +248,161 @@ void close_ini(ini_file_t **ini_file)
     *ini_file = NULL;
 }
 
+void free_selections(ini_selection_t* selection_p)
+{
+	ini_selection_t* sec_tmp = selection_p;	
+    ini_comment_t *comm_tmp = NULL;
+    ini_item_t *item_tmp = NULL;
+
+	while(NULL != sec_tmp->ini_items)
+	{
+		item_tmp = sec_tmp->ini_items;
+		sec_tmp->ini_items = sec_tmp->ini_items->next;
+
+		while(NULL != item_tmp->comments)
+		{
+			comm_tmp = item_tmp->comments;
+			item_tmp->comments = item_tmp->comments->next;
+
+			gn_free((void**)(&(comm_tmp->desc)));
+			gn_free((void**)(&comm_tmp));
+		}
+
+		gn_free((void**)(&(item_tmp->name)));
+		gn_free((void**)(&(item_tmp->value)));
+		gn_free((void**)(&item_tmp));
+	}
+
+	gn_free((void**)(&(sec_tmp->selection)));
+    gn_free((void**)(&sec_tmp));
+
+}
+
+
+int remove_selection(ini_file_t *ini_file, const char *selection)
+{
+	ini_selection_t *sec_tmp = NULL;
+
+	if((NULL == ini_file) || (NULL == selection))
+	{
+		return 0;
+	}
+
+	if (ini_file->selections)
+	{
+		sec_tmp = ini_file->selections;
+		while(sec_tmp)
+		{
+			if (0 == strcmp(sec_tmp->selection, selection)) {
+				printf("[INFO] Remove selection: %s\n", selection);
+				if (sec_tmp->pre) {
+					sec_tmp->pre->next = sec_tmp->next;
+				}
+				else {
+					ini_file->selections = sec_tmp->next;
+				}
+
+				free_selections(sec_tmp);
+				sec_tmp = NULL;
+				return 1;
+			}
+			sec_tmp = sec_tmp->next;
+		}
+	}
+	return 0;
+}
+
+char *get_selection_by_selection(ini_file_t *ini_file, const char *name)
+{
+    ini_selection_t *sec_tmp = NULL;
+
+    if ((NULL == ini_file) || (NULL == name))
+    {
+        return NULL;
+    }
+
+    if(ini_file->selections)
+    {
+        sec_tmp = ini_file->selections;
+        while(sec_tmp)
+        {
+            if ((sec_tmp->selection) && (strlen(sec_tmp->selection)) && (0 == strcmp(name, sec_tmp->selection)))
+		    {
+		    	// printf("found %s\n", name);
+		        return sec_tmp->selection;
+		    }
+			
+            sec_tmp = sec_tmp->next;
+        }
+    }
+	
+	// printf("not found %s\n", name);
+    return NULL;
+}
+
+char *get_selection_by_name_value(const ini_file_t *ini_file, const char *name, const char *value)
+{
+    ini_selection_t *sec_tmp = NULL;
+    ini_item_t *item_tmp = NULL;
+
+    if((NULL == ini_file) || (NULL == name) || (NULL == value))
+    {
+        return NULL;
+    }
+
+    if(ini_file->selections)
+    {
+        sec_tmp = ini_file->selections;
+        while(sec_tmp)
+        {
+            item_tmp = sec_tmp->ini_items;
+			while(item_tmp)
+			{
+			    if ((0 == strcmp(name, item_tmp->name)) && (0 == strcmp(value, item_tmp->value)))
+			    {
+			        return sec_tmp->selection;
+			    }
+
+			    item_tmp = item_tmp->next;
+			}
+            sec_tmp = sec_tmp->next;
+        }
+    }
+
+    return NULL;
+}
+
+
+void print_value(const ini_file_t *ini_file, const char *selection, const char *item)
+{
+	ini_selection_t *sec_tmp = NULL;
+	ini_item_t *item_tmp = NULL;
+
+	if((NULL == ini_file) || (NULL == selection) || (NULL == item))
+	{
+		return ;
+	}
+
+	if (ini_file->selections)
+	{
+		sec_tmp = ini_file->selections;
+		while(sec_tmp)
+		{
+			printf("%s\n", sec_tmp->selection);
+			item_tmp = sec_tmp->ini_items;
+			while(item_tmp)
+			{
+				printf("%s:%s\n", item_tmp->name, item_tmp->value);
+				item_tmp = item_tmp->next;
+			}
+
+			sec_tmp = sec_tmp->next;
+		}
+	}
+}
+
+
+
 //get the value of the configure item
 char *get_value(const ini_file_t *ini_file, const char *selection, const char *item)
 {

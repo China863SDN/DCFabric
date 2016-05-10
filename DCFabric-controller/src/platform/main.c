@@ -43,6 +43,7 @@
 #include "../user-mgr/user-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
+#include "../cluster-mgr/hbase_client.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "forward-mgr.h"
 #include "../ovsdb/ovsdb.h"
@@ -51,10 +52,9 @@
 #include "../fabric/fabric_impl.h"
 #include "../openstack/fabric_openstack_external.h"
 #include "../fabric/fabric_floating_ip.h"
-<<<<<<< HEAD
 #include "openstack_lbaas_app.h"
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+#include "../overload-mgr/overload-mgr.h"
+
 
 #define START_DATE __DATE__  // compile date.
 #define START_TIME __TIME__  // compile time.
@@ -67,6 +67,7 @@ UINT1 g_fabric_start_flag = 0;
 void *g_auto_timer = NULL;
 UINT1 g_auto_init_flag = 0;
 void* auto_test_p = NULL;
+UINT1 g_is_cluster_on = 0;
 
 void show_copy_right()
 {
@@ -118,6 +119,10 @@ INT4 read_configuration()
         LOG_PROC("ERROR", "%s", "Get controller configuration failed");
         return GN_ERR;
     }
+    
+	INT1* value = NULL;
+	value = get_value(g_controller_configure, "[controller]", "cluster_on");
+    g_is_cluster_on = (NULL == value) ? 0: atoi(value);
 
     return GN_OK;
 }
@@ -140,21 +145,18 @@ void init_openstack_fabric_auto_start()
 	// set external flow
 	init_external_flows();
 
+	init_proactive_floating_check_mgr();
+
 	// set floating flood
-<<<<<<< HEAD
 	init_host_check_mgr();
-=======
-	init_floating_mgr();
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+
+	// setting external
+	init_external_mac_check_mgr();
 
 	// kill timer
     timer_kill(auto_test_p, &g_auto_timer);
 
-<<<<<<< HEAD
 	start_openstack_lbaas_listener();
-=======
-    // openstack_show_all_port_security();
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 }
 
 
@@ -239,7 +241,7 @@ void gnflush_fini()
 }
 app_fini(gnflush_fini);
 
-//����__start_appinit_sec��__stop_appinit_sec֮����ڵĺ���ָ��app_init(x)
+//????__start_appinit_sec??__stop_appinit_sec?????????????app_init(x)
 static void mod_initcalls()
 {
     initcall_t *p_init;
@@ -252,7 +254,7 @@ static void mod_initcalls()
     } while (p_init < &__stop_appinit_sec);
 }
 
-//����__start_appfini_sec��__stop_appfini_sec֮����ڵĺ���ָ��app_fini(x)
+//????__start_appfini_sec??__stop_appfini_sec?????????????app_fini(x)
 static void mod_finicalls()
 {
     initcall_t *p_fini;
@@ -278,7 +280,7 @@ INT4 module_init()
     else
     {
         LOG_PROC("INFO", "Init system time finished");
-    }
+    } 
 
     ret = init_forward_mgr();
     if(GN_OK != ret)
@@ -322,17 +324,6 @@ INT4 module_init()
     else
     {
         LOG_PROC("INFO", "Init tenant manager finished");
-    }
-
-    ret = init_cluster_mgr();
-    if(GN_OK != ret)
-    {
-        LOG_PROC("ERROR", "Init cluster manager failed");
-        return GN_ERR;
-    }
-    else
-    {
-        LOG_PROC("INFO", "Init cluster manager finished");
     }
 
     ret = init_flow_mgr();
@@ -396,16 +387,68 @@ INT4 module_init()
     {
         LOG_PROC("INFO", "Init restful service finished");
     }
-
+    
+    ret = init_stats_mgr();
+    if(GN_OK != ret)
+    {
+        LOG_PROC("ERROR", "Init statistic manager failed");
+        return GN_ERR;
+    }
+    else
+    {
+    	LOG_PROC("INFO", "Init statistic manager finished");
+    }
+    
     initOpenstackFabric();
-//    ret = init_stats_mgr();
-//    if(GN_OK != ret)
-//    {
-//        LOG_PROC("ERROR", "Init statistic manager failed");
-//        return GN_ERR;
-//    }
 
-    //����module_init
+    if (g_is_cluster_on)
+    {
+        ret = init_hbase_client();
+        if(GN_OK != ret)
+        {
+            LOG_PROC("ERROR", "Init hbase client failed");
+            return GN_ERR;
+        }
+        else
+        {
+            LOG_PROC("INFO", "Init hbase client finished");
+        }  
+
+    	ret = init_sync_mgr();
+    	if(GN_OK != ret)
+        {
+            LOG_PROC("ERROR", "Init synchronization manager failed");
+            return GN_ERR;
+        }
+        else
+        {
+            LOG_PROC("INFO", "Init synchronization manager finished");
+        }
+
+        ret = init_cluster_mgr();
+        if(GN_OK != ret)
+        {
+            LOG_PROC("ERROR", "Init cluster manager failed");
+            return GN_ERR;
+        }
+        else
+        {
+            LOG_PROC("INFO", "Init cluster manager finished");
+        }
+    }
+
+    ret = init_overload_mgr();
+    if(GN_OK != ret)
+    {
+        LOG_PROC("ERROR", "Init overload mgr failed");
+        return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init overload mgr finished");
+    }
+
+    //????module_init
     mod_initcalls();
 
 
@@ -416,7 +459,7 @@ void module_fini()
 {
     fini_conn_svr();
 
-    //����module_fini
+    //????module_fini
     mod_finicalls();
 }
 

@@ -41,11 +41,11 @@ INT1 init_mac_user()
     UINT4 idx = 0;
 
     value = get_value(g_controller_configure, "[controller]", "macuser_hsize");
-    g_macuser_table.macuser_hsize = (value == NULL ? 1024 : atoi(value));
+    g_macuser_table.macuser_hsize = (value == NULL ? 1024 : atoll(value));
     g_macuser_table.macuser_hsize_tot = g_macuser_table.macuser_hsize * g_server.max_switch;
 
     value = get_value(g_controller_configure, "[controller]", "macuser_lifetime");
-    g_macuser_table.macuser_lifetime = (value == NULL ? 10 : atoi(value));
+    g_macuser_table.macuser_lifetime = (value == NULL ? 10 : atoll(value));
 
     pthread_mutex_init(&g_macuser_table.macuser_mutex, NULL);
 

@@ -92,14 +92,14 @@ public class hbase_client {
         public static String getOneRecord(String tableName, String rowkey)
                         throws Exception {
                 try {
-                        String str = null;
+                        String str = "";
 
                         HTable table = new HTable(conf, tableName);
                         Get get = new Get(rowkey.getBytes());
                         Result rs = table.get(get);
-                        for (KeyValue kv : rs.raw()) {
-                                str = new String(kv.getQualifier()) + SPLIT;
-                                str += new String(kv.getValue());
+                        for (KeyValue kv : rs.raw()) {	
+                                str += new String(kv.getQualifier()) + SPLIT;
+                                str += new String(kv.getValue()) + SPLIT;
                         }
 
                         return str;
@@ -110,6 +110,29 @@ public class hbase_client {
                         return null;
                 }
         }
+				
+		@SuppressWarnings({ "rawtypes", "unchecked" })
+		public static String getOneCell(String tableName, String rowkey, String cloumnFamily, String cloumn)
+						throws Exception {
+				try {
+						String str = "";
+
+						HTable table = new HTable(conf, tableName);
+						Get get = new Get(rowkey.getBytes());
+						get.addColumn(cloumnFamily.getBytes(), cloumn.getBytes()); 
+						Result rs = table.get(get);
+						for (KeyValue kv : rs.raw()) {		
+								str = new String(kv.getValue());
+						}
+						return str;
+				} catch (Exception e) {
+                        System.out.println("Get cell by cloumn failed, table[" + tableName
+                                        + "], row key[" + rowkey + "] cloumnFamily[" + cloumnFamily
+                                        + "], cloumn[" + cloumn + "]Exception message: "
+                                        + e.getLocalizedMessage());
+                        return null;
+				}
+		}
 
         @SuppressWarnings({ "rawtypes", "unchecked" })
         public static String[] getRecordsByFilter(String tableName, String columnFamily,

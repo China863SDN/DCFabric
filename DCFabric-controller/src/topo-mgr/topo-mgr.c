@@ -51,7 +51,6 @@ UINT4 **g_short_weight;
 int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid, UINT4 tx_port)
 {
     gn_switch_t  *neigh_sw   = NULL;
-    UINT4 n_port = 0;
     int neigh_port_seq = 0;   //neigh's port_no's Sequence
     int own_port_seq = 0;   //our port_no's Sequence
 
@@ -79,6 +78,12 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
 		return GN_ERR;
 	}
 
+    //没有找到邻居端口
+    if (neigh_port_seq >= neigh_sw->n_ports)
+    {
+        return GN_ERR;
+    }
+
 
     //通过交换机的port_no，找到端口序号
     for(own_port_seq=0; own_port_seq<src_sw->n_ports; own_port_seq++)
@@ -92,24 +97,33 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
         }
     }
 
+    //没有找到本交换机端口
+    if (own_port_seq >= src_sw->n_ports)
+    {
+        return GN_ERR;
+    }
+    
+
     if (!(src_sw->neighbor[own_port_seq]))
     {
-        src_sw->neighbor[own_port_seq] = (neighbor_t *)malloc(sizeof(neighbor_t));
+        src_sw->neighbor[own_port_seq] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
     }
 
-    // event add line between 2 ports
-    n_port = neigh_sw->ports[neigh_port_seq].port_no;
-
-    if(neigh_sw->neighbor[neigh_port_seq] != NULL
-    		&& neigh_sw->neighbor[neigh_port_seq]->sw == src_sw
-			&& src_sw->neighbor[own_port_seq]->sw != neigh_sw ){
-		event_add_switch_port_on(src_sw,rx_port);
-		event_add_switch_port_on(neigh_sw,n_port);
+    if (!(neigh_sw->neighbor[neigh_port_seq]))
+    {
+        neigh_sw->neighbor[neigh_port_seq] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
     }
-    // event end
+
+    if (neigh_sw->neighbor[neigh_port_seq]->sw != src_sw || src_sw->neighbor[own_port_seq]->sw != neigh_sw)
+    {
+        event_add_switch_port_on(src_sw,rx_port);
+		event_add_switch_port_on(neigh_sw,tx_port);
+    }
 
     src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  //该端口序号连接的sw
     src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); //该端口与哪个端口相连
+    neigh_sw->neighbor[neigh_port_seq]->sw   = src_sw;  //该端口序号连接的sw
+    neigh_sw->neighbor[neigh_port_seq]->port = &(src_sw->ports[own_port_seq]); //该端口与哪个端口相连
 
     return 1;
 }
@@ -200,25 +214,6 @@ static void lldp_tx_timer(void *para, void *tid)
     UINT4 num  = 0;
     UINT4 port = 0;
     gn_switch_t *sw = NULL;
-
-//    //if role is master save the last topology version and then send lldp, else get topology from the database.
-//    if (OFPCR_ROLE_MASTER == g_controller_role)
-//    {
-//#ifdef HBASE_CLIENT
-////        printf("Current role is master, update topology.\n");
-//        persist_topology();
-//#endif
-//    }
-//    else if(OFPCR_ROLE_SLAVE == g_controller_role)
-//    {
-//#ifdef HBASE_CLIENT
-////        printf("Current role is slave, get topology.\n");
-//        query_topology();
-//        query_dynamic_flow(NULL);
-//        query_static_flow(NULL);
-//#endif
-//        return;
-//    }
 
     for(; num < g_server.max_switch; num++)
     {

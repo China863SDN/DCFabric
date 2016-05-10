@@ -113,6 +113,8 @@ typedef long long int     INT8;
 typedef unsigned long long int UINT8;
 #endif
 
+#include "gn_inet.h"
+
 #define TRUE 1
 #define FALSE 0
 
@@ -297,7 +299,6 @@ UINT4 ip2number(const INT1* ip);
 // convert number to ip
 INT1* number2ip(INT4 ip_num, INT1* ip);
 
-<<<<<<< HEAD
 // convert ipv6 to number
 UINT1* ipv6_str_to_number(char* str, UINT1* ipv6);
 
@@ -318,14 +319,31 @@ BOOL is_digit(const INT1 *str, INT4 base);
  * 计算校验和
  */
 UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size);
-=======
-/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
-//convert str dpid to uint8
-INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret);
-BOOL is_digit(const INT1 *str, INT4 base);
-/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
 
+UINT2 calc_tcp_checksum(ip_t* p_ip, tcp_t* p_tcp);
 
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+INT1* dpidUint8ToStr(UINT8 dpid, INT1* str);
 
+/*
+ * 定义了几个比较函数:
+ * 如果双方均为空,返回1;均不为空且内容一致,返回1;
+ * 其他情况返回0
+ */
+INT4 compare_str(char* str1, char* str2);
+
+INT4 compare_array(void* str1, void* str2, INT4 num);
+
+INT4 compare_pointer(void* ptr1, void* ptr2);
+
+/*
+ * 输入CIDR 字符串 , 转换为IP 和位数的组合
+ * 比如:输入192.168.53.0/24 转换为192.168.53.0 和24
+*/
+
+INT4 cidr_str_to_ip_prefix(char* ori_cidr, UINT4* ip, UINT4* mask);
+/*
+ * 输入不小于32的数字,输出对应的子网掩码
+ * 比如:输入24, 输出 FFFFFFF00
+*/
+UINT4 cidr_to_subnet_mask(UINT4 num);
 #endif /* COMMON_H_ */

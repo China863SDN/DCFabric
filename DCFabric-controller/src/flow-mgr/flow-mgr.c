@@ -661,7 +661,7 @@ static INT4 send_flow_mod(gn_switch_t *sw, gn_flow_t *flow, UINT1 command)
 
     return sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 }
-
+/*
 INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
     uuid_t uuid_gen;
@@ -703,6 +703,207 @@ INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
     pthread_mutex_unlock(&sw->flow_entry_mutex);
     return GN_OK;
 }
+*/
+gn_flow_t* copy_flow_entry(gn_flow_t *src)
+{
+	gn_instruction_t *p_ins_src,*p_ins_dst;
+	gn_instruction_t *p_ins_src_next;
+	gn_instruction_t *p_ins_dst_next;
+    gn_action_t *p_act_src = NULL, *p_act_src_next = NULL;
+    gn_action_t *p_act_dst = NULL, *p_act_dst_next = NULL;
+    gn_instruction_actions_t* p_inact_src,* p_inact_dst;
+    gn_flow_t *dest = NULL;
+
+	
+	dest =(gn_flow_t *)mem_get(g_gnflow_mempool_id);
+	dest->prev = NULL;
+	dest->next = NULL;
+	memcpy(dest->uuid,src->uuid,sizeof(src->uuid));
+	memcpy(dest->creater,src->creater,sizeof(src->creater));
+	dest->create_time = src->create_time;
+	dest->table_id = src->table_id;
+	dest->status = src->status;
+	dest->idle_timeout = src->idle_timeout;
+	dest->hard_timeout = src->hard_timeout;
+	dest->priority = src->priority;
+	memcpy(&dest->stats,&src->stats,sizeof(src->stats));
+	memcpy(&dest->match,&src->match,sizeof(src->match));
+	
+	if(src->instructions == NULL)
+	{
+		dest->instructions = NULL;
+		return dest;
+	}
+	
+	p_ins_src = src->instructions;
+
+    while(p_ins_src)
+    {
+        p_ins_dst_next = mem_get(g_gninstruction_mempool_id);
+        p_ins_dst_next->type = p_ins_src->type;   
+        
+        if((p_ins_src->type == OFPIT_APPLY_ACTIONS) || (p_ins_src->type == OFPIT_WRITE_ACTIONS))
+        {
+        	p_inact_src = (gn_instruction_actions_t *)p_ins_src;
+        	p_inact_dst = (gn_instruction_actions_t *)p_ins_dst_next;
+            p_act_src = p_inact_src->actions;
+           
+            while(p_act_src)
+            {
+            	p_act_dst_next = mem_get(g_gnaction_mempool_id);
+            	memcpy(p_act_dst_next,p_act_src,sizeof(gn_action_t));
+            	p_act_dst_next->next = NULL;
+            	
+            	if(p_inact_dst->actions == NULL)
+            	{
+            		p_inact_dst->actions = p_act_dst_next;
+            	}
+            	else
+            	{
+            		p_act_dst = p_inact_dst->actions;
+            		while(p_act_dst->next)
+            		{
+            			p_act_dst = p_act_dst->next;
+            		}
+            		p_act_dst->next = p_act_dst_next;
+            	}
+                p_act_src_next = p_act_src->next; 
+                p_act_src = p_act_src_next;
+            }
+        }
+
+        if(dest->instructions == NULL)
+        {
+        	dest->instructions = p_ins_dst_next;
+        	dest->instructions->next = NULL;
+        }
+        else
+        {
+			p_ins_dst = dest->instructions;
+        	while(p_ins_dst->next)
+    		{
+    			p_ins_dst = p_ins_dst->next;
+    		}
+        	p_ins_dst->next = p_ins_dst_next;
+        }
+        
+        p_ins_src_next = p_ins_src->next;        
+        p_ins_src = p_ins_src_next;
+    }
+
+    return dest;
+}
+
+INT4 clean_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
+{
+    gn_flow_t *p_flow = NULL;
+    gn_flow_t *p_del_flow = NULL;
+
+    if(sw->state == 0)
+    {
+        return EC_SW_STATE_ERR;
+    }
+
+    pthread_mutex_lock(&sw->flow_entry_mutex);
+    p_flow = sw->flow_entries;
+    while(p_flow)
+    {
+    	if(match_compare_strict(&p_flow->match,&flow->match))
+    	{
+    		//delete flow entry from list
+		    if(p_flow->next)
+		    {
+		        p_flow->next->prev = p_flow->prev;
+		    }
+
+		    if(p_flow->prev)
+		    {
+		        p_flow->prev->next = p_flow->next;
+		    }
+		    else
+		    {
+		        sw->flow_entries = p_flow->next;
+		    }
+		    
+			p_del_flow = p_flow;
+			p_flow = p_flow->next;
+    		//recycle the memory
+    		gn_flow_free(p_del_flow);
+    		continue;
+    		
+    	}
+    	p_flow = p_flow->next;
+    }
+
+    pthread_mutex_unlock(&sw->flow_entry_mutex);
+    return GN_OK;
+}
+
+INT4 clean_flow_entries(gn_switch_t *sw)
+{
+    gn_flow_t *p_flow_tmp, *p_flow = sw->flow_entries;
+    
+    if((NULL == sw) || (sw->state == 0))
+    {
+        return GN_ERR;
+    }
+    sw->flow_entries = NULL;
+    while(p_flow)
+    {
+        p_flow_tmp = p_flow->next;
+
+        //recycle the memory
+        gn_flow_free(p_flow);
+
+        p_flow = p_flow_tmp;
+    }
+
+    return GN_OK;
+}
+
+INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
+{
+    uuid_t uuid_gen;
+    if(sw->state == 0)
+    {
+        return GN_ERR;
+    }
+
+    pthread_mutex_lock(&sw->flow_entry_mutex);
+    if(NULL == find_flow_entry(sw, flow))
+    {
+        uuid_generate_random(uuid_gen);
+        uuid_unparse(uuid_gen, flow->uuid);
+
+        if(sw->flow_entries)
+        {
+            gn_flow_t *p_flow = sw->flow_entries;
+            while(p_flow->next)
+            {
+                p_flow = p_flow->next;
+            };
+           p_flow->next = copy_flow_entry(flow);
+           //p_flow->next = flow;
+        }
+        else
+        {
+            flow->prev = NULL;
+            flow->next = NULL;
+            sw->flow_entries = copy_flow_entry(flow);
+            //sw->flow_entries = flow;
+        }
+    }
+    else
+    {
+        pthread_mutex_unlock(&sw->flow_entry_mutex);
+        return GN_OK;
+    }
+
+    flow->status = ENTRY_ENABLED;
+    pthread_mutex_unlock(&sw->flow_entry_mutex);
+    return GN_OK;
+}
+
 
 INT4 modify_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
@@ -936,7 +1137,7 @@ INT4 init_flow_mgr()
     INT1 *value = NULL;
 
     value = get_value(g_controller_configure, "[controller]", "max_flowentry");
-    g_max_flowentry = (value == NULL ? 100000 : atoi(value));
+    g_max_flowentry = (value == NULL ? 100000 : atoll(value));
 
     //∑÷≈‰ƒ⁄¥Ê≥ÿ
     g_gnflow_mempool_id = mem_create(sizeof(gn_flow_t), g_max_flowentry);
