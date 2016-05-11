@@ -16,17 +16,15 @@
 # @author: Dave Tucker, Hewlett-Packard Development Company L.P.
 
 import time
-
-from oslo.config import cfg
+from oslo_config import cfg
 import requests
-
+from oslo_log import log
 from neutron.common import constants as n_const
 from neutron.common import exceptions as n_exc
 from neutron.common import utils
 from neutron.extensions import portbindings
-from neutron.openstack.common import excutils
-from neutron.openstack.common import jsonutils
-from neutron.openstack.common import log
+from oslo_utils import excutils
+from oslo_serialization import jsonutils
 from neutron.plugins.common import constants
 from neutron.plugins.ml2 import driver_api as api
 

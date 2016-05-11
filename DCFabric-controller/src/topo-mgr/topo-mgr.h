@@ -48,6 +48,7 @@ extern adac_matrix_t g_adac_matrix;
 extern UINT4 **g_short_path;     //v到各顶点的最短路径向量
 extern UINT4 **g_short_weight;   //v到各顶点最短路径长度向量
 
+int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid, UINT4 tx_port);
 INT4 lldp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info);
 INT4 init_topo_mgr();
 

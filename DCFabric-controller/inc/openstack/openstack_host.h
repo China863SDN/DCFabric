@@ -31,6 +31,9 @@
 // tenant
 #define OPENSTACK_TENANT_ID_LEN 48
 
+// cidr
+#define OPENSTACK_CIDR_ID_LEN 48
+
 // network
 #define OPENSTACK_NETWORK_ID_LEN 48
 #define OPENSTACK_NETWORK_NAME_LEN 48
@@ -87,14 +90,15 @@ typedef struct _openstack_subnet{
 	UINT1 gateway_ipv6[16];
 	UINT4 start_ip;
 	UINT4 end_ip;
-<<<<<<< HEAD
 	UINT1 start_ipv6[16];
 	UINT1 end_ipv6[16];
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+	char cidr[OPENSTACK_CIDR_ID_LEN];
 	void* gateway_port;
 	void* dhcp_port;
 	UINT4 port_num;
+	UINT1 external;
+	UINT1 check_status;
+    UINT4 installed_flow_count;
 }openstack_subnet,* openstack_subnet_p;
 
 typedef struct _openstack_network{
@@ -102,6 +106,8 @@ typedef struct _openstack_network{
 	char network_id[OPENSTACK_NETWORK_ID_LEN];
 	UINT4 subnet_num;
 	UINT1 shared;
+	UINT1 external;
+	UINT1 check_status;
 }openstack_network,* openstack_network_p;
 
 typedef struct _openstack_node{
@@ -110,6 +116,7 @@ typedef struct _openstack_node{
 }openstack_node,*openstack_node_p;
 
 typedef struct _openstack_security_rule {
+	char group_id[OPENSTACK_SECURITY_GROUP_LEN];
 	char direction[OPENSTACK_SECURITY_GROUP_LEN];
 	char ethertype[OPENSTACK_SECURITY_GROUP_LEN];
 	char rule_id[OPENSTACK_SECURITY_GROUP_LEN];
@@ -119,6 +126,7 @@ typedef struct _openstack_security_rule {
 	char remote_group_id[OPENSTACK_SECURITY_GROUP_LEN];
 	char remote_ip_prefix[OPENSTACK_SECURITY_GROUP_LEN];
 	char tenant_id[OPENSTACK_SECURITY_GROUP_LEN];
+	UINT2 check_status;
 	struct _openstack_security_rule* next;
 } openstack_security_rule, *openstack_security_rule_p;
 
@@ -187,8 +195,10 @@ void destory_openstack_host();
 openstack_network_p create_openstack_host_network(
 		char* tenant_id,
 		char* network_id,
-		UINT1 shared);
+		UINT1 shared,
+		UINT1 external);
 void destory_openstack_host_network(openstack_network_p network);
+void reload_openstack_host_network();
 void add_openstack_host_network(openstack_network_p network);
 openstack_network_p find_openstack_host_network_by_network_id(char* network_id);
 openstack_network_p remove_openstack_host_network_by_network_id(char* network_id);
@@ -204,7 +214,9 @@ openstack_subnet_p create_openstack_host_subnet(
 		UINT4 end_ip,
 		UINT1* gateway_ipv6,
 		UINT1* start_ipv6,
-		UINT1* end_ipv6);
+		UINT1* end_ipv6,
+		char* cidr,
+		UINT1 external);
 void destory_openstack_host_subnet(openstack_subnet_p subnet);
 void add_openstack_host_subnet(openstack_subnet_p subnet);
 openstack_subnet_p find_openstack_host_subnet_by_subnet_id(char* subnet_id);
@@ -254,11 +266,8 @@ void destory_openstack_host_node(openstack_node_p node);
 openstack_security_p update_openstack_security_group(char* security_group);
 openstack_node_p add_openstack_host_security_node(UINT1* data, openstack_node_p head_p);
 void clear_openstack_host_security_node(UINT1* head_p);
-<<<<<<< HEAD
 void clear_all_security_group_info();
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
-void update_security_rule(char* security_group, char* rule_id, char* direction, char* ethertype, char* port_range_max,
+openstack_security_rule_p update_security_rule(char* security_group, char* rule_id, char* direction, char* ethertype, char* port_range_max,
 char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id);
 
 
@@ -268,15 +277,14 @@ p_fabric_host_node find_fabric_host_port_by_tenant_id(UINT4 ip, char* tenant_id)
 p_fabric_host_node find_fabric_host_port_by_network_id(UINT4 ip, char* network_id);
 UINT4 find_fabric_host_ports_by_subnet_id(char* subnet_id,p_fabric_host_node* host_list);
 p_fabric_host_node find_fabric_host_port_by_subnet_id(UINT4 ip, char* subnet_id);
+p_fabric_host_node find_openstack_host_by_srcport_ip(p_fabric_host_node host_p, UINT4 ip);
 void find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id);
+void update_openstack_host_port_by_mac(UINT1* mac, gn_switch_t* sw, UINT4 port);
 
-<<<<<<< HEAD
 
 void init_host_check_mgr();
 void host_check_tx_timer(void *para, void *tid);
 
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 #endif /* INC_OPENSTACK_OPENSTACK_HOST_H_ */
 
 

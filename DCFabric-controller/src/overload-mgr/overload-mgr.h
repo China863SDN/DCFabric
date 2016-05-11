@@ -19,26 +19,36 @@
 
 /******************************************************************************
 *                                                                             *
-*   File Name   : meter-mgr.h           *
-*   Author      : greenet Administrator           *
-*   Create Date : 2015-3-10           *
+*   File Name   : overload-mgr.h           *
+*   Author      : bnc Administrator           *
+*   Create Date : 2016-04-26           *
 *   Version     : 1.0           *
 *   Function    : .           *
 *                                                                             *
 ******************************************************************************/
 
-#ifndef METER_MGR_H_
-#define METER_MGR_H_
-
+#ifndef OVERLOAD_MGR_H_
+#define OVERLOAD_MGR_H_
+#include "common.h"
 #include "gnflush-types.h"
 
-INT4 add_meter_entry(gn_switch_t *sw, gn_meter_t *meter);
-INT4 modify_meter_entry(gn_switch_t *sw, gn_meter_t *meter);
-INT4 delete_meter_entry(gn_switch_t *sw, gn_meter_t *meter);
 
-void clear_meter_entries(gn_switch_t *sw);
+typedef struct msg_counter
+{
+    gn_switch_t* sw;
+    UINT4 ip;
+    UINT1 mac[6];
+    UINT4 count;
+    UINT4 start;
+    UINT4 stop;
+    BOOL  flag;
+    UINT8 timestamp;
+    
+    struct msg_counter* next;
+}msg_counter_t;
 
-INT4 init_meter_mgr();
-void fini_meter_mgr();
+void add_msg_counter(gn_switch_t* sw, UINT4 ip, const UINT1* mac);
+INT4 init_overload_mgr();
 
-#endif /* METER_MGR_H_ */
+#endif
+

@@ -100,12 +100,9 @@ typedef struct param_set
 	external_floating_ip_p floatingip;
 	security_param_p src_security;
 	security_param_p dst_security;
-<<<<<<< HEAD
 	UINT4 vip;
 	UINT1 vip_mac[6];
 	UINT4 vip_tcp_port_no;
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 }param_set_t, *param_set_p;
 
 typedef p_fabric_host_node (*save_src_info)(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 inport);
@@ -120,6 +117,8 @@ typedef INT4 (*output_t)(p_fabric_host_node src_port,p_fabric_host_node dst_port
 typedef INT4 (*remove_ip_from_flood_list_t)(UINT4 sendip);
 typedef INT4 (*reply_output_t)(p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in);
 typedef p_fabric_host_node (*find_ip_dst_port)(p_fabric_host_node src_node,UINT4 targetip);
+typedef INT4 (*ip_install_deny_flow_t)(gn_switch_t *sw, ip_t* ip);
+
 typedef struct arp_handler
 {
 	save_src_info save_src_port;
@@ -139,6 +138,7 @@ typedef struct ip_handler
 	ip_packet_flood_t ip_flood;
 	ip_packet_install_flow_t ip_packet_install_flow;
 	compute_forward_t ip_packet_compute_src_dst_forward;
+	ip_install_deny_flow_t ip_install_deny_flow;
 }ip_handler_t;
 
 #pragma pack()
@@ -160,10 +160,7 @@ INT4 packet_in_process(gn_switch_t *sw, packet_in_info_t *packet_in_info);
 INT4 init_forward_mgr();
 void fini_forward_mgr();
 void init_handler();
-<<<<<<< HEAD
 
 // initialize forward param
 void init_forward_param_list();
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 #endif /* FORWARD_MGR_H_ */

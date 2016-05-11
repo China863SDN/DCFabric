@@ -126,7 +126,7 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
 {
     INT4 ret = 0;
     UINT4 idx = 0;
-
+    g_rest_reply = NULL;
     if (NULL == *con_cls)
     {
         struct connection_info *conn_info = (struct connection_info *)gn_malloc(sizeof(struct connection_info));
@@ -142,7 +142,10 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
 
     if (0 == strcmp(method, "GET"))
     {
-        LOG_PROC("INFO", "Restful[%s]: [%s]", method, url);
+        if (0 != strcmp(url, "/gn/cluster/query/json")) {
+            LOG_PROC("INFO", "Restful[%s]: [%s]", method, url);
+        }
+           
         g_rest_reply = proc_rest_msg(method, url, upload_data);
         //todo 判空
         ret = send_page(connection, g_rest_reply, MHD_HTTP_OK);     //回复消息
@@ -195,12 +198,8 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
         }
         else
         {
-            ret = send_page(connection, g_rest_reply, MHD_HTTP_OK);
-            memset((char *) upload_data, 0x0, *upload_data_size);    //清空缓冲区
-            *upload_data_size = 0;
+            ret = send_page(connection, "", MHD_HTTP_OK);
             upload_data = NULL;
-
-            gn_free((void **)&g_rest_reply);
             return ret;
         }
     }
@@ -235,7 +234,7 @@ INT4 init_restful_svr()
 {
     UINT4 i;
     INT1 *value = get_value(g_controller_configure, "[controller]", "restful_service_port");
-    g_restful_port = (NULL == value ? 8081 : atoi(value));
+    g_restful_port = (NULL == value ? 8081 : atoll(value));
 
     for(i = 0; i < REST_CAPACITY; i++)
     {

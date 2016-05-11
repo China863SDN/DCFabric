@@ -24,6 +24,10 @@
  *  Author: BNC administrator
  *  E-mail: DCFabric-admin@bnc.org.cn
  */
+
+#ifndef DEBUG_SVR_H_
+#define DEBUG_SVR_H_H
+ 
 #include "json_server.h"
 
 
@@ -51,7 +55,25 @@ INT1 *fabric_debug_clear_all_loadbalance(const INT1 *url, json_t *root);
 
 INT1 *fabric_debug_reload_all_loadbalance(const INT1 *url, json_t *root);
 
+INT1 *fabric_debug_get_all_floatingip();
 
+INT1 *fabric_debug_get_all_arp_request();
 
- 
+INT1 *fabric_debug_get_all_arp_flood();
 
+INT1 *fabric_debug_get_all_external_config();
+
+INT1 *fabric_debug_get_all_nat_icmp_iden();
+
+INT1 *fabric_debug_get_all_nat_host();
+
+INT1* fabric_debug_get_all_network();
+
+INT1* fabric_debug_get_exteral_check();
+
+INT1* fabric_debug_start_exteral_check(const INT1 *url, json_t *root);
+
+INT1* fabric_debug_stop_exteral_check();
+
+INT1* fabric_debug_get_all_subnet();
+#endif

@@ -48,11 +48,9 @@
 #include "fabric_openstack_external.h"
 #include "fabric_openstack_nat.h"
 #include "fabric_thread.h"
-<<<<<<< HEAD
 #include "openstack_lbaas_app.h"
-=======
+#include "timer.h"
 
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 void createPortFabric(char* jsonString,const char* stringType);
 static char * g_openstack_server_name;
 UINT4 g_openstack_port = 9696;
@@ -60,6 +58,12 @@ char g_openstack_ip[16] = {0};
 UINT4 g_openstack_on = 0;
 UINT4 g_openstack_fobidden_ip = 0;
 INT4 numm = 0;
+
+//定时刷新
+void *g_reload_timer = NULL;
+void *g_reload_timerid = NULL;
+UINT4 g_reload_interval = 30;
+
 //获取token id
 void getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 {
@@ -104,7 +108,7 @@ void getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 	sprintf(str, "%d", len);
 
 	memset(str1, 0, 4096);
-	strcat(str1, "POST /v2.0/tokens HTTP/1.1\n");
+	strcat(str1, "POST /v2.0/tokens HTTP/1.0\n");
 	strcat(str1, "Content-Type: application/json\n");
 	strcat(str1, "Content-Length: ");
 	strcat(str1, str);
@@ -220,7 +224,21 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType){
 			printf("connect error!\n");
 			exit(0);
 	}
-    getNewTokenId(ip,"admin","admin","admin");
+
+	char str_tenantname[48] = {0};
+	char str_username[48] = {0};
+	char str_password[48] = {0};
+	
+	INT1 *value = get_value(g_controller_configure, "[openvstack_conf]", "tenantname");
+    NULL == value ? strncpy(str_tenantname, "admin", 48 - 1) : strncpy(str_tenantname, value, 48 - 1);
+
+	value = get_value(g_controller_configure, "[openvstack_conf]", "username");
+	NULL == value ? strncpy(str_username, "admin", 48 - 1) : strncpy(str_username, value, 48 - 1);
+
+	value = get_value(g_controller_configure, "[openvstack_conf]", "password");
+	NULL == value ? strncpy(str_password, "admin", 48 - 1) : strncpy(str_password, value, 48 - 1);
+	
+    getNewTokenId(ip, str_tenantname, str_username, str_password);	
 	//·￠?ê?Y        memset(str2, 0, 4096);
 	memset(str2, 0, 4096);
 	strcat(str2, "{}");
@@ -234,6 +252,10 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType){
 	strcat(str1, " HTTP/1.1\n");
 	strcat(str1, "Content-Type:application/json\n");
 	strcat(str1,"X-Auth-Token:");
+	if (NULL == g_openstack_server_name) {
+		LOG_PROC("ERROR", "Openstack authentication failure! Please check the configuration.");
+		return ;
+	}
 	strcat(str1,g_openstack_server_name);
 	strcat(str1,"\n\n");
 	strcat(str1, "Content-Length: ");
@@ -291,85 +313,57 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType){
 		free(string);
 }
 
-void initOpenstackFabric(){
-	// config
-	INT1 *value = NULL;
 
-	// config & check openstack
-	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
-	g_openstack_on = (NULL == value)?0:atoi(value);
-	if( 1 == g_openstack_on){
-		// get openstack ip
-		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
-		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
-		// get port;
-		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
-		g_openstack_port = ((NULL == value) ? 9696 : atoi(value));
-		//
-		g_openstack_fobidden_ip = inet_addr("169.254.169.254");
-
-		start_fabric_thread();
-
-		init_openstack_host();
-		init_openstack_external();
-		read_external_port_config();
-		init_nat_mem_pool();
-		init_nat_host();
-		init_openstack_lbaas();
-		getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/ports",g_openstack_port,"port");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/security-group-rules",g_openstack_port,"security-group-rules");
-<<<<<<< HEAD
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem");
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener");
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
-		LOG_PROC("INFO", "Init Openstack service finished");
-	}else{
-		LOG_PROC("INFO", "Init Openstack service Failed");
-	}
-//	show_openstack_total();
-}
 void updateOpenstackFloating(){
 	// config
 	INT1 *value = NULL;
 
 	// config & check openstack
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
-	g_openstack_on = (NULL == value)?0:atoi(value);
+	g_openstack_on = (NULL == value)?0:atoll(value);
 	if( 1 == g_openstack_on){
 		// get openstack ip
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
 		(NULL == value)?strncpy(g_openstack_ip, "192.168.53.51", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
 		// get port;
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
-		g_openstack_port = ((NULL == value) ? 9696 : atoi(value));
+		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
 		//
 		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
-		LOG_PROC("INFO", "Openstack Floating Info Updated");
+		// LOG_PROC("INFO", "Openstack Floating Info Updated");
 	}else{
 		LOG_PROC("INFO", "Openstack Floating Info Update Failed");
 	}
 }
 
+void show_create_port_log(const char* stringType, INT4 totalNum)
+{
+	if (0 != totalNum) {
+		LOG_PROC("INFO","OPENSTACK [%d] updated!\ttype: %s", totalNum, stringType);
+	}
+}
+
+void reset_unchecked_flag(char* stringType)
+{
+	// TBD
+}
+
+void remove_unchecked_port(char* stringType)
+{
+	// TBD
+}
+
 void createPortFabric( char *jsonString,const char *stringType){
     const char *tempString = jsonString;
 	INT4 parse_type = 0;
-	UINT2 totalNum = 0;
+	INT4 totalNum = 0;
 	json_t *json=NULL,*temp=NULL;
 	char* networkType="network",*subnetType="subnet",*portType="port",*floatingType="floating";
 	char* securityType = "security-group-rules";
-<<<<<<< HEAD
 	char* lbpools = "pools";
 	char* lbvips = "vips";
 	char* lbmembers = "lbmem";
 	char* lblistener = "lblistener";
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 	char tenant_id[48] ={0};
 	char network_id[48] = {0};
 	char subnet_id[48] = {0};
@@ -399,6 +393,7 @@ void createPortFabric( char *jsonString,const char *stringType){
 				json_t *networks = json_find_first_label(json, "networks");
 //				char *tenant_id,*network_id;
 			    UINT1 shared=0;
+				UINT1 external=0;
 				if(networks){
 					json_t *network  = networks->child->child;
 					while(network){
@@ -425,15 +420,26 @@ void createPortFabric( char *jsonString,const char *stringType){
 							}
 							json_free_value(&temp);
 						}
-						update_openstack_app_network(tenant_id,network_id,shared);
+						temp = json_find_first_label(network, "router:external");
+						if(temp){
+							if(temp->child->type==JSON_TRUE){
+								external=1;
+							}else if(temp->child->type==JSON_FALSE){
+								external=0;
+							}else{
+							}
+							json_free_value(&temp);
+						}
+						openstack_network_p network_p = update_openstack_app_network(tenant_id,network_id,shared,external);
+						if ((network_p) && (is_check_status_changed(network_p->check_status))) {
+							totalNum ++;
+						}
 						network=network->next;
-						totalNum ++;
 					}
 					json_free_value(&networks);
-					LOG_PROC("INFO","OPENSTACK NETWORK  UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
-			}else if(strcmp(stringType,subnetType)==0){
+			}
+			else if(strcmp(stringType,subnetType)==0){
 //				char *tenant_id,*network_id,*subnet_id,*cidr;
 				INT4 gateway_ip = 0, start_ip = 0, end_ip = 0;
 				UINT1 gateway_ipv6[16] = {0};
@@ -511,20 +517,21 @@ void createPortFabric( char *jsonString,const char *stringType){
 							}
 							json_free_value(&allocations);
 						}
-						update_openstack_app_subnet(tenant_id,network_id,subnet_id,gateway_ip,start_ip,end_ip,
-													gateway_ipv6, start_ipv6, end_ipv6, cidr);
+						openstack_subnet_p subnet_p = update_openstack_app_subnet(tenant_id,network_id,subnet_id,
+							gateway_ip,start_ip,end_ip,	gateway_ipv6, start_ipv6, end_ipv6, cidr);
+						if ((subnet_p) && (is_check_status_changed(subnet_p->check_status))) {
+							totalNum ++;
+						}
 						subnet=subnet->next;
-						totalNum++;
 					}
 					json_free_value(&subnets);
-					LOG_PROC("INFO","OPENSTACK SUBNETS  UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 
 			}else if(strcmp(stringType,portType)==0){
 				//char *tenant_id,*network_id,*subnet_id,*port_id;
 				char port_type[40] = {0};
 				char* computer="compute:nova";
+				char* computer_none="compute:None";
 				char* dhcp="network:dhcp";
 				char* floating = "network:floatingip";
 				INT4 ip = 0;
@@ -610,26 +617,24 @@ void createPortFabric( char *jsonString,const char *stringType){
 							json_free_value(&security_groups);
 						}
 
-						if(strcmp(port_type,computer)==0|| strcmp(port_type,floating)==0){
+						p_fabric_host_node host_p = NULL;
+						if(strcmp(port_type,computer)==0|| strcmp(port_type,floating)==0 || strcmp(port_type,computer_none)==0){
 //							LOG_PROC("INFO","PORT UPDATE!");
-<<<<<<< HEAD
-							update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
-=======
-							update_openstack_app_host_by_rest(NULL,port_number,ip,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+							host_p = update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
 						}else if(strcmp(port_type,dhcp)==0){
 //							LOG_PROC("INFO","DHCP UPDATE!");
-							update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
+							host_p = update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
 						}else{
 //							LOG_PROC("INFO","GATEWAY UPDATE!");
-							update_openstack_app_gateway_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
+							host_p = update_openstack_app_gateway_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
+						}
+
+						if ((host_p) && (is_check_status_changed(host_p->check_status))) {
+							totalNum++;
 						}
 						port=port->next;
-						totalNum++;
 					}
 					json_free_value(&ports);
-					LOG_PROC("INFO","OPENSTACK PORTS  UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
 			else if(strcmp(stringType,floatingType)==0){
@@ -639,6 +644,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 				if(floatings){
 					json_t *floating_ip_one  = floatings->child->child;
 					while(floating_ip_one){
+						fixed_ip = 0;
+						floating_ip = 0;
+						bzero(router_id, 48);
+						bzero(port_id, 48);
+						
 						temp = json_find_first_label(floating_ip_one, "router_id");
 						if(temp){
 							if(temp->child->text){
@@ -667,13 +677,14 @@ void createPortFabric( char *jsonString,const char *stringType){
 							}
 							json_free_value(&temp);
 						}
-						create_floatting_ip_by_rest(fixed_ip,floating_ip,port_id,router_id);
+						external_floating_ip_p efp = create_floatting_ip_by_rest(fixed_ip,floating_ip,port_id,router_id);
+						if ((efp) && (is_check_status_changed(efp->check_status))) {
+							totalNum++;
+						}
 						floating_ip_one=floating_ip_one->next;
-						totalNum++;
+						
 					}
 					json_free_value(&floatings);
-					LOG_PROC("INFO","OPENSTACK FLOATINGIP  UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
 			else if (0 == strcmp(stringType, securityType)) {
@@ -760,19 +771,17 @@ void createPortFabric( char *jsonString,const char *stringType){
 								json_free_value(&temp);
 							}
 						}
-
 						
-						update_security_rule(security_group_id,rule_id,direction,ethertype,port_range_max,port_range_min,
-								protocol,remote_group_id,remote_ip_prefix,security_tenant_id);
+						openstack_security_rule_p rule_p = update_security_rule(security_group_id,rule_id,direction,ethertype,
+							port_range_max,port_range_min,protocol,remote_group_id,remote_ip_prefix,security_tenant_id);
+						if ((rule_p) && (is_check_status_changed(rule_p->check_status))) {
+							totalNum++;
+						}
 						security_group = security_group->next;
-						totalNum++;
 					}
 					json_free_value(&security_groups);
-					LOG_PROC("INFO","OPENSTACK SECURITY UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
-<<<<<<< HEAD
 			else if(strcmp(stringType,lbpools)==0){
 				char lb_pool_id[48] = {0};
 				UINT1 lb_status=0;
@@ -837,14 +846,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 								lb_status,
 								lb_protocol,
 								lbaas_method);
-						if (pool_p)
-							pool_p->update_flag = GN_OK;
 						lbaas_pool = lbaas_pool->next;
-						totalNum++;
+						if ((pool_p) && (is_check_status_changed(pool_p->check_status)))
+							totalNum++;
 					}
 					json_free_value(&lbaas_pools);
-					LOG_PROC("INFO","OPENSTACK LBAAS POOLS UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
 			else if(strcmp(stringType,lbvips)==0){
@@ -883,7 +889,7 @@ void createPortFabric( char *jsonString,const char *stringType){
 						temp = json_find_first_label(lbaas_pool, "protocol_port");
 						if(temp){
 							if(temp->child->text){
-								protocol_port=atoi(temp->child->text);
+								protocol_port=atoll(temp->child->text);
 								json_free_value(&temp);
 							}
 						}
@@ -898,13 +904,13 @@ void createPortFabric( char *jsonString,const char *stringType){
 						if(temp){
 							json_t *temp2 = temp->child->child;
 							if(temp2){
-								temp2 = json_find_first_label(temp2, "type");
+								// temp2 = json_find_first_label(temp2, "type");
 								if(temp2->child->text){
-									if(strcmp(temp->child->text,"SOURCE_IP")==0){
+									if(strcmp(temp2->child->text,"SOURCE_IP")==0){
 										session_persistence=SEPER_SOURCE_IP;
-									}else if(strcmp(temp->child->text,"HTTP_COOKIE")==0){
+									}else if(strcmp(temp2->child->text,"HTTP_COOKIE")==0){
 										session_persistence=SEPER_HTTP_COOKIE;
-									}else if(strcmp(temp->child->text,"APP_COOKIE")==0){
+									}else if(strcmp(temp2->child->text,"APP_COOKIE")==0){
 										session_persistence=SEPER_APP_COOKIE;
 									}else{
 										session_persistence= SEPER_NO_LIMIT;
@@ -920,14 +926,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 								vip_ip_adress,
 								connect_limit,
 								vip_status,session_persistence);
-						if (pool_p)
-							pool_p->update_flag =GN_OK;
+						if ((pool_p) && is_check_status_changed(pool_p->check_status))
+							totalNum++;
 						lbaas_pool = lbaas_pool->next;
-						totalNum++;
 					}
 					json_free_value(&lbaas_pools);
-					LOG_PROC("INFO","OPENSTACK LBAAS POOLS UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
 			else if(strcmp(stringType,lbmembers)==0){
@@ -983,7 +986,7 @@ void createPortFabric( char *jsonString,const char *stringType){
 						temp = json_find_first_label(lbaas_member, "protocol_port");
 						if(temp){
 							if(temp->child->text){
-								mem_protocol_port=atoi(temp->child->text);
+								mem_protocol_port=atoll(temp->child->text);
 								json_free_value(&temp);
 							}
 						}
@@ -1002,14 +1005,11 @@ void createPortFabric( char *jsonString,const char *stringType){
 								mem_protocol_port,
 								mem_status,
 								mem_fixed_ip);
-						if (member_p)
-							member_p->update_flag = GN_OK;
+						if ((member_p) && is_check_status_changed(member_p->check_status)) 
+							totalNum++;
 						lbaas_member = lbaas_member->next;
-						totalNum++;
 					}
 					json_free_value(&lbaas_members);
-					LOG_PROC("INFO","OPENSTACK LBAAS MEMBERS UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
 			else if(strcmp(stringType,lblistener)==0){
@@ -1049,14 +1049,14 @@ void createPortFabric( char *jsonString,const char *stringType){
 						temp = json_find_first_label(lbaas_listener, "delay");
 						if(temp){
 							if(temp->child->text){
-								check_frequency=atoi(temp->child->text);
+								check_frequency=atoll(temp->child->text);
 								json_free_value(&temp);
 							}
 						}
 						temp = json_find_first_label(lbaas_listener, "timeout");
 						if(temp){
 							if(temp->child->text){
-								lb_lis_overtime=atoi(temp->child->text);
+								lb_lis_overtime=atoll(temp->child->text);
 								json_free_value(&temp);
 							}
 						}
@@ -1073,20 +1073,18 @@ void createPortFabric( char *jsonString,const char *stringType){
 								check_frequency,
 								lb_lis_overtime,
 								lb_lis_retries);
-						if (listener_p)
-							listener_p->update_flag = GN_OK;
+						if ((listener_p) && is_check_status_changed(listener_p->check_status))
+							totalNum++;
 						lbaas_listener = lbaas_listener->next;
-						totalNum++;
 					}
 					json_free_value(&lbaas_listeners);
-					LOG_PROC("INFO","OPENSTACK LBAAS LISTENER UPDATE!   [%d] updated!",totalNum);
-					totalNum=0;
 				}
 			}
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		}
 	}
+
+	// show log
+	show_create_port_log(stringType, totalNum);
 }
 
 void reload_security_group_info()
@@ -1095,14 +1093,14 @@ void reload_security_group_info()
 
 	// config & check openstack
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
-	g_openstack_on = (NULL == value)?0:atoi(value);
+	g_openstack_on = (NULL == value)?0:atoll(value);
 	if( 1 == g_openstack_on){
 		// get openstack ip
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
 		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
 		// get port;
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
-		g_openstack_port = ((NULL == value) ? 9696 : atoi(value));
+		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
 
 		getOpenstackInfo(g_openstack_ip, "/v2.0/ports", g_openstack_port, "port");
 		getOpenstackInfo(g_openstack_ip, "/v2.0/security-group-rules", g_openstack_port, "security-group-rules");
@@ -1110,20 +1108,40 @@ void reload_security_group_info()
 
 }
 
-void reoad_lbaas_info()
+void reload_net_info()
 {
 	INT1 *value = NULL;
-
+	
 	// config & check openstack
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
-	g_openstack_on = (NULL == value)?0:atoi(value);
+	g_openstack_on = (NULL == value)?0:atoll(value);
 	if( 1 == g_openstack_on){
 		// get openstack ip
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
 		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
 		// get port;
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
-		g_openstack_port = ((NULL == value) ? 9696 : atoi(value));
+		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
+
+		getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet");
+	} 
+
+}
+void reoad_lbaas_info()
+{
+	INT1 *value = NULL;
+
+	// config & check openstack
+	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
+	g_openstack_on = (NULL == value)?0:atoll(value);
+	if( 1 == g_openstack_on){
+		// get openstack ip
+		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
+		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
+		// get port;
+		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
+		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
 
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools");
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips");
@@ -1131,4 +1149,72 @@ void reoad_lbaas_info()
 		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener");
 	} 
 }
+
+
+void reload_tx_timer(void *para, void *tid)
+{
+	reload_openstack_host_network();
+    reload_security_group_info();
+	reload_floating_ip();
+    reload_openstack_lbaas_info();
+}
+
+void init_openstack_reload()
+{
+	INT1 *value = NULL;
+	value = get_value(g_controller_configure, "[openvstack_conf]", "reload_on");
+	UINT4 reload_on_flag = ((NULL == value) ? 0 : atoll(value));
+	if (reload_on_flag) {
+		value = get_value(g_controller_configure, "[openvstack_conf]", "reload_interval");
+		g_reload_interval = ((NULL == value) ? 30 : atoll(value));
+		g_reload_timerid = timer_init(1);
+		timer_creat(g_reload_timerid, g_reload_interval, NULL, &g_reload_timer, reload_tx_timer);
+	}
+}
+
+
+void initOpenstackFabric(){
+	// config
+	INT1 *value = NULL;
+
+	// config & check openstack
+	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
+	g_openstack_on = (NULL == value)?0:atoll(value);
+	if( 1 == g_openstack_on){
+		// get openstack ip
+		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
+		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
+		// get port;
+		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
+		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
+		//
+		g_openstack_fobidden_ip = inet_addr("169.254.169.254");
+
+		start_fabric_thread();
+
+		init_openstack_host();
+		init_openstack_external();
+		read_external_port_config();
+		init_nat_mem_pool();
+		init_nat_host();
+		init_openstack_lbaas();
+		init_openstack_reload();
+		getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/ports",g_openstack_port,"port");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/security-group-rules",g_openstack_port,"security-group-rules");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem");
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener");
+		
+		LOG_PROC("INFO", "Init Openstack service finished");
+	}else{
+		LOG_PROC("INFO", "Init Openstack service Failed");
+	}
+//	show_openstack_total();
+
+}
+
 
