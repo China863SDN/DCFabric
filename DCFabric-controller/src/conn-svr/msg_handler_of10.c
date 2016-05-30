@@ -236,18 +236,38 @@ static INT4 of10_msg_error(gn_switch_t *sw, UINT1 *of_msg)
     return GN_OK;
 }
 
-static INT4 of10_msg_echo_request(gn_switch_t *sw, UINT1 *of_msg)
+INT4 of10_msg_echo_request(gn_switch_t *sw, UINT1 *of_msg)
 {
-    return sw->msg_driver.msg_handler[OFPT_ECHO_REPLY](sw, of_msg);
+    if (NULL == of_msg) 
+    {
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP10_VERSION, OFPT_ECHO_REQUEST, total_len, DEFAULT_TRANSACTION_XID);
+        return send_of_msg(sw, total_len);
+    }
+    else
+    {
+        return sw->msg_driver.msg_handler[OFPT_ECHO_REPLY](sw, of_msg);
+    }
 }
 
 static INT4 of10_msg_echo_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP10_VERSION, OFPT_ECHO_REPLY, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+    //收到心跳响应
+    if (DEFAULT_TRANSACTION_XID == ((struct ofp_header*)of_msg)->xid) 
+    {
+        pthread_mutex_lock(&sw->sock_state_mutex);
+        sw->sock_state = 1;
+        pthread_mutex_unlock(&sw->sock_state_mutex);
+        return GN_OK;
+    }
+    else
+    {
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP10_VERSION, OFPT_ECHO_REPLY, total_len, 0);
+        return send_of_msg(sw, total_len);
+    }
 }
+
 
 static INT4 of10_msg_vendor(gn_switch_t *sw, UINT1 *of_msg)
 {
@@ -728,6 +748,15 @@ static INT4 of10_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
         total_len += of10_add_action((UINT1 *)&(ofm->actions), ((gn_instruction_actions_t *)(mod_info->flow->instructions))->actions);
     }
     ofm->header.length = htons(total_len);
+
+    if(mod_info->command == OFPFC_ADD)
+    {
+    	add_flow_entry(sw,mod_info->flow);
+    }
+    else if(mod_info->command == OFPFC_DELETE)
+    {
+		clean_flow_entry(sw,mod_info->flow);
+    }
 
     return send_of_msg(sw, total_len);
 }

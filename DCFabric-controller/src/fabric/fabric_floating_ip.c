@@ -42,18 +42,27 @@
 #include "fabric_openstack_nat.h"
 #include "openstack_app.h"
 #include "fabric_openstack_arp.h"
+#include "openstack_lbaas_app.h"
+#include "../group-mgr/group-mgr.h"
+#include "../cluster-mgr/cluster-mgr.h"
 
-<<<<<<< HEAD
-=======
-void *g_floating_timerid = NULL;
-UINT4 g_floating_interval = 300;
-void *g_floating_timer = NULL;
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+void *g_floating_check_timerid = NULL;
+UINT4 g_floating_check_interval = 5;
+void *g_floating_check_timer = NULL;
+UINT4 g_proactive_flow_flag = 0;
 
-// const UINT1 nat_zero_mac[] = {0x0,0x0,0x0,0x0,0x0,0x0};
-// const UINT1 nat_broadcat_mac[] = {0xff,0xff,0xff,0xff,0xff,0xff};
+extern openstack_external_node_p g_openstack_floating_list;
+extern openstack_node_p g_openstack_host_subnet_list;
+extern UINT4 g_openstack_on;
 
-// extern void fabric_openstack_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport);
+/* 
+ * internal functions
+ */
+INT4 create_proactive_floating_with_lbaas_group_flows(gn_switch_t* ext_sw, p_fabric_host_node fixed_port, 
+                                        external_port_p ext_port, UINT4 floatingip);
+INT4 remove_proactive_floating_with_lbaas_group_flows(gn_switch_t* ext_sw, p_fabric_host_node fixed_port, 
+                                        external_port_p ext_port, UINT4 floatingip);
+
 
 
 INT4 fabric_openstack_floating_ip_packet_out_handle(p_fabric_host_node src_port, packet_in_info_t *packet_in, external_floating_ip_p fip, param_set_p param_set)
@@ -103,283 +112,625 @@ INT4 fabric_openstack_floating_ip_packet_out_handle(p_fabric_host_node src_port,
 
 	return IP_DROP;
 }
-//
-//void fabric_openstack_floating_ip_packet_in_handle(external_port_p epp, packet_in_info_t *packet_in, external_floating_ip_p fip)
-//{
-//	ip_t *ip = (ip_t *)(packet_in->data);
-//	//printf("%s\n", FN);
-//	/*
-//	//printf("source ip  ");
-//	fabric_openstack_show_ip(ip->src);
-//	//printf("destination ip  ");
-//	fabric_openstack_show_ip(ip->dest);
-//	printf("source mac  ");
-//	fabric_openstack_show_mac(ip->eth_head.src);
-//	printf("destination mac  ");
-//	fabric_openstack_show_mac(ip->eth_head.dest);
-//	*/
-//	//printf("\n");
-//	//printf("sw ip is ");
-//	// fabric_openstack_show_ip(fip->floating_ip);
-//
-//	p_fabric_host_node dst_port = NULL;
-//	gn_switch_t * sww = find_sw_by_dpid(epp->external_dpid);
-//	dst_port = get_fabric_host_from_list_by_mac(ip->eth_head.dest);
-//	//printf("dest ip is ");
-//	// fabric_openstack_show_ip(dst_port->ip);
-//	if(dst_port == NULL || epp == NULL)
-//	{
-//		return ;
-//	}
-//
-//	if  (dst_port->sw == NULL) {
-//		//printf("fabric_openstack_floating_ip_packet_in_handle dst_port : %d | dst_port->sw : %d | ext_port : %d\n",(int)dst_port, (int)dst_port->sw, epp->external_dpid);
-//
-//		p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(dst_port);
-//
-//		if (NULL != gateway_p) {
-//			fabric_opnestack_floating_flood_inside(gateway_p->ip_list[0], dst_port->ip_list[0], gateway_p->mac, epp->external_dpid);
-//		}
-//		else {
-//			LOG_PROC("ERROR", "Can't find gateway of dest ip");
-//		}
-//
-//		// fabric_openstack_packet_output(sww, packet_in, OFPP13_TABLE);
-//		return ;
-//	}
-//
-//	//packet in rule
-//	UINT4 vlan_id = of131_fabric_impl_get_tag_sw(dst_port->sw);
-//	//printf("%s packet in rule : sw ip is %s ;vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&dst_port->sw->sw_ip), vlan_id);
-//	UINT4 out_port = get_out_port_between_switch(epp->external_dpid, dst_port->sw->dpid);
-//	if (0 != out_port) {
-//		fabric_openstack_floating_ip_install_set_vlan_in_flow(sww, ip->dest, dst_port->ip_list[0], dst_port->mac, vlan_id, out_port);
-//	}
-//	else {
-//		// start flood
-//		p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(dst_port);
-//
-//		if (NULL != gateway_p) {
-//			fabric_opnestack_floating_flood_inside(gateway_p->ip_list[0], dst_port->ip_list[0], gateway_p->mac, epp->external_dpid);
-//		}
-//		else {
-//			LOG_PROC("ERROR", "Can't find gateway of dest ip");
-//		}
-//		return;
-//	}
-//	//write table 3
-//	install_fabric_output_flow(dst_port->sw, dst_port->mac, dst_port->port);
-//
-//	//response rule
-//	vlan_id = of131_fabric_impl_get_tag_sw(sww);
-//	//printf("%s response rule : sw ip is %s ; vlan id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sww->sw_ip), vlan_id);
-//	fabric_openstack_floating_ip_install_set_vlan_out_flow(dst_port->sw, ip->src, dst_port->mac, fip->floating_ip, epp->external_gateway_mac, vlan_id);
-//
-//	//pack back
-//	fabric_openstack_packet_output(sww, packet_in, OFPP13_TABLE);
-//}
 
-//void fabric_openstack_floating_ip_arp_request_handle(gn_switch_t *sw, external_floating_ip_p fip, packet_in_info_t *packet_in)
-//{
-//	arp_t *arp = (arp_t *)(packet_in->data);
-//	//printf("%s\n", FN);
-//	//printf("source ip  ");
-//	//fabric_openstack_show_ip(arp->sendip);
-//	//printf("destination ip  ");
-//	//fabric_openstack_show_ip(arp->targetip);
-//	//printf("source mac  ");
-//	//fabric_openstack_show_mac(arp->sendmac);
-//	//printf("destination mac  ");
-//	//fabric_openstack_show_mac(arp->targetmac);
-//	p_fabric_host_node float_port = find_fabric_host_port_by_port_id(fip->port_id);
-//	if(float_port != NULL)
-//	{
-//		p_fabric_host_node dst_port = float_port;
-//
-//		// get external port
-//		external_port_p ext_port = get_external_port_by_floatip(fip->floating_ip);
-//		if (NULL == ext_port) {
-//			LOG_PROC("INFO", "Floating IP: external port is NULL!");
-//			return;
-//		}
-//
-//		// get external sw
-//		gn_switch_t * ext_sw = NULL;
-//		ext_sw = find_sw_by_dpid(ext_port->external_dpid);
-//		if (NULL == ext_sw) {
-//			LOG_PROC("INFO", "Floating IP: gateway sw is NULL!");
-//			return;
-//		}
-//
-//		if(dst_port->sw != NULL)
-//		{
-//			//printf("%s packet out \n", FN);
-//			fabric_openstack_create_arp_reply_public(float_port->mac, arp->targetip, arp->sendmac,
-//					arp->sendip, ext_sw, ext_port->external_port, packet_in);
-//		}else
-//		{
-//			//printf("%s : arp target ip is %s ", FN, inet_ntoa(*(struct in_addr*)&arp->targetip));
-//			//printf(";fip fixed ip is %s \n", inet_ntoa(*(struct in_addr*)&fip->fixed_ip));
-//			arp->targetip = fip->fixed_ip;
-//			fabric_openstack_packet_flood_inside(packet_in, ext_port->external_dpid);
-//			//printf("%s flood \n", FN);
-//		}
-//	}
-//}
-
-
-
-//void fabric_openstack_floating_ip_arp_reply_handle(gn_switch_t *sw, external_floating_ip_p fip, packet_in_info_t *packet_in)
-//{
-//	external_port_p ext_port = get_external_port_by_floatip(fip->floating_ip);
-//	arp_t *arp = (arp_t *)(packet_in->data);
-//	//printf("%s\n", FN);
-//	//printf("source ip  ");
-//	//fabric_openstack_show_ip(arp->sendip);
-//	//printf("destination ip  ");
-//	//fabric_openstack_show_ip(arp->targetip);
-//	//printf("source mac  ");
-//	//fabric_openstack_show_mac(arp->sendmac);
-//	//printf("destination mac  ");
-//	//fabric_openstack_show_mac(arp->targetmac);
-//	if(ext_port != NULL)
-//	{
-//		gn_switch_t * dest_sw = find_sw_by_dpid(ext_port->external_dpid);
-//		if(dest_sw != NULL)
-//		{
-//			arp->sendip = fip->floating_ip;
-//			memcpy(arp->targetmac, ext_port->external_gateway_mac, 6);
-//			fabric_openstack_packet_output(dest_sw, packet_in, ext_port->external_port);
-//		}
-//	}
-//}
-//
-//void fabric_opnestack_floating_flood_inside(UINT4 src_ip, UINT4 dst_ip, UINT1* src_mac, UINT8 ext_dpid)
-//{
-//	// LOG_PROC("INFO", "External: Can't find the dest: start flood!");
-//	packout_req_info_t packout_req_info;
-//	arp_t new_arp_pkt;
-//
-//	packout_req_info.buffer_id = 0xffffffff;
-//	packout_req_info.inport = OFPP13_CONTROLLER;
-//	packout_req_info.max_len = 0xff;
-//	packout_req_info.xid = 0;
-//	packout_req_info.data_len = sizeof(arp_t);
-//	packout_req_info.data = (UINT1 *)&new_arp_pkt;
-//
-//	memcpy(new_arp_pkt.eth_head.src, src_mac, 6);
-//	memcpy(new_arp_pkt.eth_head.dest, nat_broadcat_mac, 6);
-//	new_arp_pkt.eth_head.proto = htons(ETHER_ARP);
-//	new_arp_pkt.hardwaretype = htons(1);
-//	new_arp_pkt.prototype = htons(ETHER_IP);
-//	new_arp_pkt.hardwaresize = 0x6;
-//	new_arp_pkt.protocolsize = 0x4;
-//	new_arp_pkt.opcode = htons(1);
-//	new_arp_pkt.sendip = src_ip;
-//	new_arp_pkt.targetip=dst_ip;
-//
-//	memcpy(new_arp_pkt.sendmac, src_mac, 6);
-//	memcpy(new_arp_pkt.targetmac, nat_zero_mac, 6);
-//
-//	gn_switch_t *sw = NULL;
-//	UINT2 i = 0,j=0;
-//
-//	for(i = 0; i < g_server.max_switch; i++) {
-//		if (g_server.switches[i].state) {
-//			sw = &g_server.switches[i];
-//			if (sw->dpid == ext_dpid) {
-//				continue;
-//			}
-//
-//			for(j=0; j<sw->n_ports; j++){
-//				// check port state is ok and also not connect other switch(neighbor)
-//				if(sw->neighbor[j] == NULL){
-//					packout_req_info.outport = sw->ports[j].port_no;
-//					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&packout_req_info);
-//				}
-//			}
-//		}
-//	}
-//}
-//
-//void fabric_openstack_packet_flood_inside(packet_in_info_t *packet_in_info, UINT8 ext_dpid)
-//{
-//	LOG_PROC("INFO", "External: Can't find the dest: start flood!");
-//	packout_req_info_t pakout_req;
-//	gn_switch_t *sw = NULL;
-//	UINT2 i = 0,j=0;
-//	pakout_req.buffer_id = 0xffffffff;
-//	pakout_req.inport = OFPP13_CONTROLLER;
-//	pakout_req.max_len = 0xff;
-//	pakout_req.xid = packet_in_info->xid;
-//	pakout_req.data_len = packet_in_info->data_len;
-//	pakout_req.data = packet_in_info->data;
-//
-//	// find all switch
-//	for(i = 0; i < g_server.max_switch; i++){
-//		if (g_server.switches[i].state){
-//			sw = &g_server.switches[i];
-////			sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
-//			// find switch's outter ports
-//
-//			if (sw->dpid == ext_dpid) {
-//				continue;
-//			}
-//
-//			for(j=0; j<sw->n_ports; j++){
-//				// check port state is ok and also not connect other switch(neighbor)
-//				if(sw->neighbor[j] == NULL){
-//					pakout_req.outport = sw->ports[j].port_no;
-//					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
-//				}
-//			}
-//		}
-//	}
-//	return;
-//};
-
-<<<<<<< HEAD
-=======
-void init_floating_mgr()
+INT4 compare_sw_between_host(p_fabric_host_node host_p, p_fabric_host_node fixed_port)
 {
-	// call flood function
-	floating_tx_timer(NULL, NULL);
+    if ((NULL == host_p) || (NULL == host_p->sw) || (NULL == fixed_port) || (host_p == fixed_port)) {
+        return 0;
+    }
 
-	// set the timer
-    g_floating_timerid = timer_init(1);
-    timer_creat(g_floating_timerid, g_floating_interval, NULL, &g_floating_timer, floating_tx_timer);
+    if (OPENSTACK_PORT_TYPE_HOST == fixed_port->type) {
+        if (fixed_port->sw == host_p->sw) {
+            return 1;
+        }
+    }
+    else if (OPENSTACK_PORT_TYPE_LOADBALANCER == fixed_port->type) {
+       openstack_lbaas_pools_p pool_p = find_openstack_lbaas_pool_by_ip(fixed_port->ip_list[0]);
+       if (pool_p) {
+           openstack_lbaas_node_p node_p = pool_p->pool_member_list;
+            while (node_p) {
+                openstack_lbaas_members_p member_p = (openstack_lbaas_members_p)node_p->data;
+                if (member_p) {
+                    p_fabric_host_node fixed_host_p = get_fabric_host_from_list_by_ip(member_p->fixed_ip);
+
+                    if ((fixed_host_p) && (fixed_host_p->sw) && (fixed_host_p->sw == host_p->sw)) {
+                        return 1;
+                    }
+                }
+                node_p = node_p->next;
+           }
+       }
+    }
+    else {
+        }
+
+    return 0;
 }
 
-void floating_tx_timer(void *para, void *tid)
+
+INT4 judge_sw_in_use(p_fabric_host_node host_p)
 {
-	openstack_external_node_p node_p = NULL;
-	external_floating_ip_p epp = NULL;
-	external_port_p ext_p = NULL;
-	p_fabric_host_node fip_p = NULL;
-	p_fabric_host_node gateway_p = NULL;
+    if ((NULL == host_p) || (NULL == host_p->sw) || (OPENSTACK_PORT_TYPE_HOST != host_p->type)) {
+        return 0;
+    }
 
-	node_p = get_floating_list();
+    INT4 return_value = 0;
+    
+    openstack_external_node_p node_p = g_openstack_floating_list;
+    p_fabric_host_node fixed_port = NULL;
+        
+    while (NULL != node_p) {
+        external_floating_ip_p efp = (external_floating_ip_p)node_p->data;
+        
+        if ((efp->fixed_ip) && (efp->floating_ip)) {
+            fixed_port = get_fabric_host_from_list_by_ip(efp->fixed_ip);
 
-	// create floating request
-	while(NULL != node_p) {
-		epp = (external_floating_ip_p)node_p->data;
+            return_value = compare_sw_between_host(host_p, fixed_port);
 
-		if(NULL != epp) {
-			fip_p = find_fabric_host_port_by_port_id(epp->port_id);
+            if (return_value) {
+                return 1;
+            }
+        }
+        node_p = node_p->next;
+    }
 
-			if (NULL != fip_p) {
-				gateway_p = find_openstack_app_gateway_by_host(fip_p);
-				ext_p = find_openstack_external_by_floating_ip(epp->floating_ip);
+	
+	return return_value;
+}
 
-				if ((NULL != gateway_p) && (NULL != ext_p)) {
-					// g_floating_interval = 30;
-					// fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], epp->fixed_ip, gateway_p->mac, ext_p->external_dpid);
-					fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], epp->fixed_ip, gateway_p->mac);
-				}
-			}
+
+INT4 update_floating_internal_subnet_flow(p_fabric_host_node host_p, UINT4 type, char* cidr, UINT1 external)
+{
+    if ((NULL == host_p) || (0 == strlen(cidr)) || (NULL == host_p->sw)) {
+        return 0;
+    }
+
+    UINT4 ip = 0;
+    UINT4 mask = 0;
+    cidr_str_to_ip_prefix(cidr, &ip, &mask);
+
+    if ((ip) && (mask) && (mask <=32)) {
+        if (0 == external) {
+            if ((2 == type) && (judge_sw_in_use(host_p))) {
+                return 0;
+            }
+            install_fabric_openstack_floating_internal_subnet_flow(host_p->sw, type, ip, mask, NULL);
+        }
+        else {
+            install_fabric_openstack_floating_internal_subnet_flow(host_p->sw, 2, ip, mask, NULL);
+        }
+    }
+    return 0;
+}
+
+
+INT4 process_floating_internal_subnet_flow(p_fabric_host_node fixed_port, openstack_subnet_p subnet, INT4 type)
+{
+    if ((NULL == fixed_port) || (NULL == subnet) || (0 == strlen(subnet->cidr))) {
+        return 0;
+    }
+
+	if (OPENSTACK_PORT_TYPE_HOST == fixed_port->type) {
+		update_floating_internal_subnet_flow(fixed_port, type, subnet->cidr, subnet->external);
+	}
+    else if (OPENSTACK_PORT_TYPE_LOADBALANCER == fixed_port->type) {
+       openstack_lbaas_pools_p pool_p = find_openstack_lbaas_pool_by_ip(fixed_port->ip_list[0]);
+       if (pool_p) {
+           openstack_lbaas_node_p node_p = pool_p->pool_member_list;
+            while (node_p) {
+                openstack_lbaas_members_p member_p = (openstack_lbaas_members_p)node_p->data;
+                if (member_p) {
+                    p_fabric_host_node host_p = get_fabric_host_from_list_by_ip(member_p->fixed_ip);
+                    update_floating_internal_subnet_flow(host_p, type, subnet->cidr, subnet->external);
+                }
+                node_p = node_p->next;
+           }
+       }
+    }
+    else {
+        }
+	return 0;
+}
+
+INT4 process_floating_internal_subnet_flow_by_subnet(openstack_subnet_p subnet, INT4 type)
+{
+    if (0 == g_proactive_flow_flag) {
+        return 0;
+    }
+
+    if (OFPCR_ROLE_SLAVE == g_controller_role) {
+        return 0;
+    }
+        
+    if (NULL == subnet) {
+		return 0;
+	}
+	
+	external_floating_ip_p efp = NULL;
+	openstack_external_node_p node_p = g_openstack_floating_list;
+	while (NULL != node_p) {
+		efp = (external_floating_ip_p)node_p->data;
+
+		if (efp) {
+			p_fabric_host_node fixed_port = get_fabric_host_from_list_by_ip(efp->fixed_ip);
+			if (fixed_port) {
+				process_floating_internal_subnet_flow(fixed_port, subnet, type);
+			}	
 		}
+			
+		node_p = node_p->next;
+	}
 
+	return 1;
+}
+
+INT4 create_proactive_floating_internal_subnet_flow_by_subnet(openstack_subnet_p subnet)
+{
+	return process_floating_internal_subnet_flow_by_subnet(subnet, 1);
+}
+
+INT4 remove_proactive_floating_internal_subnet_flow_by_subnet(openstack_subnet_p subnet)
+{
+	return process_floating_internal_subnet_flow_by_subnet(subnet, 2);
+}
+
+
+INT4 process_proactive_internal_subnet_flow_by_fixed_port(p_fabric_host_node fixed_port, INT4 type)
+{
+	if (NULL == fixed_port) {
+		return 0;
+	}
+	
+	openstack_subnet_p subnet = NULL;
+	openstack_node_p node_p = g_openstack_host_subnet_list;
+	while (node_p != NULL) {
+		subnet = (openstack_subnet_p)node_p->data;
+		if (subnet) {
+			process_floating_internal_subnet_flow(fixed_port, subnet, type);
+		}
+		node_p = node_p->next;
+	}	
+
+	return 1;
+}
+
+INT4 create_proactive_internal_subnet_flow_by_fixed_port(p_fabric_host_node fixed_port)
+{
+	return process_proactive_internal_subnet_flow_by_fixed_port(fixed_port, 1);
+}
+
+INT4 remove_proactive_internal_subnet_flow_by_fixed_port(p_fabric_host_node fixed_port)
+{
+	return process_proactive_internal_subnet_flow_by_fixed_port(fixed_port, 2);
+}
+
+INT4 process_floating_lbaas_group_flow_by_pool_ip(UINT4 ip, UINT4 type)
+{
+    if (0 == g_proactive_flow_flag) {
+        return 0;
+    }
+
+    if (OFPCR_ROLE_SLAVE == g_controller_role) {
+         return 0;
+    }
+        
+    external_floating_ip_p fip = get_external_floating_ip_by_fixed_ip(ip);
+    if (NULL == fip) {
+        // printf("fip is NULL!\n");
+        return 0;
+    }
+    
+	external_port_p ext_port = NULL;
+	gn_switch_t* ext_sw = NULL;
+	p_fabric_host_node fixed_port = NULL;
+    
+	ext_port = find_openstack_external_by_floating_ip(fip->floating_ip);
+	if (NULL == ext_port) {
+		return 0;
+	}
+
+	ext_sw = find_sw_by_dpid(ext_port->external_dpid);
+    fixed_port = get_fabric_host_from_list_by_ip(fip->fixed_ip);
+    if ((ext_sw) && (fixed_port)) {
+        if (1 == type) {
+            create_proactive_floating_with_lbaas_group_flows(ext_sw, fixed_port, ext_port ,fip->floating_ip);
+        }
+        else if (2 == type) {
+            remove_proactive_floating_with_lbaas_group_flows(ext_sw, fixed_port, ext_port, fip->floating_ip);
+        }
+        else {
+            // do nothing
+        }        
+    }
+
+    return 0;
+}
+
+INT4 create_proactive_floating_lbaas_flow_by_pool_ip(UINT4 pool_ip)
+{
+    return process_floating_lbaas_group_flow_by_pool_ip(pool_ip, 1);
+}
+
+INT4 remove_proactive_floating_lbaas_flow_by_pool_ip(UINT4 pool_ip)
+{
+    return process_floating_lbaas_group_flow_by_pool_ip(pool_ip, 2);
+}
+
+
+INT4 process_floating_lbaas_group_flow_by_member_ip(UINT4 ip, UINT4 member_ip, UINT4 member_portno, UINT4 type)
+{   
+    if (0 == g_proactive_flow_flag) {
+        return 0;
+    }
+
+    if (OFPCR_ROLE_SLAVE == g_controller_role) {
+        return 0;
+    }
+        
+    external_floating_ip_p fip = get_external_floating_ip_by_fixed_ip(ip);
+    if (NULL == fip) {
+        // printf("fip is NULL!\n");
+        return 0;
+    }
+        
+	external_port_p ext_port = NULL;
+	gn_switch_t* ext_sw = NULL;
+	p_fabric_host_node fixed_port = NULL;
+    p_fabric_host_node member_port = NULL;
+    
+	ext_port = find_openstack_external_by_floating_ip(fip->floating_ip);
+	if (NULL == ext_port) {
+		return 0;
+	}
+
+	ext_sw = find_sw_by_dpid(ext_port->external_dpid);
+    fixed_port = get_fabric_host_from_list_by_ip(fip->fixed_ip);
+    member_port = get_fabric_host_from_list_by_ip(member_ip);
+    
+    if ((ext_sw) && (fixed_port) && (member_port) && (member_port->sw)) {
+        if (1 == type) {
+            create_proactive_floating_with_lbaas_group_flows(ext_sw, fixed_port, ext_port, fip->floating_ip);
+        }
+        else if (2 == type) {
+            UINT1 zero_mac[6] = {0};
+            install_proactive_floating_lbaas_to_external_flow(member_port->sw, 2, member_port->ip_list[0] ,member_portno,
+                    zero_mac, 0, 0, 0, zero_mac);
+            create_proactive_floating_with_lbaas_group_flows(ext_sw, fixed_port, ext_port, fip->floating_ip);
+        }
+        else {
+            // do nothing
+        }        
+    }
+
+    return 0;
+   
+}
+
+INT4 create_proactive_floating_lbaas_flow_by_member_ip(UINT4 pool_ip, UINT4 member_ip, UINT4 member_portno)
+{
+    return process_floating_lbaas_group_flow_by_member_ip(pool_ip, member_ip, member_portno, 1);
+}
+
+INT4 remove_proactive_floating_lbaas_flow_by_member_ip(UINT4 pool_ip, UINT4 member_ip, UINT4 member_portno)
+{
+    return process_floating_lbaas_group_flow_by_member_ip(pool_ip, member_ip, member_portno, 2);
+}
+
+INT4 create_proactive_floating_with_lbaas_group_flows(gn_switch_t* ext_sw, p_fabric_host_node fixed_port, 
+                                    external_port_p ext_port, UINT4 floatingip)
+{
+    if ((NULL == fixed_port) || (NULL == ext_sw) || (NULL == ext_port)) {
+        return 0;
+    }
+    
+    group_bucket_t* all_bucket = NULL;
+    UINT4 ext_vlan_id = of131_fabric_impl_get_tag_sw(ext_sw); 
+     
+    openstack_lbaas_pools_p pool_p = find_openstack_lbaas_pool_by_ip(fixed_port->ip_list[0]);
+    if (NULL == pool_p) {
+        return 0;
+    }
+    
+    if  (0 != pool_p->group_flow_installed) {
+        return 0;
+    }
+
+    openstack_lbaas_node_p node_p = pool_p->pool_member_list;
+    
+    while (node_p) {
+        openstack_lbaas_members_p member_p = (openstack_lbaas_members_p)node_p->data;
+        
+        if ((member_p)&& (1 == member_p->status)) {
+            p_fabric_host_node host_p = get_fabric_host_from_list_by_ip(member_p->fixed_ip);
+
+            if ((host_p) && (host_p->sw) && (host_p->port)) {
+
+                UINT4 host_vlan_id = of131_fabric_impl_get_tag_sw(host_p->sw);
+                UINT4 host_tcp_dst = member_p->protocol_port;
+                UINT4 between_portno = get_out_port_between_switch(ext_sw->dpid, host_p->sw->dpid);
+
+                // nat_show_ip(member_p->fixed_ip);
+                if ((host_vlan_id) && (host_tcp_dst) && (between_portno)) {
+                    group_bucket_t* bucket = create_lbaas_group_bucket(between_portno, host_p->mac, host_p->ip_list[0], 
+                        host_tcp_dst, host_vlan_id, member_p->weight);
+                    
+                    if (NULL == bucket) {
+                        LOG_PROC("INFO", "Faill to create lbaas group bucket!");
+                        return 0;
+                    }
+                    
+                    bucket->next = all_bucket;
+                    all_bucket = bucket;
+    
+                    if (0 == member_p->group_flow_installed) {
+                        install_fabric_output_flow(host_p->sw, host_p->mac, host_p->port);
+                        create_proactive_internal_subnet_flow_by_fixed_port(host_p);
+                        install_proactive_floating_lbaas_to_external_flow(host_p->sw, 1, host_p->ip_list[0], host_tcp_dst, 
+                                           ext_port->external_gateway_mac, ext_vlan_id, floatingip, pool_p->protocol_port, fixed_port->mac);  
+                        install_add_fabric_controller_flow(host_p->sw);
+                    }
+    
+                    member_p->group_flow_installed = 1;
+                }
+            }
+        }
+        node_p = node_p->next;
+    }
+
+    gn_group_t* group = (gn_group_t *)gn_malloc(sizeof(gn_group_t));
+    group->buckets = all_bucket;
+
+    group->type = OFPGT_SELECT;
+    group->group_id = fixed_port->ip_list[0];
+    group->next = NULL;
+
+    if (all_bucket) {
+        if (find_group_by_id(ext_sw, group->group_id)) {
+            modify_group_entry(ext_sw, group);
+        }
+        else {
+            // delete_group_entry(fixed_port->sw, &group);
+            add_group_entry(ext_sw, group);
+        }
+
+        install_proactive_floating_external_to_lbaas_group_flow(ext_sw, 1, floatingip, pool_p->protocol_port, fixed_port->ip_list[0]);
+        pool_p->group_flow_installed = 1;
+        return 0;
+    }
+    else {
+        if (find_group_by_id(ext_sw, group->group_id)) {
+            delete_group_entry(ext_sw, group);
+        }
+
+        // process_proactive_internal_subnet_flow_by_fixed_port(fixed_port, 2);
+        install_proactive_floating_external_to_lbaas_group_flow(ext_sw, 2, floatingip, pool_p->protocol_port, 0);
+        pool_p->group_flow_installed = 0;
+    }
+
+    
+    return 0;
+}
+
+INT4 remove_proactive_floating_with_lbaas_group_flows(gn_switch_t* ext_sw, p_fabric_host_node fixed_port, 
+                                         external_port_p ext_port, UINT4 floatingip)
+{   
+    if (NULL == ext_sw) {
+        return 0;
+    }
+
+    openstack_lbaas_pools_p pool_p = find_openstack_lbaas_pool_by_ip(fixed_port->ip_list[0]);
+    if (NULL == pool_p) {
+        return 0;
+    }
+    
+    openstack_lbaas_node_p node_p = pool_p->pool_member_list;
+    while (node_p) {
+        openstack_lbaas_members_p member_p = (openstack_lbaas_members_p)node_p->data;
+        if (member_p) {
+            p_fabric_host_node host_p = get_fabric_host_from_list_by_ip(member_p->fixed_ip);
+
+            if ((host_p) && (host_p->sw) && (host_p->port)) {
+                // nat_show_ip(member_p->fixed_ip);
+                   
+                UINT1 zero_mac[6] = {0};
+                install_proactive_floating_lbaas_to_external_flow(host_p->sw, 2, host_p->ip_list[0], member_p->protocol_port,
+                    zero_mac, 0, 0, 0, zero_mac);     
+
+                member_p->group_flow_installed = 0;
+            }
+        }
+        node_p = node_p->next;
+    }
+    
+    gn_group_t* group = (gn_group_t *)gn_malloc(sizeof(gn_group_t));
+    group->buckets = NULL;
+
+    // group->buckets = bucket;
+    group->type = OFPGT_SELECT;
+    group->group_id = fixed_port->ip_list[0];
+    group->next = NULL;
+
+    if (find_group_by_id(ext_sw, group->group_id)) {
+        delete_group_entry(ext_sw, group);
+    }
+
+    remove_proactive_internal_subnet_flow_by_fixed_port(fixed_port);
+    install_proactive_floating_external_to_lbaas_group_flow(ext_sw, 2, floatingip, pool_p->protocol_port, 0);
+    pool_p->group_flow_installed = 0;
+    
+    return 0;
+}
+
+INT4 create_proactive_floating_with_host_flows(p_fabric_host_node fixed_port, gn_switch_t* ext_sw, 
+                                    external_port_p ext_port, UINT4 floatingip)
+{
+    if ((NULL == fixed_port) || (NULL == ext_sw) || (NULL == ext_port)) {
+        return 0;
+    }
+
+    if ((NULL == fixed_port->sw) || (0 == fixed_port->port)) {
+        p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(fixed_port);
+				
+		if (NULL != gateway_p) {
+			fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], fixed_port->ip_list[0], gateway_p->mac);
+		}
+		else {
+			fabric_opnestack_create_arp_flood(g_reserve_ip, fixed_port->ip_list[0], g_reserve_mac);
+		}
+        
+        return 0;
+    }
+
+    UINT4 fixed_vlan_id = of131_fabric_impl_get_tag_sw(fixed_port->sw);
+    UINT4 ext_vlan_id = of131_fabric_impl_get_tag_sw(ext_sw);
+
+    if ((0 == fixed_vlan_id) || (0 == ext_vlan_id)) {
+       return 0;
+    }
+
+    UINT4 outport = get_out_port_between_switch(ext_port->external_dpid, fixed_port->sw->dpid);
+
+    if (0 == outport) {
+        return 0;
+    }
+
+    create_proactive_internal_subnet_flow_by_fixed_port(fixed_port);
+
+    install_proactive_floating_host_to_external_flow(fixed_port->sw, 1, fixed_port->ip_list[0], fixed_port->mac, 
+       floatingip, ext_port->external_gateway_mac, ext_vlan_id, NULL);
+
+    install_add_fabric_controller_flow(fixed_port->sw);
+
+    fabric_openstack_floating_ip_install_set_vlan_in_flow(ext_sw, floatingip, 
+       fixed_port->ip_list[0], fixed_port->mac, fixed_vlan_id, outport);
+
+    install_fabric_output_flow(fixed_port->sw, fixed_port->mac, fixed_port->port);
+
+    return 1;
+}
+
+INT4 create_proactive_floating_flows_by_floating(external_floating_ip_p fip)
+{   
+    if (OFPCR_ROLE_SLAVE == g_controller_role) {
+        return 0;
+    }
+
+	external_port_p ext_port = NULL;
+	gn_switch_t* ext_sw = NULL;
+	p_fabric_host_node fixed_port = NULL;
+    UINT4 return_value = 0;
+    
+	ext_port = get_external_port_by_floatip(fip->floating_ip);
+	if (NULL == ext_port) {
+		return 0;
+	}
+
+	ext_sw = find_sw_by_dpid(ext_port->external_dpid);
+    if (NULL == ext_sw) {
+        return 0;
+    }
+    
+	fixed_port = get_fabric_host_from_list_by_ip(fip->fixed_ip);
+	if (NULL == fixed_port) {
+        return 0;
+    }
+
+	if (OPENSTACK_PORT_TYPE_LOADBALANCER == fixed_port->type) {
+        return_value = create_proactive_floating_with_lbaas_group_flows(ext_sw, fixed_port, ext_port, fip->floating_ip);
+    }
+    else if (OPENSTACK_PORT_TYPE_HOST == fixed_port->type) {
+        return_value = create_proactive_floating_with_host_flows(fixed_port, ext_sw, ext_port, fip->floating_ip);
+    }
+    else {
+        return 0;
+    }
+
+	return return_value;
+}
+
+INT4 remove_proactive_floating_flows_by_floating(external_floating_ip_p fip)
+{   
+    if (0 == g_proactive_flow_flag) {
+        return 0;
+    }
+
+    if (OFPCR_ROLE_SLAVE == g_controller_role) {
+        return 0;
+    }
+    
+	external_port_p ext_port = NULL;
+	gn_switch_t* ext_sw = NULL;
+	p_fabric_host_node fixed_port = NULL;
+    
+	ext_port = find_openstack_external_by_floating_ip(fip->floating_ip);
+    
+	if (ext_port) {
+		ext_sw = find_sw_by_dpid(ext_port->external_dpid);
+        if (ext_sw) {
+		    delete_fabric_input_flow_by_ip(ext_sw, fip->floating_ip);
+        }
+	}
+
+	fixed_port = get_fabric_host_from_list_by_ip(fip->fixed_ip);
+    
+    if (NULL == fixed_port) {
+        return 0;
+    }
+    
+	if ((OPENSTACK_PORT_TYPE_HOST == fixed_port->type) && (fixed_port->sw)) {
+		UINT1 zero_mac[6] = {0};
+		install_proactive_floating_host_to_external_flow(fixed_port->sw, 2, fixed_port->ip_list[0], fixed_port->mac, 
+				fip->floating_ip, zero_mac, 0, NULL);
+	}
+    else if (OPENSTACK_PORT_TYPE_LOADBALANCER == fixed_port->type) {
+        remove_proactive_floating_lbaas_flow_by_pool_ip(fixed_port->ip_list[0]);
+    }
+
+	fip->flow_installed = 0;
+	
+	return 0;
+}
+
+void proactive_floating_check_tx_timer(void *para, void *tid)
+{
+	// if openstack on
+	if (0 == g_openstack_on) {
+		// return
+		return;
+	}
+
+   if (OFPCR_ROLE_SLAVE == g_controller_role) {
+        return ;
+   }
+
+	external_floating_ip_p efp = NULL;
+	openstack_external_node_p node_p = g_openstack_floating_list;
+    
+	while (NULL != node_p) {
+		efp = (external_floating_ip_p)node_p->data;
+		
+		if ((efp->fixed_ip) && (efp->floating_ip) && (strlen(efp->port_id)) && (strlen(efp->router_id)) && (0 == efp->flow_installed)) {
+			efp->flow_installed = create_proactive_floating_flows_by_floating(efp);
+		}
 		node_p = node_p->next;
 	}
 }
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+
+void init_proactive_floating_check_mgr()
+{
+    INT1 *value = NULL;
+	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
+	UINT4 openstack_flag = (NULL == value) ? 0: atoi(value);
+	value = get_value(g_controller_configure, "[openvstack_conf]", "proactive_flow_on");
+	g_proactive_flow_flag = (NULL == value) ? 0: atoi(value);
+
+    if ((0 == openstack_flag) || (0 == g_proactive_flow_flag)) {
+        return ;
+    }
+
+	proactive_floating_check_tx_timer(NULL, NULL);
+	
+	// set the timer
+	g_floating_check_timerid = timer_init(1);
+	timer_creat(g_floating_check_timerid, g_floating_check_interval, NULL, &g_floating_check_timer, proactive_floating_check_tx_timer);
+}

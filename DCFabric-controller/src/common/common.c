@@ -28,6 +28,7 @@
 ******************************************************************************/
 
 #include "common.h"
+#include <netinet/tcp.h>
 
 static unsigned long poolprefixarray[32]=
 {
@@ -240,7 +241,7 @@ void masked_ip_parser(INT1 *masked_ip, net_mask_t *net_mask)
         if(masked_ip[i] == '/')
         {
             masked_ip[i] = '\0';
-            net_mask->prefix = atoi(masked_ip + i +1);
+            net_mask->prefix = atoll(masked_ip + i +1);
             break;
         }
     }
@@ -305,7 +306,6 @@ INT1* number2ip(INT4 ip_num, INT1* ip)
    return ip;
 }
 
-<<<<<<< HEAD
 UINT1* ipv6_str_to_number(char* str, UINT1* ipv6)
 {
 	struct in6_addr ip;
@@ -349,9 +349,6 @@ void nat_show_ipv6(UINT1* ip)
 }
 
 
-=======
-/*=== BEGIN === Added by zgzhao for controller API requirement 2015-12-28*/
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 //00:00:00:00:00:00:01:91 --> 401
 INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret)
 {
@@ -439,7 +436,6 @@ BOOL is_digit(const INT1 *str, INT4 base)
     
     return TRUE; 
 }
-<<<<<<< HEAD
 
 
 // calculate checksum
@@ -460,6 +456,174 @@ UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size)
 	cksum += (cksum >>16);
 	return (UINT2)(~cksum);
 }
-=======
-/*=== END === Added by zgzhao for controller API requirement 2015-12-28*/
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+
+
+UINT2 calc_tcp_checksum(ip_t* p_ip, tcp_t* p_tcp)
+{
+    char buf[IP_MAXPACKET];
+    char *ptr;
+    int chksumlen = 0;
+    UINT2 svalue;
+    UINT1 svalue2;
+    bzero(buf, IP_MAXPACKET);
+
+    ptr = &buf[0];
+
+    memcpy(ptr, &p_ip->src, sizeof(p_ip->src));
+    ptr += sizeof(p_ip->src);
+    chksumlen += sizeof(p_ip->src);
+
+    memcpy(ptr, &p_ip->dest, sizeof(p_ip->dest));
+    ptr += sizeof(p_ip->dest);
+    chksumlen += sizeof(p_ip->dest);
+
+    *ptr = 0;
+    ptr ++;
+    chksumlen ++;
+
+    memcpy(ptr, &p_ip->proto, sizeof(p_ip->proto));
+    ptr += sizeof(p_ip->proto);
+    chksumlen += sizeof(p_ip->proto);
+
+    // tcp lengh
+    svalue =  ((p_tcp->offset << 4) * 4);
+    memcpy (ptr, &svalue, sizeof (svalue));
+    ptr += sizeof (svalue);
+    chksumlen += sizeof (svalue);
+
+    memcpy(ptr, &p_tcp->sport, sizeof(p_tcp->sport));
+    ptr += sizeof(p_tcp->sport);
+    chksumlen += sizeof(p_tcp->sport);
+
+    memcpy(ptr, &p_tcp->dport, sizeof(p_tcp->dport));
+    ptr += sizeof(p_tcp->dport);
+    chksumlen += sizeof(p_tcp->dport);
+
+    memcpy(ptr, &p_tcp->seq, sizeof(p_tcp->seq));
+    ptr += sizeof(p_tcp->seq);
+    chksumlen += sizeof(p_tcp->seq);
+
+    memcpy(ptr, &p_tcp->ack, sizeof(p_tcp->ack));
+    ptr += sizeof(p_tcp->ack);
+    chksumlen += sizeof(p_tcp->ack);
+
+    svalue2 = (p_tcp->offset) ;
+    memcpy(ptr, &svalue2, sizeof(svalue2));
+    ptr += sizeof(svalue2);
+    chksumlen += sizeof(svalue2);
+
+    memcpy(ptr, &p_tcp->code, sizeof(p_tcp->code));
+    ptr += sizeof(p_tcp->code);
+    chksumlen += sizeof(p_tcp->code);
+
+    memcpy(ptr, &p_tcp->window, sizeof(p_tcp->window));
+    ptr += sizeof(p_tcp->window);
+    chksumlen += sizeof(p_tcp->window);
+
+    *ptr = 0; ptr++;
+    *ptr = 0; ptr++;
+    chksumlen += 2;
+
+    memcpy(ptr, &p_tcp->urg, sizeof(p_tcp->urg));
+    ptr += sizeof(p_tcp->urg);
+    chksumlen += sizeof(p_tcp->urg);
+
+    UINT2 calc = calc_ip_checksum((UINT2 *) buf, chksumlen);
+
+    // printf("calc: %x\n", htons(calc));
+
+    return calc;
+
+}
+
+INT1* dpidUint8ToStr(UINT8 ori_dpid, INT1* str)
+{
+	UINT1 dpid[8];
+	ulli64_to_uc8(ori_dpid, dpid);
+	sprintf(str, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", dpid[0], dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7]);
+    return str;
+}
+
+INT4 compare_str(char* str1, char* str2) 
+{
+	if ((0 == strlen(str1)) && (0 == strlen(str2))) {
+		return 1;
+	}
+	else if ((strlen(str1)) && (strlen(str2)) && (0 == strcmp(str1, str2))) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+INT4 compare_array(void* str1, void* str2, INT4 num) 
+{
+	if ((NULL == str1) && (NULL == str2)) {
+		return 1;
+	}
+	else if ((str1) && (str2) && (0 == memcmp(str1, str2, num))) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+INT4 compare_pointer(void* ptr1, void* ptr2)
+{
+	if ((NULL == ptr1) && (NULL == ptr2)) {
+		return 1;
+	}
+	else if ((ptr1) && (ptr2) && (ptr1 == ptr2)) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+INT4 cidr_str_to_ip_prefix(char* ori_cidr, UINT4* ip, UINT4* mask)
+{
+	char cidr[48] = {0};
+	memcpy(cidr, ori_cidr, 48);
+	
+	char* token = NULL;
+	char* buf = cidr; 
+	INT4 count = 0;
+
+	while((token = strsep(&buf , "/")) != NULL)
+	{
+		if (0 == count) {
+			// printf("cidr ip: %s\n", token);
+			*ip = ip2number(token);
+			// printf("%u\n", cidr_ip);
+		}
+		else {
+			// printf("mask is: %s\n", token);
+			*mask = (0 == strcmp("0", token)) ? 0:atoll(token);
+			// printf("%u\n", cidr_mask);
+		}
+		count++;
+	}
+
+	return *ip;
+}
+
+// convert cidr to subnet mask
+UINT4 cidr_to_subnet_mask(UINT4 num) 
+{ 
+	UINT4 mask = 0;
+
+	if (32 >= num) {
+	    int bits = sizeof(UINT4) * 8;
+ 
+	    mask = ~0;
+	    bits -= num;
+	    mask <<= bits;
+	}
+	
+    return htonl(mask);
+}
+
+

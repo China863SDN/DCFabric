@@ -53,5 +53,7 @@ void fabric_create_arp_reply(p_fabric_host_node src,p_fabric_host_node dst,packe
 void fabric_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport);
 p_fabric_host_node fabric_find_dst_port_ip(p_fabric_host_node src_node,UINT4 targetip);
 
+INT4 fabric_ip_install_deny_flow(gn_switch_t *sw, ip_t* ip);
+INT4 fabric_ip_remove_deny_flow(UINT1* src_mac);
 
 #endif /* INC_FABRIC_FABRIC_ARP_H_ */

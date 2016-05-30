@@ -39,7 +39,8 @@
 openstack_network_p create_openstack_app_network(
 		char* tenant_id,
 		char* network_id,
-		UINT1 shared);
+		UINT1 shared,
+		UINT1 external);
 
 /*
  * create & update network
@@ -47,7 +48,8 @@ openstack_network_p create_openstack_app_network(
 openstack_network_p update_openstack_app_network(
 		char* tenant_id,
 		char* network_id,
-		UINT1 shared);
+		UINT1 shared,
+		UINT1 external);
 
 /*
  * create subnet
@@ -62,7 +64,8 @@ openstack_subnet_p create_openstack_app_subnet(
 		UINT1* gateway_ipv6,
 		UINT1* start_ipv6,
 		UINT1* end_ipv6,
-		char* cidr);
+		char* cidr,
+		UINT1 external);
 
 /*
  * create & update subnet
@@ -199,4 +202,15 @@ p_fabric_host_node find_openstack_app_dhcp_by_subnet_id(char* subnet_id);
 UINT4 find_openstack_app_hosts_by_subnet_id(char* subnet_id,p_fabric_host_node* host_list);
 
 UINT4 check_openstack_app_host_is_gateway_by_mac(UINT1* mac);
+
+enum OPENSTACK_CHECK_STATUS {
+	CHECK_UNKNOWN = 0,
+	CHECK_CREATE = 1, 
+	CHECK_UPDATE = 2,
+	CHECK_LATEST = 3,
+	CHECK_UNCHECKED = 4,
+};
+
+INT4 is_check_status_changed(UINT1 check_status);
+
 #endif /* INC_OPENSTACK_OPENSTACK_APP_H_ */

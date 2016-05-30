@@ -41,5 +41,6 @@ void initOpenstackFabric();
 void updateOpenstackFloating();
 void reload_security_group_info();
 void reoad_lbaas_info();
+void reload_net_info();
 
 #endif

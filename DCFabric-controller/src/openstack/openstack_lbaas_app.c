@@ -11,6 +11,11 @@
 #include "openstack_app.h"
 #include "fabric_openstack_arp.h"
 #include "../restful-svr/openstack-server.h"
+#include "../cluster-mgr/hbase_sync.h"
+#include "openflow-common.h"
+#include "../cluster-mgr/cluster-mgr.h"
+#include "fabric_floating_ip.h"
+
 
 #define LBAAS_CONNECT_PORT_MIN_VALUE		59200
 #define LBAAS_CONNECT_PORT_MAX_VALUE		59700
@@ -45,9 +50,9 @@ openstack_lbaas_pools_p create_openstack_lbaas_pools_by_poolrest(
 openstack_lbaas_pools_p create_openstack_lbaas_pools_by_viprest(
 		char* pool_id,
 		UINT4 protocol_port,
-		UINT1 vips_status,
 		UINT4 ipaddress,
 		UINT1 connect_limit,
+		UINT1 vips_status,
 		UINT1 session_persistence);
 
 openstack_lbaas_members_p create_openstack_lbaas_member(
@@ -93,6 +98,11 @@ void add_lbaas_member_into_listener_member_listener(openstack_lbaas_members_p me
 
 
 void show_all_lbaas();
+void reset_floating_lbaas_group_flow_installed_flag(openstack_lbaas_members_p lb_member);
+
+void remove_floating_lbaas_member_flow(openstack_lbaas_members_p lb_member);
+
+
 
 // this function is called to initialize the mem pool
 void init_openstack_lbaas()
@@ -321,9 +331,9 @@ openstack_lbaas_pools_p create_openstack_lbaas_pools_by_poolrest(
 openstack_lbaas_pools_p create_openstack_lbaas_pools_by_viprest(
 		char* pool_id,
 		UINT4 protocol_port,
-		UINT1 vips_status,
 		UINT4 ipaddress,
 		UINT1 connect_limit,
+		UINT1 vips_status,
 		UINT1 session_persistence)
 {
 	openstack_lbaas_pools_p ret = NULL;
@@ -343,6 +353,48 @@ openstack_lbaas_pools_p create_openstack_lbaas_pools_by_viprest(
 	return ret;
 };
 
+INT4 compare_openstack_lbaas_pools_by_viprest(
+		char* pool_id,
+		UINT4 protocol_port,
+		UINT4 ipaddress,
+		UINT1 connect_limit,
+		UINT1 vips_status,
+		UINT1 session_persistence,
+		openstack_lbaas_pools_p pool_p)
+{
+	if ((pool_p)
+		&& compare_str(pool_id, pool_p->pools_id)
+		&& (protocol_port == pool_p->protocol_port)
+		&& (vips_status == pool_p->vips_status)
+		&& (ipaddress == pool_p->ipaddress)
+		&& (connect_limit == pool_p->connect_limit)
+		&& (session_persistence == pool_p->session_persistence)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+INT4 compare_openstack_lbaas_pool_by_poolrest(
+		char* tenant_id,
+		char* pool_id,
+		UINT1 status,
+		UINT1 protocol,
+		UINT1 lbaas_method,
+		openstack_lbaas_pools_p pool_p)
+{
+	if ((pool_p)
+		&& compare_str(tenant_id, pool_p->tenant_id)
+		&& compare_str(pool_id, pool_p->pools_id)
+		&& (status == pool_p->status)
+		&& (protocol == pool_p->protocol)
+		&& (lbaas_method == pool_p->lbaas_method)) {
+		return 1;
+	}
+
+	return 0;
+}
+
 // this function is used to update lbaas pool by pool id
 openstack_lbaas_pools_p update_openstack_lbaas_pool_by_poolrest(
 		char* tenant_id,
@@ -355,13 +407,21 @@ openstack_lbaas_pools_p update_openstack_lbaas_pool_by_poolrest(
 	lb_pool = find_openstack_lbaas_pool_by_pool_id(pool_id);
 	if(lb_pool == NULL) {
 		lb_pool = create_openstack_lbaas_pools_by_poolrest(tenant_id,pool_id,status,protocol,lbaas_method);
-		add_node_into_list(lb_pool, LBAAS_NODE_POOL);
-	}else{
+		if (lb_pool) {
+			add_node_into_list(lb_pool, LBAAS_NODE_POOL);
+			lb_pool->check_status = (UINT2)CHECK_CREATE;
+		}
+	}
+	else if (compare_openstack_lbaas_pool_by_poolrest(tenant_id,pool_id,status,protocol,lbaas_method,lb_pool)) {
+		lb_pool->check_status = (UINT2)CHECK_LATEST;
+	}
+	else {
 		strcpy(lb_pool->tenant_id, tenant_id);
 		strcpy(lb_pool->pools_id, pool_id);
 		lb_pool->status = status;
 		lb_pool->protocol = protocol;
 		lb_pool->lbaas_method = lbaas_method;
+		lb_pool->check_status = (UINT2)CHECK_UPDATE;
 	}
 	return lb_pool;
 };
@@ -380,7 +440,14 @@ openstack_lbaas_pools_p update_openstack_lbaas_pool_by_viprest(
 
 	if(lb_pool == NULL) {
 		lb_pool = create_openstack_lbaas_pools_by_viprest(pool_id,protocol_port,ipaddress,connect_limit,vips_status,session_persistence);
-		add_node_into_list((void*)lb_pool, LBAAS_NODE_POOL);
+		if (lb_pool) {
+			add_node_into_list((void*)lb_pool, LBAAS_NODE_POOL);
+			lb_pool->check_status = (UINT2)CHECK_CREATE;
+		}
+	}
+	else if (compare_openstack_lbaas_pools_by_viprest(pool_id,protocol_port,ipaddress,
+								connect_limit,vips_status,session_persistence,lb_pool)) {
+		lb_pool->check_status = (UINT2)CHECK_LATEST;
 	}
 	else {
 		strcpy(lb_pool->pools_id, pool_id);
@@ -389,6 +456,7 @@ openstack_lbaas_pools_p update_openstack_lbaas_pool_by_viprest(
 		lb_pool->ipaddress = ipaddress;
 		lb_pool->connect_limit = connect_limit;
 		lb_pool->session_persistence = session_persistence;
+		lb_pool->check_status = (UINT2)CHECK_UPDATE;
 	}
 	return lb_pool;
 };
@@ -422,6 +490,36 @@ openstack_lbaas_members_p create_openstack_lbaas_member(
 	return ret;
 };
 
+INT4 compare_openstack_lbaas_member(
+		char* member_id,
+		char* tenant_id,
+		char* pool_id,
+		UINT1 weight,
+		UINT4 protocol_port,
+		UINT1 status,
+		UINT4 fixed_ip,
+		openstack_lbaas_members_p member_p)
+{
+	// printf("1.%s,%s,%s,%d,%d,%d,%d\n",member_id,tenant_id,pool_id,weight,protocol_port,status,fixed_ip);
+	// printf("2.%s,%s,%s,%d,%d,%d,%d\n",member_p->member_id,member_p->tenant_id,member_p->pool_id,member_p->weight,
+	//	member_p->protocol_port,member_p->status,member_p->fixed_ip);
+
+	if ((member_p)
+		&& compare_str(member_id, member_p->member_id)
+		&& compare_str(tenant_id, member_p->tenant_id)
+		&& compare_str(pool_id, member_p->pool_id)
+		&& (weight == member_p->weight)
+		&& (protocol_port == member_p->protocol_port)
+		// && (status == member_p->status)
+		&& (fixed_ip == member_p->fixed_ip)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+
+
 // this function is used to update lbaas member
 openstack_lbaas_members_p update_openstack_lbaas_member_by_rest(
 		char* member_id,
@@ -437,9 +535,15 @@ openstack_lbaas_members_p update_openstack_lbaas_member_by_rest(
 
 	if (lb_member == NULL) {
 		lb_member = create_openstack_lbaas_member(member_id,tenant_id,pool_id,weight,protocol_port,status,fixed_ip);
-		add_node_into_list((void*)lb_member, LBAAS_NODE_MEMBER);
-		add_node_into_list((void*)lb_member, LBAAS_NODE_POOL_MEMBER);
-		add_lbaas_member_into_listener_member_listener(lb_member);
+		if (lb_member) {
+			add_node_into_list((void*)lb_member, LBAAS_NODE_MEMBER);
+			add_node_into_list((void*)lb_member, LBAAS_NODE_POOL_MEMBER);
+			add_lbaas_member_into_listener_member_listener(lb_member);
+			lb_member->check_status = (UINT2)CHECK_CREATE;
+		}
+	}
+	else if (compare_openstack_lbaas_member(member_id,tenant_id,pool_id,weight,protocol_port,status,fixed_ip,lb_member)) {
+		lb_member->check_status = (UINT2)CHECK_LATEST;
 	}
 	else {
 		strcpy(lb_member->member_id, member_id);
@@ -449,7 +553,13 @@ openstack_lbaas_members_p update_openstack_lbaas_member_by_rest(
 		lb_member->protocol_port = protocol_port;
 		lb_member->status = status;
 		lb_member->fixed_ip = fixed_ip;
+		lb_member->check_status = (UINT2)CHECK_UPDATE;
 	}
+
+    if (is_check_status_changed(lb_member->check_status)) {
+        reset_floating_lbaas_group_flow_installed_flag(lb_member);
+    }
+	
 	return lb_member;
 };
 
@@ -478,6 +588,26 @@ openstack_lbaas_listener_p create_openstack_lbaas_listener(
 	return ret;
 };
 
+INT4 compare_openstack_lbaas_listener(
+		char* listener_id,
+		UINT1 type,
+		UINT4 check_frequency,
+		UINT4 overtime,
+		UINT1 retries,
+		openstack_lbaas_listener_p listener_p)
+{
+	if ((listener_p)
+		&& compare_str(listener_id, listener_p->listener_id)
+		&& (type == listener_p->type)
+		&& (check_frequency == listener_p->check_frequency)
+		&& (overtime == listener_p->overtime)
+		&& (retries == listener_p->retries)) {
+		return 1;
+	}
+
+	return 0;
+}
+
 // this function to update lbaas listener
 openstack_lbaas_listener_p update_openstack_lbaas_listener_by_rest(
 		char* listener_id,
@@ -491,8 +621,14 @@ openstack_lbaas_listener_p update_openstack_lbaas_listener_by_rest(
 
 	if (lb_listener == NULL) {
 		lb_listener = create_openstack_lbaas_listener(listener_id,type,check_frequency,overtime,retries);
-		add_node_into_list((void*)lb_listener, LBAAS_NODE_LISTENER);
-		lb_listener->listener_member_list = create_lbaas_listener_member_listener(lb_listener);
+		if (lb_listener) {
+			add_node_into_list((void*)lb_listener, LBAAS_NODE_LISTENER);
+			lb_listener->listener_member_list = create_lbaas_listener_member_listener(lb_listener);
+			lb_listener->check_status = (UINT2)CHECK_CREATE;
+		}
+	}
+	else if (compare_openstack_lbaas_listener(listener_id,type,check_frequency,overtime,retries,lb_listener)) {
+		lb_listener->check_status = (UINT2)CHECK_LATEST;
 	}
 	else {
 		strcpy(lb_listener->listener_id, listener_id);
@@ -500,7 +636,9 @@ openstack_lbaas_listener_p update_openstack_lbaas_listener_by_rest(
 		lb_listener->check_frequency = check_frequency;
 		lb_listener->overtime = overtime;
 		lb_listener->retries = retries;
+		lb_listener->check_status = (UINT2)CHECK_UPDATE;
 	}
+	
 	return lb_listener;
 };
 
@@ -752,6 +890,72 @@ void create_icmp_packet(UINT4 src_ip, UINT4 dst_ip, UINT1* src_mac, UINT1* dst_m
 	free(new_ip);
 }
 
+void create_tcp_packet(UINT4 src_ip, UINT4 dst_ip, UINT2 dst_port, UINT1* src_mac, UINT1* dst_mac, 
+    gn_switch_t* sw, UINT4 outport, UINT2 seq, UINT2 code)
+{
+    packet_in_info_t packout_req_info;
+    
+    UINT1 data_len = sizeof(ip_t) + sizeof(tcp_t);
+
+    ip_t* new_ip = (ip_t*)malloc(data_len);
+    memset(new_ip, 0, data_len);
+
+    tcp_t tcp_pkt;
+    tcp_t* new_tcp = &tcp_pkt;
+    memset(new_tcp, 0, sizeof(tcp_t));
+
+    packout_req_info.buffer_id = 0xffffffff;
+    packout_req_info.inport = -3;
+    packout_req_info.xid = 0;
+    packout_req_info.data_len = data_len+sizeof(packet_in_info_t);
+    packout_req_info.data = (UINT1 *)new_ip;
+
+    memcpy(new_ip->eth_head.src, src_mac, 6);
+	memcpy(new_ip->eth_head.dest, dst_mac, 6);
+    new_ip->eth_head.proto = ntohs(0x0800);   
+    new_ip->hlen = 0x45;
+    new_ip->ttl = 64;
+    new_ip->len = ntohs(data_len - sizeof(ether_t));
+    new_ip->src = src_ip;
+    new_ip->dest = dst_ip;
+    new_ip->ipid = ntohs(0x02);
+    new_ip->fragoff = 0;
+    new_ip->proto = IPPROTO_TCP;
+    new_ip->cksum = 0;
+    new_ip->cksum = calc_ip_checksum((UINT2*)&new_ip->hlen, sizeof(ip_t));
+
+    new_tcp->sport = ntohs(12345);
+    new_tcp->dport = ntohs(dst_port);
+    new_tcp->seq = ntohl(seq);
+    new_tcp->ack = 0;
+    new_tcp->offset = 0x50;
+    new_tcp->code = code;
+    new_tcp->window = ntohs(65535);
+    new_tcp->urg = ntohs(0);
+    new_tcp->cksum = calc_tcp_checksum(new_ip, new_tcp);
+
+    memcpy(new_ip->data, new_tcp, sizeof(tcp_t));
+
+    fabric_openstack_packet_output(sw, &packout_req_info, outport);
+
+    free(new_ip);
+
+}
+
+void create_tcp_rst_packet(UINT4 src_ip, UINT4 dst_ip, UINT2 dst_port, UINT1* src_mac, UINT1* dst_mac, 
+    gn_switch_t* sw, UINT4 outport, UINT2 seq)
+{
+   create_tcp_packet(src_ip, dst_ip, dst_port, src_mac, dst_mac, sw, outport, seq, 0x04);
+}
+
+void create_tcp_syn_packet(UINT4 src_ip, UINT4 dst_ip, UINT2 dst_port, UINT1* src_mac, UINT1* dst_mac, 
+    gn_switch_t* sw, UINT4 outport, UINT2 seq)
+{
+   create_tcp_packet(src_ip, dst_ip, dst_port, src_mac, dst_mac, sw, outport, seq, 0x02);
+}
+
+
+
 // this function is used monitor the member and update status
 void* lbaas_listener_thread(void* param)
 {
@@ -779,20 +983,41 @@ void* lbaas_listener_thread(void* param)
 				// printf("lbaas: wait status: %d request times:%d ip:%d\n", lb_p->wait_status, lb_p->request_time, lb_p->dst_ip);
 
 				// if last request not receive response
-				if (lb_p->wait_status) {
-					// add request times
-					lb_p->request_time++;
-				}
-				else {
-					lb_p->request_time = 0;
-					lb_p->member_p->status = LBAAS_LISTENER_MEMBER_ACTIVE;
-				}
+                if (0 == lb_p->wait_status) {
+                    lb_p->request_time = 0;
+                    if (LBAAS_LISTENER_PING == listener_p->type)  {
+                        lb_p->member_p->ping_status = LBAAS_LISTENER_MEMBER_ACTIVE;
+                    }
+                    else {
+                        openstack_lbaas_pools_p lb_pool = find_openstack_lbaas_pool_by_pool_id(lb_p->member_p->pool_id);
 
-				// if retry time over max
-				if (lb_p->request_time > listener_p->retries) {
-					// printf("lbaas: set status inactive: %d\n", lb_p->dst_ip);
-					lb_p->member_p->status = LBAAS_LISTENER_MEMBER_INACTIVE;
-				}
+                        if (lb_p->member_p->status != LBAAS_LISTENER_MEMBER_ACTIVE) {
+                            lb_p->member_p->group_flow_installed = 0;
+                            lb_pool->group_flow_installed = 0;
+                            lb_p->member_p->status = LBAAS_LISTENER_MEMBER_ACTIVE;
+                            create_proactive_floating_lbaas_flow_by_member_ip(lb_pool->ipaddress, lb_p->member_p->fixed_ip, lb_p->member_p->protocol_port);
+                        }
+                    }
+                }
+                else {
+                    if (lb_p->request_time > listener_p->retries) {
+                        // printf("lbaas: set status inactive: %d\n", lb_p->dst_ip);
+                        if (LBAAS_LISTENER_PING == listener_p->type)  {
+                            lb_p->member_p->ping_status = LBAAS_LISTENER_MEMBER_INACTIVE;
+                        }
+                        else {
+                            openstack_lbaas_pools_p lb_pool = find_openstack_lbaas_pool_by_pool_id(lb_p->member_p->pool_id);
+                            
+                            if (lb_p->member_p->status != LBAAS_LISTENER_MEMBER_INACTIVE) {
+                                lb_p->member_p->status = LBAAS_LISTENER_MEMBER_INACTIVE;
+                                lb_pool->group_flow_installed = 0;
+
+                                remove_proactive_floating_lbaas_flow_by_member_ip(lb_pool->ipaddress, lb_p->member_p->fixed_ip, lb_p->member_p->protocol_port);
+                            }
+                        }                                              
+                    }
+                    lb_p->request_time++;
+                }
 
 				if (NULL == lb_p->dst_port) {
 					lb_p->dst_port = get_fabric_host_from_list_by_ip(lb_p->dst_ip);
@@ -806,8 +1031,23 @@ void* lbaas_listener_thread(void* param)
 				else {
 					lb_p->init_time = (UINT4)g_cur_sys_time.tv_sec;
 
-					create_icmp_packet(ntohl(g_controller_ip), lb_p->dst_ip, g_controller_mac, lb_p->dst_port->mac,
-							lb_p->dst_port->sw, lb_p->dst_port->port, 8, 0, ntohs(lb_p->seq_id), ntohs(0));
+                    if (LBAAS_LISTENER_PING == listener_p->type) {  
+                        UINT2 seq = lb_p->seq_id;
+                        create_icmp_packet(ntohl(g_reserve_ip), lb_p->dst_ip, g_reserve_mac, lb_p->dst_port->mac,
+                                lb_p->dst_port->sw, lb_p->dst_port->port, 8, 0, ntohs(seq), ntohs(0));
+                    }
+                    else if (LBAAS_LISTENER_TCP == listener_p->type) {
+                        // printf("create tcp packet: id:%d, port:%d\n", lb_p->seq_id, lb_p->protocol_port);
+                        create_tcp_syn_packet(ntohl(g_reserve_ip), lb_p->dst_ip, lb_p->protocol_port, g_reserve_mac, lb_p->dst_port->mac,
+                              lb_p->dst_port->sw, lb_p->dst_port->port, lb_p->seq_id);
+                    }
+                    else if ((LBAAS_LISTENER_HTTP == listener_p->type) || (LBAAS_LISTENER_HTTPS == listener_p->type)) {
+                        create_tcp_syn_packet(ntohl(g_reserve_ip), lb_p->dst_ip, 80, g_reserve_mac, lb_p->dst_port->mac,
+                              lb_p->dst_port->sw, lb_p->dst_port->port, lb_p->seq_id);
+                    }
+                    else {
+                        // do nothing
+                    }
 				}
 
 				lb_p->wait_status = 1;
@@ -822,7 +1062,7 @@ void* lbaas_listener_thread(void* param)
 }
 
 // this function is used to update listener member status
-void update_openstack_lbaas_listener_member_status(p_fabric_host_node dst_port, UINT2 seq_id)
+void update_openstack_lbaas_listener_member_status(UINT1 type, p_fabric_host_node dst_port, UINT4 seq_id, UINT2 port_no, UINT1 code)
 {
 	openstack_lbaas_node_p list_p = g_openstack_lbaas_listener_list;
 	openstack_lbaas_listener_p listener_p = NULL;
@@ -836,13 +1076,33 @@ void update_openstack_lbaas_listener_member_status(p_fabric_host_node dst_port, 
 
 			lb_p = listener_p->listener_member_list;
 
+            // printf("%d,%d,%d,%d\n", type, seq_id, port_no, code);
+            
 			while (lb_p) {
-				if (lb_p->init_time + listener_p->overtime >= (UINT4)g_cur_sys_time.tv_sec) {
-					if ((lb_p->dst_port == dst_port) && (lb_p->seq_id == seq_id))
-					{
-						lb_p->wait_status = 0;
-					}
-				}
+                if ((LBAAS_LISTENER_PING == type) && (type == listener_p->type)) {
+                    if (lb_p->init_time + listener_p->overtime >= (UINT4)g_cur_sys_time.tv_sec) {
+                        if ((lb_p->dst_port == dst_port) && (lb_p->seq_id == seq_id))
+                        {
+                            lb_p->wait_status = 0;
+                        }
+                    }
+                }
+                else if (((LBAAS_LISTENER_TCP == type) || (LBAAS_LISTENER_HTTP == type) || (LBAAS_LISTENER_HTTPS == type))
+                    && (type == listener_p->type)) {
+                    if ((lb_p->dst_port == dst_port) && (lb_p->seq_id == seq_id - 1) && (lb_p->protocol_port == port_no))
+                    {
+                        // receive ACK
+                        if (0x12 == code) {
+                            lb_p->wait_status = 0;
+							// create RST packet
+                            create_tcp_rst_packet(ntohl(g_reserve_ip), lb_p->dst_ip, lb_p->protocol_port, g_reserve_mac, 
+                                lb_p->dst_port->mac, lb_p->dst_port->sw, lb_p->dst_port->port, seq_id);
+                        }
+                    }
+                }
+                else {
+                    }
+                
 
 				lb_p = lb_p->next;
 			}
@@ -876,12 +1136,15 @@ openstack_lbaas_listener_member_p create_listener_member(openstack_lbaas_members
 	openstack_lbaas_listener_member_p listener_member_p = (openstack_lbaas_listener_member_p)mem_get(g_openstack_lbaas_listener_member_id);
 
 	if (listener_member_p) {
+        strcpy(listener_member_p->member_id, member_p->member_id);
+        listener_member_p->protocol_port = member_p->protocol_port;
 		listener_member_p->dst_ip = member_p->fixed_ip;
 		listener_member_p->dst_port = get_fabric_host_from_list_by_ip(member_p->fixed_ip);
 		listener_member_p->init_time = g_cur_sys_time.tv_sec;
 		listener_member_p->request_time = 0;
 		listener_member_p->member_p = member_p;
 		listener_member_p->member_p->status = LBAAS_LISTENER_MEMBER_INITIALIZE;
+        listener_member_p->wait_status = 1;
 	}
 
 	return listener_member_p;
@@ -899,7 +1162,7 @@ void add_lbaas_member_into_listener_member_listener(openstack_lbaas_members_p me
 
 			UINT1 check_exist = GN_OK;
 			while (listener_member_p) {
-				if (listener_member_p->dst_ip == member_p->fixed_ip) {
+				if (0 == strcmp(member_p->member_id, listener_member_p->member_id)) {
 					check_exist = GN_ERR;
 				}
 				listener_member_p = listener_member_p->next;
@@ -996,10 +1259,11 @@ openstack_lbaas_members_p get_lbass_member_by_method_round_robin(char* pool_id)
 
 	if ((node_p) && (node_p == pool_p->last_round_robin_member)) {
 		return_p = (openstack_lbaas_members_p)node_p->data;
-		if (LBAAS_LISTENER_MEMBER_INACTIVE == return_p->status) {
-			return_p = NULL;
-		}
 	}
+
+	if ((return_p) && (LBAAS_LISTENER_MEMBER_ACTIVE!= return_p->status)) {
+	    return_p = NULL;
+    }
 
 	return return_p;
 }
@@ -1072,6 +1336,10 @@ openstack_lbaas_members_p get_lbass_member_by_method_least_connection(char* pool
 			node_p = node_p->next;
 		}
 	}
+
+    if ((least_member) && (LBAAS_LISTENER_MEMBER_ACTIVE!= least_member->status)) {
+        least_member = NULL;
+    }    
 
 	return least_member;
 }
@@ -1152,6 +1420,11 @@ UINT4 create_openstack_lbaas_connect(UINT4 ext_ip, UINT4 inside_ip, UINT4 vip, U
 					}
 					member_p->connect_numbers++;
 				}
+                
+                if (g_controller_role == OFPCR_ROLE_MASTER)
+                {
+                    persist_fabric_openstack_lbaas_members_single(OPERATE_ADD, find_p);
+                }
 
 				return find_p->ext_port_no;
 			}
@@ -1173,7 +1446,7 @@ openstack_lbaas_connect_p find_openstack_lbass_connect_by_extip(UINT4 ext_ip, UI
 
 		while (node_p) {
 			openstack_lbaas_connect_p connect_p = (openstack_lbaas_connect_p)node_p->data;
-			if ((connect_p->ext_ip == ext_ip) && (connect_p->ext_port_no == src_port_no)) {
+			if ((connect_p->ext_ip == ext_ip) && (connect_p->src_port_no == src_port_no)) {
 				return connect_p;
 			}
 			node_p = node_p->next;
@@ -1214,7 +1487,13 @@ void remove_openstack_lbaas_connect(UINT4 ext_ip, UINT4 inside_ip, UINT4 vip, UI
 {
 	openstack_lbaas_connect_p connect_p = find_openstack_lbass_connect_by_extip(ext_ip, inside_ip, vip, src_port_no);
 
-	if (connect_p) {
+	if (connect_p) 
+    {
+        
+        if (g_controller_role == OFPCR_ROLE_MASTER)
+        {
+            persist_fabric_openstack_lbaas_members_single(OPERATE_DEL, connect_p);
+        }
 		remove_node_from_list((void*)connect_p, LBAAS_NODE_CONNECT);
 	}
 }
@@ -1224,7 +1503,12 @@ void remove_openstack_lbaas_connect_by_ext_ip_portno(UINT4 ext_ip, UINT4 src_por
 {
 	openstack_lbaas_connect_p connect_p = find_openstack_lbass_connect_by_extip_portno(ext_ip, src_port_no);
 
-	if (connect_p) {
+	if (connect_p) 
+    {
+        if (g_controller_role == OFPCR_ROLE_MASTER)
+        {
+            persist_fabric_openstack_lbaas_members_single(OPERATE_DEL, connect_p);
+        }
 		remove_node_from_list((void*)connect_p, LBAAS_NODE_CONNECT);
 	}
 }
@@ -1236,7 +1520,7 @@ void rest_openstack_lbaas_update_flag()
 
 	while(node_p != NULL) {
 		lb_pool = (openstack_lbaas_pools_p)node_p->data;
-		lb_pool->update_flag = GN_ERR;
+		lb_pool->check_status = (UINT2)CHECK_UNCHECKED;
 		node_p = node_p->next;
 	}
 	
@@ -1244,7 +1528,7 @@ void rest_openstack_lbaas_update_flag()
 	node_p = g_openstack_lbaas_members_list;
 	while(node_p != NULL) {
 		lb_member = (openstack_lbaas_members_p)node_p->data;
-		lb_member->update_flag = GN_ERR;
+		lb_member->check_status = (UINT2)CHECK_UNCHECKED;
 		node_p = node_p->next;
 	}
 
@@ -1252,14 +1536,14 @@ void rest_openstack_lbaas_update_flag()
 	node_p = g_openstack_lbaas_listener_list;
 	while(node_p != NULL) {
 		lb_listener = (openstack_lbaas_listener_p)node_p->data;
-		lb_listener->update_flag = GN_ERR;
+		lb_listener->check_status = (UINT2)CHECK_UNCHECKED;
 		node_p = node_p->next;
 	}
 
 }
 
 // this function is used to remove pool by flag
-void remove_openstack_lbaas_pool_by_check_flag(UINT1 flag)
+void remove_openstack_lbaas_pool_by_check_status()
 {
 	openstack_lbaas_pools_p lb_pool = NULL;
 	openstack_lbaas_node_p head_p = g_openstack_lbaas_pools_list;
@@ -1275,7 +1559,8 @@ void remove_openstack_lbaas_pool_by_check_flag(UINT1 flag)
 	while (next_p) {
 		lb_pool = (openstack_lbaas_pools_p)next_p->data;
 		
-		if ((lb_pool) && (lb_pool->update_flag == flag)) {
+		if ((lb_pool) && (lb_pool->check_status == (UINT2)CHECK_UNCHECKED)) {
+            // process_floating_lbaas_group_flow_by_pool(lb_pool, 2);
 			prev_p->next = next_p->next;
 			mem_free(g_openstack_lbaas_pools_id, lb_pool);
 			mem_free(g_openstack_lbaas_node_id, next_p);
@@ -1287,7 +1572,8 @@ void remove_openstack_lbaas_pool_by_check_flag(UINT1 flag)
 	}
 
 	lb_pool = (openstack_lbaas_pools_p)head_p->data;
-	if ((lb_pool) && (lb_pool->update_flag == flag)) {
+	if ((lb_pool) && (lb_pool->check_status == (UINT2)CHECK_UNCHECKED)) {
+        // process_floating_lbaas_group_flow_by_pool(lb_pool, 2);
 		next_p = head_p->next;
 		mem_free(g_openstack_lbaas_pools_id, head_p->data);
 		mem_free(g_openstack_lbaas_node_id, head_p);
@@ -1296,7 +1582,7 @@ void remove_openstack_lbaas_pool_by_check_flag(UINT1 flag)
 }
 
 // this function is used to remove pool by flag
-void remove_openstack_lbaas_pool_member_by_check_flag(UINT1 flag)
+void remove_openstack_lbaas_pool_member_by_check_status()
 {
 	openstack_lbaas_pools_p lb_pool = NULL;
 	openstack_lbaas_node_p list_p = g_openstack_lbaas_pools_list;
@@ -1315,7 +1601,8 @@ void remove_openstack_lbaas_pool_member_by_check_flag(UINT1 flag)
 				while (next_p) {
 					lb_member = (openstack_lbaas_members_p)next_p->data;
 
-					if ((lb_member) && (lb_member->update_flag == flag)) {
+					if ((lb_member) && (lb_member->check_status== (UINT2)CHECK_UNCHECKED)) {
+                        remove_floating_lbaas_member_flow(lb_member);
 						prev_p->next = next_p->next;
 						mem_free(g_openstack_lbaas_node_id, next_p);
 					}
@@ -1326,7 +1613,8 @@ void remove_openstack_lbaas_pool_member_by_check_flag(UINT1 flag)
 				}
 			
 				lb_member = (openstack_lbaas_members_p)head_p->data;
-				if ((lb_member) && (lb_member->update_flag == flag)) {
+				if ((lb_member) && (lb_member->check_status== (UINT2)CHECK_UNCHECKED)) {
+                    remove_floating_lbaas_member_flow(lb_member);
 					next_p = head_p->next;
 					mem_free(g_openstack_lbaas_node_id, head_p);
 					lb_pool->pool_member_list = next_p;
@@ -1338,7 +1626,7 @@ void remove_openstack_lbaas_pool_member_by_check_flag(UINT1 flag)
 }
 
 // this function is used to remove pool by flag
-void remove_openstack_lbaas_listener_by_check_flag(UINT1 flag)
+void remove_openstack_lbaas_listener_by_check_status()
 {
 	openstack_lbaas_listener_p lb_listener = NULL;
 	openstack_lbaas_node_p head_p = g_openstack_lbaas_listener_list;
@@ -1354,7 +1642,7 @@ void remove_openstack_lbaas_listener_by_check_flag(UINT1 flag)
 	while (next_p) {
 		lb_listener = (openstack_lbaas_listener_p)next_p->data;
 		
-		if ((lb_listener) && (lb_listener->update_flag == flag)) {
+		if ((lb_listener) && (lb_listener->check_status== (UINT2)CHECK_UNCHECKED)) {
 			prev_p->next = next_p->next;
 			mem_free(g_openstack_lbaas_listener_id, lb_listener);
 			mem_free(g_openstack_lbaas_node_id, next_p);
@@ -1366,7 +1654,7 @@ void remove_openstack_lbaas_listener_by_check_flag(UINT1 flag)
 	}
 
 	lb_listener = (openstack_lbaas_listener_p)head_p->data;
-	if ((lb_listener) && (lb_listener->update_flag== flag)) {
+	if ((lb_listener) && (lb_listener->check_status== (UINT2)CHECK_UNCHECKED)) {
 		next_p = head_p->next;
 		mem_free(g_openstack_lbaas_listener_id, head_p->data);
 		mem_free(g_openstack_lbaas_node_id, head_p);
@@ -1375,7 +1663,7 @@ void remove_openstack_lbaas_listener_by_check_flag(UINT1 flag)
 }
 
 // this function is used to remove pool by flag
-void remove_openstack_lbaas_member_by_check_flag(UINT1 flag)
+void remove_openstack_lbaas_member_by_check_status()
 {
 	openstack_lbaas_members_p lb_member = NULL;
 	openstack_lbaas_node_p head_p = g_openstack_lbaas_members_list;
@@ -1391,7 +1679,7 @@ void remove_openstack_lbaas_member_by_check_flag(UINT1 flag)
 	while (next_p) {
 		lb_member = (openstack_lbaas_members_p)next_p->data;
 		
-		if ((lb_member) && (lb_member->update_flag == flag)) {
+		if ((lb_member) && (lb_member->check_status== (UINT2)CHECK_UNCHECKED)) {
 			prev_p->next = next_p->next;
 			mem_free(g_openstack_lbaas_members_id, lb_member);
 			mem_free(g_openstack_lbaas_node_id, next_p);
@@ -1403,7 +1691,7 @@ void remove_openstack_lbaas_member_by_check_flag(UINT1 flag)
 	}
 
 	lb_member = (openstack_lbaas_members_p)head_p->data;
-	if ((lb_member) && (lb_member->update_flag== flag)) {
+	if ((lb_member) && (lb_member->check_status== (UINT2)CHECK_UNCHECKED)) {
 		next_p = head_p->next;
 		mem_free(g_openstack_lbaas_members_id, head_p->data);
 		mem_free(g_openstack_lbaas_node_id, head_p);
@@ -1411,7 +1699,7 @@ void remove_openstack_lbaas_member_by_check_flag(UINT1 flag)
 	}	
 }
 
-void remove_openstack_lbaas_listener_member_by_check_flag(UINT1 flag)
+void remove_openstack_lbaas_listener_member_by_check_status()
 {
 	openstack_lbaas_members_p lb_member = NULL;
 	openstack_lbaas_node_p list_p =  g_openstack_lbaas_listener_list;
@@ -1427,7 +1715,7 @@ void remove_openstack_lbaas_listener_member_by_check_flag(UINT1 flag)
 
 				while (next_p) {
 					lb_member = next_p->member_p;
-					if ((lb_member) && (lb_member->update_flag == flag)) {
+					if ((lb_member) && (lb_member->check_status== (UINT2)CHECK_UNCHECKED)) {
 						prev_p->next = next_p->next;
 						mem_free(g_openstack_lbaas_listener_member_id, next_p);
 					}
@@ -1439,7 +1727,7 @@ void remove_openstack_lbaas_listener_member_by_check_flag(UINT1 flag)
 				}
 
 				lb_member = head_p->member_p;
-				if ((lb_member) && (lb_member->update_flag == flag)) {
+				if ((lb_member) && (lb_member->check_status== (UINT2)CHECK_UNCHECKED)) {
 					next_p = head_p->next;
 					mem_free(g_openstack_lbaas_listener_member_id, head_p);
 					listener_p->listener_member_list = next_p;
@@ -1452,6 +1740,32 @@ void remove_openstack_lbaas_listener_member_by_check_flag(UINT1 flag)
 	}
 }
 
+void reset_floating_lbaas_group_flow_installed_flag(openstack_lbaas_members_p lb_member)
+{
+    if (lb_member) {
+        openstack_lbaas_pools_p lb_pool = find_openstack_lbaas_pool_by_pool_id(lb_member->pool_id);
+        
+        if (lb_pool) {
+            lb_pool->group_flow_installed = 0;
+        }
+        
+        lb_member->group_flow_installed = 0;
+    }
+}
+
+void remove_floating_lbaas_member_flow(openstack_lbaas_members_p lb_member)
+{
+    if (lb_member) {
+        openstack_lbaas_pools_p lb_pool = find_openstack_lbaas_pool_by_pool_id(lb_member->pool_id);
+        
+        if (lb_pool) {
+            lb_pool->group_flow_installed = 0;
+            remove_proactive_floating_lbaas_flow_by_member_ip(lb_pool->ipaddress, lb_member->fixed_ip, lb_member->protocol_port);
+        }
+        
+        lb_member->group_flow_installed = 0;
+    }
+}
 
 void clear_openstack_lbaas_info()
 {
@@ -1465,10 +1779,10 @@ void reload_openstack_lbaas_info()
 	reoad_lbaas_info();
 
 	// reset upchecked flag
-	remove_openstack_lbaas_pool_by_check_flag(GN_ERR);
-	remove_openstack_lbaas_pool_member_by_check_flag(GN_ERR);
-	remove_openstack_lbaas_listener_member_by_check_flag(GN_ERR);
+	remove_openstack_lbaas_pool_by_check_status();
+	remove_openstack_lbaas_pool_member_by_check_status();
+	remove_openstack_lbaas_listener_member_by_check_status();
 	
-	remove_openstack_lbaas_member_by_check_flag(GN_ERR);
-	remove_openstack_lbaas_listener_by_check_flag(GN_ERR);
+	remove_openstack_lbaas_member_by_check_status();
+	remove_openstack_lbaas_listener_by_check_status();
 }

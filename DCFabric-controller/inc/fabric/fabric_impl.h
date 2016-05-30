@@ -34,6 +34,7 @@
 #include "fabric_path.h"
 
 #define FABRIC_START_TAG 4
+extern t_fabric_sw_list g_fabric_sw_list;
 
 void of131_fabric_impl_setup_by_dpids(UINT8* dpids,UINT4 len);
 void of131_fabric_impl_setup();
@@ -57,4 +58,8 @@ p_fabric_path of131_fabric_get_path(UINT8 src_dpid,UINT8 dst_dpid);
 UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid);
 
 void of131_test_update();
+
+p_fabric_sw_node get_fabric_sw_node_by_dpid(UINT8 dpid);
+UINT4 adjust_fabric_sw_node_list(UINT8 pre_dpid, UINT8 dpid);
+
 #endif /* INC_FABRIC_FABRIC_IMPL_H_ */

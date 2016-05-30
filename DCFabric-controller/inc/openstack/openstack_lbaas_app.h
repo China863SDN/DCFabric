@@ -38,13 +38,15 @@ typedef struct _openstack_lbaas_members {
 	char member_id[OPENSTACK_LBAAS_LEN];
 	char tenant_id[OPENSTACK_LBAAS_LEN];
 	char pool_id[OPENSTACK_LBAAS_LEN];
-	UINT1 weight;
+	UINT2 weight;
 	UINT4 protocol_port;
 	UINT1 status;
+    UINT1 ping_status;
 	UINT4 fixed_ip;
 	UINT1 connect_numbers;
-	UINT1 update_flag;
+	UINT2 check_status;
 	openstack_lbaas_node_p connect_ips;
+    UINT4 group_flow_installed;
 }openstack_lbaas_members, *openstack_lbaas_members_p;
 
 typedef struct _openstack_lbaas_pools {
@@ -59,9 +61,10 @@ typedef struct _openstack_lbaas_pools {
 	UINT1 connect_limit;
 	UINT1 session_persistence;
 	UINT4 weight_count;
-	UINT1 update_flag;
+	UINT2 check_status;
 	openstack_lbaas_node_p last_round_robin_member;
 	openstack_lbaas_node_p pool_member_list;
+    UINT4 group_flow_installed;
 } openstack_lbaas_pools, *openstack_lbaas_pools_p;
 
 typedef struct openstack_lbaas_listener_member
@@ -69,9 +72,11 @@ typedef struct openstack_lbaas_listener_member
 	p_fabric_host_node dst_port;
 	UINT4 dst_ip;
 	// UINT1 status;
+	UINT4 protocol_port;
+	char member_id[OPENSTACK_LBAAS_LEN];
 	UINT4 init_time;
 	UINT1 request_time;
-	UINT2 seq_id;
+	UINT4 seq_id;
 	UINT1 wait_status;
 	openstack_lbaas_members_p member_p;
 	struct openstack_lbaas_listener_member* next;
@@ -83,7 +88,7 @@ typedef struct _openstack_lbaas_listener {
     UINT4 check_frequency;
 	UINT4 overtime;
 	UINT1 retries;
-	UINT1 update_flag;
+	UINT2 check_status;
 	pthread_t listener_pid;
 	pthread_mutex_t listener_mutex;
 	openstack_lbaas_listener_member_p listener_member_list;
@@ -157,9 +162,13 @@ enum lbass_node_type
 enum lbaas_listener_member_status_type
 {
 	LBAAS_LISTENER_MEMBER_INACTIVE = 0,
-	LBAAS_LISTENER_MEMBER_ACTIVE,
-	LBAAS_LISTENER_MEMBER_INITIALIZE,
+	LBAAS_LISTENER_MEMBER_ACTIVE = 1,
+	LBAAS_LISTENER_MEMBER_INITIALIZE = 2,
 };
+
+
+extern openstack_lbaas_node_p g_openstack_lbaas_members_list;
+
 
 /*
  * define public functions
@@ -251,7 +260,7 @@ UINT4 get_openstack_lbaas_ip_by_ip_proto(UINT4 ip, UINT1 proto);
 /*
  * this function is used to update listener member status
  */
-void update_openstack_lbaas_listener_member_status(p_fabric_host_node dst_port, UINT2 seq_id);
+void update_openstack_lbaas_listener_member_status(UINT1 type, p_fabric_host_node dst_port, UINT4 seq_id, UINT2 port_no, UINT1 code);
 
 /*
  * this function is used to start lbaas listener thread

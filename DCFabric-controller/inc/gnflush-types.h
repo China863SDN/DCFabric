@@ -46,6 +46,10 @@ extern ini_file_t *g_controller_configure;
 extern UINT1 g_controller_mac[];
 extern UINT4 g_controller_ip;
 extern UINT4 g_controller_south_port;
+extern UINT1 g_is_cluster_on;
+extern UINT1 g_reserve_mac[];
+extern UINT4 g_reserve_ip;
+
 
 enum http_type
 {
@@ -66,12 +70,9 @@ enum forward_ip_type
 	Internal_out_subnet_flow = 8,
 	Floating_ip_flow = 9,
 	Nat_ip_flow = 10,
-<<<<<<< HEAD
 	Internal_vip_flow = 11,
 	External_vip_flow = 12,
 	Internal_floating_vip_flow = 13,
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 };
 
 #pragma pack(1)
@@ -276,6 +277,8 @@ typedef struct gn_switch
     pthread_t pid_proc;   //�����
     UINT8 connected_since;
     UINT8 weight;         //sw_weight
+    UINT1 sock_state;     //socket status
+    pthread_mutex_t sock_state_mutex;
 }gn_switch_t;
 
 

@@ -15,11 +15,11 @@
 #include "gnflush-types.h"
 
 #define HTTP_TIMEOUT 5
-#define REST_CAPACITY 30
+#define REST_CAPACITY 60
 #define POSTBUFFERSIZE 512
 #define REST_BUFF_LEN 100   //55 * 1024 = 56320
 
-extern UINT4 g_rest_port;
+extern UINT4 g_restful_port;
 
 extern restful_handles_t g_restful_get_handles[];
 extern restful_handles_t g_restful_post_handles[];

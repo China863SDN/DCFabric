@@ -41,4 +41,6 @@ gn_switch_t *find_sw_by_dpid(UINT8 dpid);
 void free_switch(gn_switch_t *sw);
 UINT1 *init_sendbuff(gn_switch_t *sw, UINT1 of_version, UINT1 type, UINT2 buf_len, UINT4 transaction_id);
 INT4 send_of_msg(gn_switch_t *sw, UINT4 total_len);
+gn_switch_t* find_sw_by_port_physical_mac(UINT1* mac);
+
 #endif /* CONN_SVR_H_ */

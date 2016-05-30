@@ -124,22 +124,27 @@ p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 se
 		if(!check_IP_in_fabric_host(p_node,sendip))
 		{
 			add_fabric_host_ip(p_node,sendip);
-<<<<<<< HEAD
 		}
 	}else{
 		p_node = create_fabric_host_list_node(sw,inport,sendmac,sendip,NULL);
 		if (NULL == p_node) {
 		    return NULL;	
 		}
-=======
-		}
-	}else{
-		p_node = create_fabric_host_list_node(sw,inport,sendmac,sendip);
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 		insert_fabric_host_into_list(p_node);
+        install_fabric_output_flow(sw,sendmac,inport);
 	}
+    
+	if ((NULL != p_node->sw) && (0 != p_node->port))
+    {   
+	    return p_node;
+    }
+        
 	p_node->port = inport;
 	p_node->sw=sw;
+    if (sendip)
+    {
+        p_node->ip_list[0] = sendip;
+    }
 	install_fabric_output_flow(sw,sendmac,inport);
 	return p_node;
 }
@@ -155,9 +160,10 @@ p_fabric_host_node fabric_find_dst_port_ip(p_fabric_host_node src_node,UINT4 tar
 	return p_node;
 }
 
-INT4 fabric_arp_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in){
-	p_fabric_arp_request_node arp_node = create_fabric_arp_request_list_node(src_port,sendip,targetip);
-	insert_fabric_arp_request_into_list(arp_node);
+INT4 fabric_arp_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in)
+{
+	fabric_add_into_arp_request(src_port, sendip, targetip);
+	
 	// flood to outter ports
 	fabric_push_arp_flood_queue(targetip,packet_in);
 	return GN_OK;
@@ -480,6 +486,85 @@ void fabric_ip_packet_flood( packet_in_info_t *packet_in_info)
 	}
 	return;
 }
+
+INT4 fabric_ip_install_deny_flow(gn_switch_t *sw, ip_t* p_ip)
+{
+	UINT4 src_ip = 0;
+	UINT4 dst_ip = 0;
+	UINT1 src_mac[6] = {0};
+	UINT1 dst_mac[6] = {0};
+	UINT1 proto = 0;
+	icmp_t* p_icmp = NULL;
+	tcp_t* p_tcp = NULL;
+	udp_t* p_udp = NULL;
+	UINT1 icmp_type = 0;
+	UINT1 icmp_code = 0;
+	UINT2 sport = 0;
+	UINT2 dport = 0;
+	
+	if (NULL == p_ip) {
+		return GN_ERR;
+	}	
+
+	src_ip = p_ip->src;
+	dst_ip = p_ip->dest;
+	memcpy(src_mac, p_ip->eth_head.src, 6);
+	memcpy(dst_mac, p_ip->eth_head.dest, 6);
+	proto = p_ip->proto;
+
+	switch(proto)
+	{
+	case IPPROTO_ICMP:
+		{
+			p_icmp = (icmp_t*)p_ip->data;
+			if (p_icmp) {
+				icmp_type = p_icmp->type;
+				icmp_code = p_icmp->code;
+			}
+		}
+		break;
+	case IPPROTO_TCP:
+		{
+			p_tcp = (tcp_t*)p_ip->data;
+			if (p_tcp) {
+				sport = p_tcp->sport;
+				dport = p_tcp->dport;
+			}
+		}
+		break;
+	case IPPROTO_UDP:
+		{
+			p_udp = (udp_t*)p_ip->data;
+			if (p_udp) {
+				sport = p_udp->sport;
+				dport = p_udp->dport;
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	
+	install_deny_flow(sw, src_ip, dst_ip, src_mac, dst_mac, proto, icmp_type, icmp_code, sport, dport);
+
+	return GN_OK;
+
+}
+
+INT4 fabric_ip_remove_deny_flow(UINT1* src_mac)
+{
+	p_fabric_host_node host = get_fabric_host_from_list_by_mac(src_mac);
+	if (host) {
+		gn_switch_t* sw = host->sw;
+		if (sw) {
+			remove_deny_flow(sw, src_mac);
+		}
+	}
+	
+	return GN_OK;
+}
+
+
 
 /////////////////////////////////////////////////////////////////////////////////
 ///*

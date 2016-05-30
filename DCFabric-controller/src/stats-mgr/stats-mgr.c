@@ -365,23 +365,31 @@ void *get_throughput(void *args)
 {
     gn_switch_t *sw = NULL;
     UINT4 num = 0;
+    struct timeval begin_time;
 
+	gettimeofday(&begin_time, NULL);
     while(g_runing_flag)
     {
-        sleep(g_stats_mgr_interval);
-
-        for(num=0; num < g_server.max_switch; num++)
-        {
-            if(g_server.switches[num].state)
-            {
-                sw = &g_server.switches[num];
-                if(sw->state == 1)
-                {
-                    of_send_port_stats(sw);
-                    of_send_flow_stats(sw);
-                }
-            }
-        }
+       sleep(1);
+       
+      if(g_cur_sys_time.tv_sec - begin_time.tv_sec >= g_stats_mgr_interval)
+       {
+       		//更新起始时间
+			gettimeofday(&begin_time, NULL);
+			
+       		for(num=0; num < g_server.max_switch; num++)
+	        {
+	            if(g_server.switches[num].state)
+	            {
+	                sw = &g_server.switches[num];
+	                if(sw->state == 1)
+	                {
+	                    of_send_port_stats(sw);
+	                    of_send_flow_stats(sw);
+	                }
+	            }
+	        }
+       }
     }
 
     return NULL;
@@ -390,10 +398,14 @@ void *get_throughput(void *args)
 
 //初始化
 INT4 init_stats_mgr()
-{
-    g_runing_flag = 1;
+{   
+	char *val = NULL;
+	
+    val = get_value(g_controller_configure, "[stats_conf]", "sampling_interval");
+    g_stats_mgr_interval = (NULL == val  ? 5 : atoi(val));
+	g_runing_flag = 1;
     pthread_create(&g_stats_mgr_threadid, NULL, get_throughput, NULL);
-
+	
     return GN_OK;
 }
 

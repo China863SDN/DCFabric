@@ -19,46 +19,36 @@
 
 /******************************************************************************
 *                                                                             *
-*   File Name   : cluster-mgr.h           *
-*   Author      : greenet Administrator           *
-*   Create Date : 2015-2-27           *
+*   File Name   : overload-mgr.h           *
+*   Author      : bnc Administrator           *
+*   Create Date : 2016-04-26           *
 *   Version     : 1.0           *
 *   Function    : .           *
 *                                                                             *
 ******************************************************************************/
 
-#ifndef CLUSTER_MGR_H_
-#define CLUSTER_MGR_H_
-
+#ifndef OVERLOAD_MGR_H_
+#define OVERLOAD_MGR_H_
+#include "common.h"
 #include "gnflush-types.h"
 
-#define MAX_CONTROLLER 8
 
-enum CLUSTER_STATE
+typedef struct msg_counter
 {
-	CLUSTER_STOP = 0,
-	CLUSTER_SETUP = 1
-};
+    gn_switch_t* sw;
+    UINT4 ip;
+    UINT1 mac[6];
+    UINT4 count;
+    UINT4 start;
+    UINT4 stop;
+    BOOL  flag;
+    UINT8 timestamp;
+    
+    struct msg_counter* next;
+}msg_counter_t;
 
-#pragma pack(1)
-typedef struct cluster_node
-{
-    UINT4 cluster_id;
-    INT1 controller_ip[36];
-}cluster_node_t;
-#pragma pack()
+void add_msg_counter(gn_switch_t* sw, UINT4 ip, const UINT1* mac);
+INT4 init_overload_mgr();
 
-extern UINT1 g_controller_role;
-extern UINT8 g_election_generation_id;
-extern cluster_node_t g_controller_cluster[];   //控制器集群管理结构
-extern UINT8 g_master_id; 
+#endif
 
-INT4 update_role(UINT4 role);
-INT4 get_controller_status(UINT4 tmp_id);
-UINT4 set_cluster_onoff(UINT4 onoff);
-UINT4 set_cluster_role(UINT8 controller_id);
-int update_controllers_role(UINT4 controller_id, UINT1 mode);
-INT4 init_cluster_mgr();
-void fini_cluster_mgr();
-
-#endif /* CLUSTER_MGR_H_ */

@@ -38,6 +38,10 @@
 #include "openstack_app.h"
 #include "ini.h"
 #include "fabric_openstack_arp.h"
+#include "../cluster-mgr/hbase_sync.h"
+#include "openflow-common.h"
+#include "../cluster-mgr/cluster-mgr.h"
+
 
 // 定义NAT最大连接数
 #define NAT_HOST_MAX_NUM 		1000
@@ -632,6 +636,11 @@ UINT2 create_nat_connect(UINT4 internal_ip, UINT4 host_ip, UINT2 internal_port_n
 
 	// LOG_PROC("INFO", "NAT: Success create NAT connect!");
 
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {
+        persist_fabric_nat_host_single(OPERATE_ADD, host_p);
+    }
+
 	// 返回
 	return external_port_no;
 }
@@ -672,12 +681,20 @@ void destroy_nat_connect(UINT4 host_ip, UINT2 external_port_no, UINT1 proto_type
 	// 如果port已经全部删除
 	if ((NULL == host_p->tcp_port_list->next)
 			&&(NULL == host_p->udp_port_list->next)){
+        if (g_controller_role == OFPCR_ROLE_MASTER)
+        {
+            persist_fabric_nat_host_single(OPERATE_DEL, host_p);
+        }
+
 		// 删除该host
-		// LOG_PROC("INFO", "NAT: all the port removed, remove host");
 		remove_nat_host_by_ip(host_p->host_ip);
+        return;
 	}
 
-	// LOG_PROC("INFO", "NAT: Success destroy NAT connect!");
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {
+        persist_fabric_nat_host_single(OPERATE_ADD, host_p);
+    }
 }
 
 void destroy_nat_connect_by_mac_and_port(gn_switch_t* sw, UINT4 host_ip, UINT1* internal_mac, UINT2 internal_port_no, UINT1 proto_type)
@@ -714,13 +731,21 @@ void destroy_nat_connect_by_mac_and_port(gn_switch_t* sw, UINT4 host_ip, UINT1* 
 
 	// 如果port已经全部删除
 	if ((NULL == host_p->tcp_port_list->next)
-			&&(NULL == host_p->udp_port_list->next)){
+			&&(NULL == host_p->udp_port_list->next))
+    {   
+        if (g_controller_role == OFPCR_ROLE_MASTER)
+        {
+            persist_fabric_nat_host_single(OPERATE_DEL, host_p);
+        }
 		// 删除该host
-		// LOG_PROC("INFO", "NAT: all the port removed, remove host");
 		remove_nat_host_by_ip(host_p->host_ip);
+        return;
 	}
 
-	// LOG_PROC("INFO", "NAT: Success destroy NAT connect!");
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {
+        persist_fabric_nat_host_single(OPERATE_ADD, host_p);
+    }
 }
 
 nat_port_p find_nat_connect(UINT4 external_ip, UINT2 external_port_no, UINT1 proto_type)
@@ -1050,6 +1075,9 @@ INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *
 			nat_icmp_p = create_nat_imcp_iden_p(packetin_icmp->id, ipt->src, ipt->eth_head.src, sw->dpid, packet_in->inport);
 		}
 
+		if (NULL == nat_icmp_p) {
+			return IP_DROP;
+		}
 		// modify src_ip, src_mac, dst_mac
 		ipt->src = epp->external_outer_interface_ip;
 		memcpy(ipt->eth_head.src, epp->external_outer_interface_mac, 6);
@@ -1089,7 +1117,7 @@ INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *
 
 			// packet out the data to the host
 			// fabric_openstack_nat_packet_output(output_sw, packet_in, nat_icmp_p->inport);
-			p_fabric_host_node host = get_fabric_host_from_list_by_ip(nat_icmp_p->host_ip);
+			p_fabric_host_node host = get_fabric_host_from_list_by_mac(nat_icmp_p->host_mac);
 
 			if (NULL == host) {
 				return IP_DROP;
@@ -1104,16 +1132,6 @@ INT4 fabric_openstack_nat_icmp_comute_foward(gn_switch_t *sw, packet_in_info_t *
 
 			param_set->dst_sw = host->sw;
 			param_set->dst_inport = host->port;
-<<<<<<< HEAD
-=======
-
-//			param_set->dst_sw = output_sw;
-//			param_set->dst_inport = nat_icmp_p->inport;
-			return CONTROLLER_FORWARD;
-		}
-	}
-}
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
 
 //			param_set->dst_sw = output_sw;
 //			param_set->dst_inport = nat_icmp_p->inport;

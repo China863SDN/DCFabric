@@ -126,7 +126,6 @@ void update_fabric_flow_entries(gn_switch_t *sw, UINT1 *entry, UINT2 length, UIN
 {
     if (xid != FABRIC_STATS_XID)
     {
-        printf("\ndifferent xid\n");
         return;
     }
 

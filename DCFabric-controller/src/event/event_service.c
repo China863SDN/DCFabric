@@ -243,6 +243,8 @@ void *topo_change_event_thread(){
 		//sleep_times = 0;
 		sem_wait(&topo_change_thread_sem);
 		LOG_PROC("INFO", "topo_change_event_thread start");
+        // initialize the fabric
+		init_openstack_fabric_auto_start_delay();
 		// init rate
 
 		if(g_event_delete_switch_list_num){
@@ -260,8 +262,6 @@ void *topo_change_event_thread(){
 			}while(last_add_sw_num < g_event_add_switch_list_num );
 			//sleep_times = 5>g_event_add_switch_list_num?5:g_event_add_switch_list_num;
 			call_add_switch_fun();
-			// initialize the fabric
-			init_openstack_fabric_auto_start_delay();
 		}
 
 		if(g_event_delete_switch_port_list_num){

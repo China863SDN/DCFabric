@@ -34,11 +34,14 @@
 #include "../event/event_service.h"
 #include <stdio.h>
 #include "forward-mgr.h"
-<<<<<<< HEAD
 #include "fabric_stats.h"
+#include "../cluster-mgr/cluster-mgr.h"
+#include "../cluster-mgr/hbase_sync.h"
+#include "openflow-common.h"
 
-=======
->>>>>>> bf54879025c15afe476208ca575ee15b66675acb
+
+
+
 
 extern UINT4 g_openstack_on;
 /*****************************
@@ -107,6 +110,7 @@ t_fabric_sw_list g_fabric_sw_list;
 t_fabric_sw_list g_fabric_sw_list_total;
 t_fabric_sw_list g_fabric_sw_list_old_tag;
 UINT4 g_fabric_tag = 0;
+UINT4 vlan_start_tag = FABRIC_START_TAG;
 
 // fabric path list
 p_fabric_path_list g_fabric_path_list = NULL;
@@ -152,14 +156,17 @@ void of131_fabric_impl_setup_by_dpids(UINT8* dpids,UINT4 len){
 void of131_fabric_impl_setup(){
     //path weight init
 	INT1* value = get_value(g_controller_configure, "[topo_conf]", "sw_init_weight");
-	g_sw_init_weight = (NULL == value) ? 10 : atoll(value);
+	g_sw_init_weight = (NULL == value) ? 10 : strtoull(value, NULL, 10);
 	value = get_value(g_controller_configure, "[topo_conf]", "sw_once_inc");
-	g_sw_once_inc = (NULL == value) ? 1 : atoll(value);
+	g_sw_once_inc = (NULL == value) ? 1 : strtoull(value, NULL, 10);
 
 	value = get_value(g_controller_configure, "[topo_conf]", "path_init_weight");
-	g_path_init_weight = (NULL == value) ? 10 : atoll(value);
+	g_path_init_weight = (NULL == value) ? 10 : strtoull(value, NULL, 10);
 	value = get_value(g_controller_configure, "[topo_conf]", "path_once_inc");
-	g_path_once_inc = (NULL == value) ? 1 : atoll(value);
+	g_path_once_inc = (NULL == value) ? 1 : strtoull(value, NULL, 10);
+
+	value = get_value(g_controller_configure, "[controller]", "vlan_start_tag");
+	vlan_start_tag = (NULL == value) ? FABRIC_START_TAG: strtoull(value, NULL, 10);
 
 	// alloc memory from pool
 	init_fabric_path_mem();
@@ -194,10 +201,16 @@ void of131_fabric_impl_setup(){
 	register_fabric_functions_into_event();
 
     init_fabric_stats();
-    
+
+    //syn data to hbase
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+	{	
+	    persist_fabric_all();
+	}
+
 	//printf("Fabric: v 2015/05/15 \nof131_fabric_impl_setup!\n");
 	LOG_PROC("INFO", "of131_fabric_impl_setup!");
-    
+
 	return;
 }
 
@@ -283,7 +296,13 @@ void of131_fabric_impl_add_sws(gn_switch_t** swList, UINT4 num){
 		sw = swList[i];
 		// init sw
 		if(sw->state)
+        {      
 			delete_fabric_flow(sw);
+        }
+        else
+        {
+            continue;
+        }
 
 		// initialize base flows if avaliable
 		if( 1 == check_dpid_avaliable(sw->dpid)){
@@ -309,6 +328,13 @@ void of131_fabric_impl_add_sws(gn_switch_t** swList, UINT4 num){
 		// add sw node to total list
 		insert_fabric_sw_list(&g_fabric_sw_list_total,node);
 	}
+
+    //syn data to hbase
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {   
+        persist_fabric_all();
+    }
+
 	return;
 }
 
@@ -336,6 +362,12 @@ void of131_fabric_impl_remove_sws(gn_switch_t** swList, UINT4 num){
 			insert_fabric_sw_list(&g_fabric_sw_list_old_tag,node);
 		}
 	}
+
+    //syn data to hbase
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {   
+        persist_fabric_all();
+    }
 
 	return;
 }
@@ -486,7 +518,11 @@ void init_fabric_swap_flows(){
         // initialize each switch's swap flows
         p_sentinel->next = init_fabric_swap_flows_single(sw_node->sw,sw_node->tag);
         sw_node = sw_node->next;
-        p_sentinel = p_sentinel->next;
+        if (NULL != p_sentinel->next)
+        {
+            p_sentinel = p_sentinel->next;
+        }
+        
     }
     
     // set the global path list variable
@@ -514,7 +550,7 @@ p_fabric_path_list init_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
     UINT2 next_num = 0;// next switch num
 
     // check swith object
-    if(sw != NULL){
+    if(sw != NULL && 1 == sw->state){
         // copy total switch list
         sw_list = copy_fabric_sw_list(&g_fabric_sw_list_total);
         marked_list = create_fabric_sw_list();
@@ -793,12 +829,26 @@ void init_fabric_neighbor_weight(p_fabric_sw_node node_list, UINT8 sw_weight, UI
 
 void of131_fabric_impl_add_sw_ports(p_event_sw_port sw_portList,UINT4 num){
 	update_fabric_swap_flows();
+    
+    //syn data to hbase
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {   
+        persist_fabric_all();
+    }
+    
 	return;
 }
 
 
 void of131_fabric_impl_delete_sw_ports(p_event_sw_port sw_portList,UINT4 num){
 	update_fabric_swap_flows();
+    
+    //syn data to hbase
+    if (g_controller_role == OFPCR_ROLE_MASTER)
+    {   
+        persist_fabric_all();
+    }
+    
 	return;
 }
 
@@ -823,7 +873,10 @@ void update_fabric_swap_flows(){
         p_sentinel->next = update_fabric_swap_flows_single(sw_node->sw,sw_node->tag);
         //print_list_flow_num();
         sw_node = sw_node->next;
-        p_sentinel = p_sentinel->next;
+        if (NULL != p_sentinel->next)
+        {
+            p_sentinel = p_sentinel->next;
+        }
     }
 
     // swap path
@@ -864,7 +917,7 @@ p_fabric_path_list update_fabric_swap_flows_single(gn_switch_t* sw, UINT4 tag){
     UINT2 next_num = 0;// next switch num
 
     // check swith object
-    if(sw != NULL){
+    if(sw != NULL && 1 == sw->state){
 
         // copy total switch list
         sw_list = copy_fabric_sw_list(&g_fabric_sw_list_total);
@@ -1042,7 +1095,7 @@ void init_fabric_id(){
 	UINT4 i=0;
 
 	// initialize
-	g_fabric_tag = FABRIC_START_TAG;
+	g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
 	p_sentinel = &sentinel;
 	p_sentinel->next = NULL;
 
@@ -1072,7 +1125,7 @@ void init_fabric_id_by_dpids(UINT8* dpids,UINT4 len){
 	UINT4 i=0;
 
 	// initialize
-	g_fabric_tag = FABRIC_START_TAG;
+	g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
 	p_sentinel = &sentinel;
 	p_sentinel->next = NULL;
 	p_total_sentinel = &total_sentinel;
@@ -1348,27 +1401,115 @@ void of131_test_update(){
 // get the output port of dpids
 UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid)
 {
-
+    INT1 src_str[48] = {0};
+    INT1 dst_str[48] = {0}; 
+        
 	p_fabric_path path = NULL;
 	p_fabric_path_node path_node = NULL;
 
 	path = of131_fabric_get_path(src_dpid, dst_dpid);
+    
+    dpidUint8ToStr(src_dpid, src_str);
+    dpidUint8ToStr(dst_dpid, dst_str);
+
+    if ((0 == strlen(src_str)) || (0 == strlen(dst_str))) {
+        LOG_PROC("INFO", "Fail to get path. Src dpid or Dst dpid is emtpy");
+        return 0;
+    }
+
 	if (NULL == path) {
-		LOG_PROC("INFO", "The path from %llu to %llu is not exist", src_dpid, dst_dpid);
+		LOG_PROC("INFO", "The path from %s to %s is not exist", src_str, dst_str);
 		return 0;
 	}
 
 	path_node = path->node_list;
 	if (NULL == path_node) {
-		LOG_PROC("INFO", "The path from %llu to %llu has no node", src_dpid, dst_dpid);
+		LOG_PROC("INFO", "The path from %s to %s has no node", src_str, dst_str);
 		return 0;
 	}
 
 	if (NULL == path_node->port) {
-		LOG_PROC("INFO", "The path from %llu to %llu has no port", src_dpid, dst_dpid);
+		LOG_PROC("INFO", "The path from %s to %s has no port", src_str, dst_str);
 		return 0;
 	}
 
 	// LOG_PROC("INFO", "The port of path from %llu to %llu is %d", src_dpid, dst_dpid, path_node->port->port_no);
 	return path_node->port->port_no;
 }
+
+
+p_fabric_sw_node get_fabric_sw_node_by_dpid(UINT8 dpid)
+{
+    p_fabric_sw_node sw_node = g_fabric_sw_list.node_list;
+    while (NULL != sw_node && NULL != sw_node->sw)
+    {
+        if (sw_node->sw->dpid == dpid)
+        {
+            return sw_node;
+        }
+
+        sw_node = sw_node->next;
+    }
+
+    return NULL;
+}
+
+
+UINT4 adjust_fabric_sw_node_list(UINT8 pre_dpid, UINT8 dpid)
+{
+    p_fabric_sw_node t_node = NULL;
+    p_fabric_sw_node sw_node = g_fabric_sw_list.node_list;
+
+    p_fabric_sw_node pre_node = NULL;
+    p_fabric_sw_node cur_node = NULL;
+    p_fabric_sw_node cur_pre_node = NULL;
+
+    while (NULL != sw_node && NULL != sw_node->sw)
+    {
+        if (sw_node->sw->dpid == dpid)
+        {
+            cur_node = sw_node;
+            cur_pre_node = t_node;
+        } 
+        else if (sw_node->sw->dpid == pre_dpid)
+        {
+            pre_node = sw_node;
+        }
+    
+        t_node = sw_node;
+        sw_node = sw_node->next;
+    }
+
+    if (NULL == cur_node)
+    {
+        return 0;
+    }
+    
+    if (0 == pre_dpid) //如果是第一个
+    {
+        if (NULL != cur_pre_node)
+        {
+            cur_pre_node->next = cur_node->next;
+            cur_node->next = g_fabric_sw_list.node_list;
+            g_fabric_sw_list.node_list = cur_node;
+        }
+
+        return 1;
+    }
+
+    if (NULL != pre_node) //如果不是第一个
+    {
+        if (cur_pre_node != pre_node)
+        {
+            cur_pre_node->next = cur_node->next;
+            cur_node->next = pre_node->next;
+            pre_node->next = cur_node;
+        }
+
+        return 1;
+    }
+
+    return 0;
+}
+
+

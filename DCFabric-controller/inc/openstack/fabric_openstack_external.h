@@ -47,6 +47,7 @@ typedef struct external_port
 	UINT1 external_outer_interface_mac[6];
 	UINT8 external_dpid; //openflow route dpid
 	UINT4 external_port; //openflow route port
+	INT4  status;
 	UINT4 ID;	// 标识符
 }external_port_t,*external_port_p;
 
@@ -57,6 +58,8 @@ typedef struct _external_floating_ip
 	UINT4 floating_ip;//outer ip
 	char port_id[48];
 	char router_id[48];
+	UINT1 check_status;
+	UINT1 flow_installed;
 }external_floating_ip, *external_floating_ip_p;
 
 //identifier host ip struct
@@ -74,12 +77,18 @@ typedef struct _openstack_external_node{
 	struct _openstack_external_node* next;
 }openstack_external_node,*openstack_external_node_p;
 
+extern openstack_external_node_p g_openstack_external_list;
+extern openstack_external_node_p g_nat_icmp_iden_list;
+
+
 void init_openstack_external();
+/*
+  * all the get_external_port_by_xx function is provided as public interface,  and the status of result is Active.
+  * all the find_external_port_by_xx function is provided as internal interface,  and the status of result is Active or inactive.
+ */
+
 //get external_port_p from mem by outer interface ip(such as 192.168.52.100)
 external_port_p get_external_port_by_out_interface_ip(UINT4 external_outer_interface_ip);
-
-//get external_port_p from mem by floating ip(such as 192.168.52.201)
-external_floating_ip_p get_external_floating_ip_by_floating_ip(UINT4 floating_ip);
 
 //TODO
 //get external_port_p from mem by floating ip
@@ -90,6 +99,9 @@ external_port_p get_external_port_by_host_mac(UINT1* host_mac);
 
 //get external_port_p from mem by load balancing
 external_port_p get_external_port();
+
+//get external_port_p from mem by floating ip(such as 192.168.52.201)
+external_floating_ip_p get_external_floating_ip_by_floating_ip(UINT4 floating_ip);
 
 //get external_floating_ip_p ip from mem by fixed ip(such as 10.0.0.20)
 external_floating_ip_p get_external_floating_ip_by_fixed_ip(UINT4 fixed_ip);
@@ -114,11 +126,31 @@ void create_external_port_by_rest(
         UINT4 external_port,
 		char* network_id);
 
+external_port_p create_external_port(
+        UINT4 external_gateway_ip,
+		UINT1* external_gateway_mac,
+        UINT4 external_outer_interface_ip,
+		UINT1* external_outer_interface_mac,
+		UINT8 external_dpid,
+		UINT4 external_port,
+		char* network_id);
+
+void update_external_config(external_port_p epp);
+
+nat_icmp_iden_p update_nat_icmp_iden(
+		UINT2 identifier,
+		UINT4 host_ip,
+		UINT1* host_mac,
+		UINT8 sw_dpid,
+		UINT4 inport);
+
+void remove_external_port_by_networkid(INT1* network_id);
+
 // update external flows
 void init_external_flows();
 
 //add external_floating_ip_p into mem from rest api
-void create_floatting_ip_by_rest(
+external_floating_ip_p create_floatting_ip_by_rest(
 		UINT4 fixed_ip,
         UINT4 floating_ip,
 		char* port_id,
@@ -138,8 +170,14 @@ void read_external_port_config();
 
 openstack_external_node_p get_floating_list();
 
-external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip);
-external_floating_ip_p find_external_floating_ip_by_fixed_ip(UINT4 fixed_ip);
 external_floating_ip_p find_external_floating_ip_by_floating_ip(UINT4 floating_ip);
+external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip);
+
+void reload_floating_ip();
+void update_openstack_external_gateway_mac(UINT4 gateway_ip, UINT1* gateway_mac, UINT4 outer_ip, UINT1* outer_mac);
+void update_openstack_external_by_outer_interface(UINT4 host_ip, UINT1* host_mac, char* network_id);
+void start_external_mac_check(UINT4 check_on, UINT4 check_internal);
+void stop_external_mac_check();
+void init_external_mac_check_mgr();
 
 #endif

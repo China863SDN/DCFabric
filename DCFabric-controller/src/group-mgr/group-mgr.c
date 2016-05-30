@@ -35,7 +35,9 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 
-static gn_group_t *find_group_by_id(gn_switch_t *sw, UINT4 group_id)
+INT4 group_weight_flag = 0;
+
+gn_group_t *find_group_by_id(gn_switch_t *sw, UINT4 group_id)
 {
     gn_group_t *p_group = sw->group_entries;
 
@@ -215,12 +217,60 @@ static void group_bucket_free(group_bucket_t *bucket)
     while(p_action)
     {
         bucket->actions = p_action->next;
-        mem_free(g_gnaction_mempool_id, (void *)p_action);
+        // mem_free(g_gnaction_mempool_id, (void *)p_action);
+        gn_free((void**)&p_action);
         p_action = bucket->actions;
     }
 
     free(bucket);
 }
+
+group_bucket_t* create_lbaas_group_bucket(UINT4 between_portno, UINT1* host_mac, UINT4 host_ip, UINT2 host_tcp_dst,
+            UINT2 host_vlan_id, UINT2 weight)
+{
+    group_bucket_t* bucket = (group_bucket_t *)gn_malloc(sizeof(group_bucket_t));
+
+    gn_action_output_t *output_action = (gn_action_output_t *)gn_malloc(sizeof(gn_action_output_t));
+    output_action->port = between_portno;
+    output_action->type = OFPAT13_OUTPUT;
+    output_action->max_len = 0xffff;
+    output_action->next = NULL;                    
+
+    gn_action_set_field_t* act_set_field = (gn_action_set_field_t*)gn_malloc(sizeof(gn_action_set_field_t));
+    memset(act_set_field, 0, sizeof(gn_action_set_field_t));
+    act_set_field->type = OFPAT13_SET_FIELD;
+    memcpy(act_set_field->oxm_fields.eth_dst, host_mac, 6);
+    act_set_field->oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
+    act_set_field->oxm_fields.ipv4_dst = htonl(host_ip);
+    act_set_field->oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
+    act_set_field->oxm_fields.tcp_dst = host_tcp_dst;
+    act_set_field->oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
+    act_set_field->oxm_fields.vlan_vid = host_vlan_id;
+    act_set_field->oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
+    act_set_field->next = (gn_action_t*)output_action;
+
+    gn_action_t* act_pushVlan = (gn_action_t*)gn_malloc(sizeof(gn_action_t));
+    memset(act_pushVlan, 0, sizeof(gn_action_t));
+    act_pushVlan->type = OFPAT13_PUSH_VLAN;
+    act_pushVlan->next =  (gn_action_t*)act_set_field;
+
+    bucket->watch_port = OFPP13_ANY;
+    bucket->watch_group = OFPG_ANY;
+
+    if (0 == group_weight_flag) {
+        bucket->weight = 1;
+    }
+    else {
+        bucket->weight = weight;
+    }
+    bucket->next = NULL;
+
+    bucket->actions = act_pushVlan;
+    return bucket;
+
+}
+
+
 
 void gn_group_free(gn_group_t *group)
 {
@@ -241,8 +291,17 @@ INT4 init_group_mgr()
 {
     INT4 ret = 0;
 
+    INT1 *value = NULL;
+    value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
+    UINT4 openstack_flag = (NULL == value) ? 0: atoi(value);
+    if (openstack_flag) {
+        value = get_value(g_controller_configure, "[openvstack_conf]", "group_weight_on");
+        group_weight_flag = (NULL == value) ? 0: atoi(value);
+    }
+
     return ret;
 }
+
 
 void fini_group_mgr()
 {
