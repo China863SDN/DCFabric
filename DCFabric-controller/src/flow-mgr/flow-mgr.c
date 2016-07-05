@@ -636,7 +636,7 @@ gn_flow_t * find_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 
     while(p_flow)
     {
-        if(match_compare_strict(&(p_flow->match), &(flow->match)))
+        if(p_flow->table_id == flow->table_id && match_compare_strict(&(p_flow->match), &(flow->match)))
         {
             return p_flow;
         }

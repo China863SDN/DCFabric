@@ -778,7 +778,7 @@ static INT4 of13_msg_packet_in(gn_switch_t *sw, UINT1 *of_msg)
     return packet_in_process(sw, &packet_in_info);
 }
 
-static void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match)
+void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match)
 {
     UINT2 oxm_tot_len = ntohs(of_match->length);
     UINT2 oxm_len = 4;
