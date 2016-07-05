@@ -41,6 +41,9 @@ UINT4 g_stats_mgr_interval = 5;
 static pthread_t g_stats_mgr_threadid = 0;
 static UINT1 g_runing_flag = 0;
 
+extern void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match);
+
+
 //static UINT4 format_timestamp(UINT4 time)
 //{
 //    return time / g_stats_mgr_interval * g_stats_mgr_interval;
@@ -284,30 +287,29 @@ void of13_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 length)
 //        }
 //    }
 
+	UINT2 offset = 0;                       //记录所有flow_stats处理偏移
+    gn_flow_t *p_flow = NULL;
+	gn_flow_t gn_flow;
 
     struct ofp13_flow_stats *flow_stats = (struct ofp13_flow_stats*)stats;
-    gn_flow_t *p_flow = NULL;
-    gn_flow_t gn_flow;
-//    UINT2 offset = 0;
-    UINT2 oxm_tot_len = ntohs(flow_stats->match.length);
-    UINT2 oxm_len = 4;
-    struct ofp_oxm_header *oxm = (struct ofp_oxm_header *)(flow_stats->match.oxm_fields);
-
-    memset(&gn_flow, 0, sizeof(gn_flow_t));
-    gn_flow.priority = ntohs(flow_stats->priority);
-    gn_flow.table_id = flow_stats->table_id;
-    while(ALIGN_8(oxm_len) < oxm_tot_len)
+    UINT1 *p_stats = stats;
+    offset = length;
+    while(offset)
     {
-        sw->msg_driver.convertter->oxm_convertter((UINT1 *)oxm, &(gn_flow.match.oxm_fields));
-        oxm += sizeof(struct ofp_oxm_header) + oxm->length;
-        oxm_len += sizeof(struct ofp_oxm_header) + oxm->length;
-    }
+        memset(&gn_flow, 0, sizeof(gn_flow_t));
+        gn_flow.priority = ntohs(flow_stats->priority);
+        gn_flow.table_id = flow_stats->table_id;
+        of13_parse_match(&(flow_stats->match), &gn_flow.match);
+        
+        p_flow = find_flow_entry(sw, &gn_flow);
+        if(p_flow)
+        {
+            update_flow_stats(&(p_flow->stats), gn_ntohll(flow_stats->byte_count), gn_ntohll(flow_stats->packet_count), ntohl(flow_stats->duration_sec));
+        }
 
-    p_flow = find_flow_entry(sw, &gn_flow);
-    if(p_flow)
-    {
-        update_flow_stats(&(p_flow->stats), gn_ntohll(flow_stats->byte_count),
-                gn_ntohll(flow_stats->packet_count), ntohl(flow_stats->duration_sec));
+        offset -= ntohs(flow_stats->length);
+        p_stats += ntohs(flow_stats->length);
+        flow_stats = (struct ofp13_flow_stats *)p_stats;
     }
 }
 
