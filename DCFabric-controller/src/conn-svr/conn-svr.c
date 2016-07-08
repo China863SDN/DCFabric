@@ -87,7 +87,7 @@ gn_switch_t *find_sw_by_dpid(UINT8 dpid)
 
     for(num=0; num < g_server.max_switch; num++)
     {
-        if (g_server.switches[num].state)
+        if ((g_server.switches) && (g_server.switches[num].state))
         {
             sw = &g_server.switches[num];
             if(sw)

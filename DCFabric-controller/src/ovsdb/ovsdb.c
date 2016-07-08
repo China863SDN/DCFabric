@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include "../conn-svr/conn-svr.h"
 #include "openstack_host.h"
+#include "../qos-mgr/qos-queue-ovsdb.h"
 
 struct sockaddr_in g_ovsdb_addr;
 INT4 g_ovsdb_sockfd;
@@ -109,6 +110,19 @@ void search_from_ovsdb_table_all(INT4 conn_fd)
     table_obj = json_new_object();
     json_insert_child(key, table_obj);
     json_insert_child(value, key);
+
+    //Controller
+    key = json_new_string("QoS");
+    table_obj = json_new_object();
+    json_insert_child(key, table_obj);
+    json_insert_child(value, key);
+
+    //Controller
+    key = json_new_string("Queue");
+    table_obj = json_new_object();
+    json_insert_child(key, table_obj);
+    json_insert_child(value, key);
+
 
     /*
      //Port
@@ -1189,6 +1203,7 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
     json_t *br_name = NULL;
     json_t *br_dpid = NULL;
     json_t *br_ctrl = NULL;
+	json_t *br_port = NULL;
 
     INT1 controller_ip[128];
 
@@ -1245,6 +1260,20 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
 
             g_ovsdb_nodes[seq].bridge[br_idx].is_using = TRUE;
 
+			br_port = json_find_first_label(br_uuid->child->child->child, "ports");
+			if (br_port) {
+				json_t* br_p = br_port->child->child->next->child;
+				
+				while (br_p) {
+					// clear all qos info
+					clear_qos_in_port_table(client_fd, br_p->child->next->text);
+					clear_qos_in_qos_table(client_fd);
+					clear_queue_in_queue_table(client_fd);
+					
+					br_p = br_p->next;
+				}
+			}
+
             br_idx++;
             br_uuid = br_uuid->next;
         }
@@ -1270,6 +1299,8 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
     json_t *method = NULL;
     json_t *params = NULL;
     json_t *br = NULL;
+	json_t *queue = NULL;
+	json_t *qos = NULL;
     json_t *root = NULL;
     json_t *br_dpid = NULL;
     json_t *br_ctrl = NULL;
@@ -1351,6 +1382,17 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
 
                             return;
                         }
+						
+						queue = json_find_first_label(params->child->child->next, "Queue");
+						if (queue) {
+							notify_recevice_queue_uuid(queue);
+						}
+
+						qos = json_find_first_label(params->child->child->next, "QoS");
+						if (qos) {
+							notify_recevice_qos_uuid(qos);
+						}
+						
                     }
                 }
             }
@@ -1364,7 +1406,7 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
         {
             echo_reply_ovsdb(client_fd);
         }
-        else if (strncmp(id->child->text, SEARCH_ALL_TABLE_ID, 1) == 0) //bridge
+        else if (strncmp(id->child->text, SEARCH_ALL_TABLE_ID, 2) == 0) //bridge
         {
             result = id->next;
             if (result)
@@ -1374,13 +1416,33 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                 handle_bridge_table(client_fd, seq, result, have_controller);
             }
         }
-		else if (strncmp(id->child->text, SEARCH_HOST_BY_MAC, 1) == 0) 
+		else if (strncmp(id->child->text, SEARCH_HOST_BY_MAC, 2) == 0) 
 		{
 			result = id->next;
 			if (result) {
 				handle_search_host_by_mac(client_ip, seq, result);
 			}
 		}
+		else if (strncmp(id->child->text, SEARCH_INTERFACE_BY_PORT_NO, 2) == 0) 
+		{
+			result = id->next;
+			if (result) {
+				notify_receive_interface_uuid(result);
+			}
+		}
+		else if (strncmp(id->child->text, SEARCH_PORT_BY_INTERFACE, 2) == 0) 
+		{
+			result = id->next;
+			if (result) {
+				notify_receive_port_uuid(result);
+			}
+		}
+
+		
+		else {
+			}
+
+		
         json_free_value(&id);
     }
 
@@ -1633,3 +1695,35 @@ INT4 init_ovsdb()
 
     return GN_OK;
 }
+
+// get conn fd by sw ip
+INT4 get_conn_fd_by_sw_ip(UINT4 sw_ip)
+{		
+	INT4 index = 0;
+	
+	for (index = 0; index < OVSDB_MAX_CONNECTION; index++) {		
+		if (g_ovsdb_clients_ip[index] == sw_ip) {
+			
+			return g_ovsdb_clients[index];
+		}
+	}
+
+	return 0;
+}
+
+// get sw ip by conn fd
+UINT4 get_sw_ip_by_conn_fd(INT4 conn_fd)
+{
+	INT4 index = 0;
+	
+	for (index = 0; index < OVSDB_MAX_CONNECTION; index++) {		
+		if (g_ovsdb_clients[index] == conn_fd) {
+			
+			return g_ovsdb_clients_ip[index];
+		}
+	}
+
+	return 0;
+}
+
+

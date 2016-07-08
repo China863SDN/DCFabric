@@ -37,6 +37,8 @@
 #include "openflow-13.h"
 #include "fabric_openstack_nat.h"
 #include "fabric_impl.h"
+#include "../qos-mgr/qos-policy.h"
+#include "../qos-mgr/qos-meter.h"
 
 extern UINT4 g_reserve_ip;
 
@@ -52,7 +54,12 @@ gn_flow_t * install_add_fabric_impl_middle_flow(gn_switch_t * sw,UINT4 port,UINT
 void install_delete_fabric_flow(gn_switch_t* sw);
 void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id);
 
+// add action in the front
 void add_action_param(action_param_t** action_param, INT4 type, void* param);
+
+// add action in the rear
+void add_action_param_rear(action_param_t** action_param, INT4 type, void* param);
+
 flow_param_t* init_flow_param();
 void clear_flow_param(flow_param_t* flow_param);
 
@@ -64,6 +71,19 @@ void install_fabric_flows(gn_switch_t * sw,
 						  UINT1 command,
 						  flow_param_t* flow_param);
 void set_security_match(gn_oxm_t* oxm, security_param_t* security_param);
+
+
+/* 
+ * set qos match
+ *
+ * @brief this function is used to set qos match condition
+ * 
+ * @param: sw			the switch
+ * @param: flow_param		the instructions and actions
+ *
+ * @return : none
+ */
+void set_qos_match(gn_switch_t* sw, flow_param_t* flow_param);
 
 
 // new ids for mem alloc
@@ -2622,14 +2642,14 @@ gn_instruction_t* set_flow_instruction(gn_instruction_t* flow_instruction, actio
 			instrucion_meter = (gn_instruction_meter_t*)gn_malloc(sizeof(gn_instruction_meter_t));
 			memset(instrucion_meter, 0, sizeof(gn_instruction_meter_t));
 			instrucion_meter->type = (UINT2)OFPIT_METER;
+			instrucion_meter->meter_id = *(UINT4*)instraction_param->param;
 			break;
 		}
 		case OFPIT_EXPERIMENTER:
 		{
 			instruction_experimenter = (gn_instruction_experimenter_t*)gn_malloc(sizeof(gn_instruction_experimenter_t));
-			memset(instrucion_meter, 0, sizeof(gn_instruction_meter_t));
+			memset(instruction_experimenter, 0, sizeof(gn_instruction_experimenter_t));
 			instrucion_meter->type = (UINT2)OFPIT_EXPERIMENTER;
-			instrucion_meter->meter_id = *(UINT4*)instraction_param->param;
 			break;
 		}
 		default:
@@ -2911,6 +2931,61 @@ void clear_flow_temp_data(gn_instruction_t* instruction)
 	}
 }
 
+// this function is used to set qos policy match
+void set_qos_match(gn_switch_t* sw, flow_param_t* flow_param)
+{
+	if ((NULL == sw) || (QOS_TYPE_OFF == sw->qos_type)) {
+		return ;
+	}
+
+	gn_oxm_t* match_oxm = NULL;
+	gn_oxm_t* set_oxm = NULL;
+	qos_policy_p policy_p = NULL;
+
+	// get match condition in match field
+	if (flow_param->match_param) {
+		match_oxm = flow_param->match_param;
+	}
+
+	if ((match_oxm) && (match_oxm->ipv4_dst)) {
+		policy_p = find_qos_policy_by_sw_dstip(sw, ntohl(match_oxm->ipv4_dst));
+	}
+
+	// get the match condition in action field
+	if (NULL == policy_p) {
+		if (flow_param->action_param) {
+			action_param_t* action = flow_param->action_param;
+			while (action) {
+				if (OFPAT13_SET_FIELD == action->type) {
+					set_oxm = (gn_oxm_t*)action->param;
+		
+				}
+				action = action->next;
+			}
+		}
+
+		if ((set_oxm) && (0 != set_oxm->ipv4_dst)) {
+			policy_p = find_qos_policy_by_sw_dstip(sw, ntohl(set_oxm->ipv4_dst));
+		}
+	}
+
+	// judge the type and set queue/meter id
+	if ((policy_p) && (policy_p->qos_service)){
+		if (QOS_TYPE_METER == sw->qos_type) {
+			qos_meter_p meter_p = policy_p->qos_service;
+			add_action_param(&flow_param->instruction_param, OFPIT_METER, (void*)&meter_p->meter_id);
+		}
+		else if (QOS_TYPE_QUEUE== sw->qos_type) {
+			gn_queue_t* queue_p = policy_p->qos_service;
+			add_action_param_rear(&flow_param->action_param, OFPAT13_SET_QUEUE, (void*)&queue_p->queue_id);
+		}
+		else {
+			// do nothing
+		}
+	}
+
+}
+
 void install_fabric_flows(gn_switch_t * sw,
 						  UINT2 idle_timeout,
 						  UINT2 hard_timeout,
@@ -2930,6 +3005,7 @@ void install_fabric_flows(gn_switch_t * sw,
 	flow.table_id = table_id;
 	flow.match.type = OFPMT_OXM;
 
+	set_qos_match(sw, flow_param);
 	set_flow_match(&flow.match.oxm_fields, flow_param->match_param);
 	// printf("flow match mask is %llu\n", flow.match.oxm_fields.mask);
 	flow.instructions = set_flow_instruction(flow.instructions, flow_param->instruction_param);
@@ -2957,6 +3033,24 @@ void add_action_param(action_param_t** action_param, INT4 type, void* param)
 	new_param->next = *action_param;
 	*action_param = new_param;
 }
+
+// add action to rear
+void add_action_param_rear(action_param_t** action_param, INT4 type, void* param)
+{
+	action_param_t* new_param = (action_param_t*)gn_malloc(sizeof(action_param_t));
+	memset(new_param, 0, sizeof(action_param_t));
+	new_param->type = type;
+	new_param->param = param;
+	new_param->next = NULL;
+
+	action_param_t* list = *action_param;
+	while (list->next) {
+		list = list->next;
+	}
+
+	list->next = new_param;
+}
+
 
 void clear_action_param(action_param_t* action_param)
 {

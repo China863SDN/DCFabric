@@ -54,6 +54,7 @@
 #include "../fabric/fabric_floating_ip.h"
 #include "openstack_lbaas_app.h"
 #include "../overload-mgr/overload-mgr.h"
+#include "../qos-mgr/qos-mgr.h"
 
 
 #define START_DATE __DATE__  // compile date.
@@ -125,6 +126,8 @@ INT4 read_configuration()
 	INT1* value = NULL;
 	value = get_value(g_controller_configure, "[controller]", "cluster_on");
     g_is_cluster_on = (NULL == value) ? 0: atoi(value);
+
+	init_qos_mgr();
 
     return GN_OK;
 }

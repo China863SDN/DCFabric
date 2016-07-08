@@ -57,6 +57,18 @@ p_fabric_path of131_fabric_get_path(UINT8 src_dpid,UINT8 dst_dpid);
 
 UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid);
 
+/*
+ * get port number between switch and ip
+ *
+ * @brief: this function is used to get port between switch and host ip
+ *
+ * @param: sw			the source switch
+ * @param: dst_ip			the host ip
+ *
+ * @return: UINT4			0: fail; other: port number
+ */
+UINT4 get_port_no_between_sw_ip(gn_switch_t* sw, UINT4 dst_ip);
+
 void of131_test_update();
 
 p_fabric_sw_node get_fabric_sw_node_by_dpid(UINT8 dpid);

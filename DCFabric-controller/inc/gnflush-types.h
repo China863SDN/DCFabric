@@ -41,6 +41,7 @@
 #endif
 
 #define MAX_PORTS 150
+#define MAX_QUEUE_ID 40960
 
 extern ini_file_t *g_controller_configure;
 extern UINT1 g_controller_mac[];
@@ -195,6 +196,7 @@ typedef struct gn_port
     UINT4 peer;
     UINT4 config;
     UINT4 state;
+	UINT4 queue_ids[MAX_QUEUE_ID];
     neighbour_t *neighbour;
     mac_user_t *user_info;
     port_stats_t stats;     //portʵʱ��������Ϣ
@@ -267,7 +269,10 @@ typedef struct gn_switch
     gn_flowmod_helper_t flowmod_helper;
     gn_flow_t *flow_entries;
     gn_meter_t *meter_entries;
-    gn_group_t *group_entries;
+	INT4 qos_type;
+	gn_qos_t* qos_entries;
+    gn_group_t* group_entries;
+	gn_queue_t* queue_entries;
     pthread_mutex_t users_mutex;
     pthread_mutex_t send_buffer_mutex;
     pthread_mutex_t flow_entry_mutex;

@@ -6737,7 +6737,11 @@ INT4 init_json_server()
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/external", fabric_debug_get_all_external_config);
         ret += register_restful_handler(HTTP_GET, "/dcf/debug/nat/icmp", fabric_debug_get_all_nat_icmp_iden);
         ret += register_restful_handler(HTTP_GET, "/dcf/debug/nat/host", fabric_debug_get_all_nat_host);
-        
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/qos/policy", fabric_debug_get_all_qos_policy);
+		ret += register_restful_handler(HTTP_POST, "/dcf/debug/qos/policy", fabric_debug_post_qos_policy);
+		ret += register_restful_handler(HTTP_DELETE, "/dcf/debug/qos/policy", fabric_debug_delete_qos_policy);
+
+		
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/security/group", fabric_debug_get_all_securitygroup);
 
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/security/host", fabric_debug_get_all_hostsecurity);

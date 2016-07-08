@@ -76,4 +76,10 @@ INT1* fabric_debug_start_exteral_check(const INT1 *url, json_t *root);
 INT1* fabric_debug_stop_exteral_check();
 
 INT1* fabric_debug_get_all_subnet();
+
+INT1* fabric_debug_get_all_qos_policy();
+
+INT1 *fabric_debug_post_qos_policy(const INT1 *url, json_t *root);
+
+INT1 *fabric_debug_delete_qos_policy(const INT1 *url, json_t *root);
 #endif
