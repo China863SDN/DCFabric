@@ -29,6 +29,7 @@
 
 #include "json_server.h"
 #include "gnflush-types.h"
+#include "mod-types.h"
 #include "gn_inet.h"
 #include "timer.h"
 #include "../conn-svr/conn-svr.h"
@@ -3249,7 +3250,238 @@ static INT1 *get_port_stats(const INT1 *url, json_t *root)
 }
 
 
+static INT1 *get_flow_stats(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    gn_switch_t *sw_flow = NULL;
+    json_t *key, *value;
+    UINT1 tmp[8];
+    INT1 temp[32] = { 0 };
+    UINT8 sw_dpid = 0;
+    UINT4 ip_change = 0;
 
+    key_value_t swDPID, ip;
+    swDPID.key = strdup("swDPID");
+    swDPID.value = NULL;
+
+    ip.key = strdup("ip");
+    ip.value = NULL;
+
+    get_url_argument(url + strlen("/gn/flow/stats/json") + 1, &swDPID);
+    if (NULL == swDPID.value)
+    {
+        return json_to_reply(NULL, EC_RESTFUL_REQUIRE_SRCDPID);
+    }
+
+    get_url_argument(url + strlen("/gn/flow/stats/json") + 1, &ip);
+    if (NULL != ip.value)
+    {
+        ip_change = inet_addr(ip.value);
+    }
+    mac_str_to_bin(swDPID.value, tmp);
+    uc8_to_ulli64(tmp, &sw_dpid);
+
+    gn_flow_t *flow = NULL;
+    sw_flow = find_sw_by_dpid(sw_dpid);
+
+    free(ip.key);
+    free(swDPID.key);
+    free(ip.value);
+    free(swDPID.value);
+
+    if (sw_flow)
+    {
+        flow = sw_flow->flow_entries;
+        //UINT4 port_no = g_adac_matrix.src_port[src_sw->index][dst_sw->in->x];
+
+        json_t *array = json_new_array();
+        while(flow)
+        {
+            json_t *obj2 = json_new_object();
+            UINT2 priority = flow->priority;
+            UINT4 ip_dst = NULL;
+            ip_dst = ntohl(flow->match.oxm_fields.ipv4_dst);
+            if( (ip_change!=0 && ip_dst==ip_change) || (ip_change==0 && priority ==16) ){
+                //nat_show_ip(ip_dst);
+
+                key = json_new_string("ip");
+                strcpy(temp, inet_ntoa(*(struct in_addr*)&ip_dst));
+                value = json_new_string(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+
+                key = json_new_string("priority");
+                sprintf(temp, "%u",priority);
+                value = json_new_number(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+
+                key = json_new_string("kbps");
+                sprintf(temp, "%d",flow->stats.kbps);
+                value = json_new_number(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+
+                key = json_new_string("kpps");
+                sprintf(temp, "%d",flow->stats.kpps);
+                value = json_new_number(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+
+                key = json_new_string("count");
+                sprintf(temp, "%llu",flow->stats.byte_count);
+                value = json_new_number(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+
+                key = json_new_string("packets");
+                sprintf(temp, "%llu",flow->stats.packet_count);
+                value = json_new_number(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+
+                key = json_new_string("duration");
+                sprintf(temp, "%d",flow->stats.duration_sec);
+                value = json_new_number(temp);
+                json_insert_child(key, value);
+                json_insert_child(obj2, key);
+                json_insert_child(array,obj2);
+
+            }
+            flow = flow->next;
+        }
+        key = json_new_string("flowstats");
+        json_insert_child(key, array);
+        json_insert_child(obj, key);
+    }else{
+        LOG_PROC("ERROR","sw_flow NULL");
+       // LOG_PROC("ERROR",sw.key);
+    }
+    return json_to_reply(obj, GN_OK);
+}
+
+static INT1 *get_all_flow_stats(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    gn_switch_t *sw_flow = NULL;
+    json_t *key, *value;
+    INT1 temp[32] = { 0 };
+    INT4 num;
+    json_t *array = json_new_array();
+    gn_flow_t *flow = NULL;
+    for(num=0; num < g_server.max_switch; num++)
+    {
+        if (g_server.switches[num].state)
+        {
+            sw_flow = &g_server.switches[num];
+            if(sw_flow)
+            {
+                flow = sw_flow->flow_entries;
+        //UINT4 port_no = g_adac_matrix.src_port[src_sw->index][dst_sw->in->x];
+
+
+                while(flow)
+                {
+                    json_t *obj2 = json_new_object();
+                    UINT2 priority = flow->priority;
+                    UINT4 ip_dst = NULL;
+                    ip_dst = ntohl(flow->match.oxm_fields.ipv4_dst);
+                    if( priority ==16){
+                        //nat_show_ip(ip_dst);
+
+                        key = json_new_string("ip");
+                        strcpy(temp, inet_ntoa(*(struct in_addr*)&ip_dst));
+                        value = json_new_string(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+
+                        key = json_new_string("priority");
+                        sprintf(temp, "%u",priority);
+                        value = json_new_number(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+
+                        key = json_new_string("kbps");
+                        sprintf(temp, "%d",flow->stats.kbps);
+                        value = json_new_number(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+
+                        key = json_new_string("kpps");
+                        sprintf(temp, "%d",flow->stats.kpps);
+                        value = json_new_number(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+
+                        key = json_new_string("count");
+                        sprintf(temp, "%llu",flow->stats.byte_count);
+                        value = json_new_number(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+
+                        key = json_new_string("packets");
+                        sprintf(temp, "%llu",flow->stats.packet_count);
+                        value = json_new_number(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+
+                        key = json_new_string("duration");
+                        sprintf(temp, "%d",flow->stats.duration_sec);
+                        value = json_new_number(temp);
+                        json_insert_child(key, value);
+                        json_insert_child(obj2, key);
+                        json_insert_child(array,obj2);
+
+                    }
+                    flow = flow->next;
+                }
+            }
+        }
+    }
+    key = json_new_string("flowstats");
+    json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+    return json_to_reply(obj, GN_OK);
+}
+
+static INT1 *clear_floatip_stats(const INT1 *url, json_t *root)
+{
+    json_t *obj = json_new_object();
+    gn_switch_t *sw_flow = NULL;
+    gn_flow_t *flow = NULL;
+    INT4 num;
+    for(num=0; num < g_server.max_switch; num++)
+    {
+        if (g_server.switches[num].state)
+        {
+            sw_flow = &g_server.switches[num];
+            if(sw_flow)
+            {
+                flow = sw_flow->flow_entries;
+                //UINT4 port_no = g_adac_matrix.src_port[src_sw->index][dst_sw->in->x];
+                while(flow)
+                {
+                    UINT2 priority = flow->priority;
+                    UINT4 ip_dst = NULL;
+                    ip_dst = ntohl(flow->match.oxm_fields.ipv4_dst);
+                    if( priority ==16){
+                        external_floating_ip_p float_port = get_external_floating_ip_by_floating_ip(ip_dst);
+                        p_fabric_host_node fixed_port = get_fabric_host_from_list_by_ip(float_port->fixed_ip);
+                        external_port_p ext_port = find_openstack_external_by_floating_ip(ip_dst);
+                        UINT1 *mod_dst_mac = fixed_port->mac;
+                        UINT4 outport = 0;
+                        UINT4 fixed_vlan_id = of131_fabric_impl_get_tag_sw(fixed_port->sw);
+                        outport = get_out_port_between_switch(ext_port->external_dpid, fixed_port->sw->dpid);
+                        fabric_openstack_floating_ip_clear_stat(sw_flow, ip_dst, float_port->fixed_ip,  mod_dst_mac, fixed_vlan_id, outport);
+                    }
+                    flow = flow->next;
+                }
+            }
+        }
+    }
+    return json_to_reply(obj, GN_OK);
+}
 
 static INT1 *get_path_stats(const INT1 *url, json_t *root)
 {
@@ -6653,7 +6885,10 @@ INT4 init_json_server()
     ret += register_restful_handler(HTTP_GET, "/gn/path/stats/json", get_path_stats);
     ret += register_restful_handler(HTTP_GET, "/gn/path/port/json", get_port_stats);
     ret += register_restful_handler(HTTP_GET, "/gn/path/status/json", get_path_status);
-	
+    ret += register_restful_handler(HTTP_GET, "/gn/flow/stats/json", get_flow_stats);
+    ret += register_restful_handler(HTTP_GET, "/gn/flow/allstats/json", get_all_flow_stats);
+    ret += register_restful_handler(HTTP_GET, "/gn/flow/clearstat/json", clear_floatip_stats);
+
     // fabric
     ret += register_restful_handler(HTTP_GET, "/gn/fabric/switchname/json",get_switch_name);
     ret += register_restful_handler(HTTP_DELETE, "/gn/fabric/delete/json", del_fabric_entries);

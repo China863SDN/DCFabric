@@ -70,6 +70,13 @@ void install_fabric_flows(gn_switch_t * sw,
 						  UINT1 table_id,
 						  UINT1 command,
 						  flow_param_t* flow_param);
+void install_fabric_clear_stat_flows(gn_switch_t * sw,
+						  UINT2 idle_timeout,
+						  UINT2 hard_timeout,
+						  UINT2 priority,
+						  UINT1 table_id,
+						  UINT1 command,
+						  flow_param_t* flow_param);
 void set_security_match(gn_oxm_t* oxm, security_param_t* security_param);
 
 
@@ -1647,6 +1654,37 @@ void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UIN
 //	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 }
 
+void fabric_openstack_floating_ip_clear_stat(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
+
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	memcpy(oxm.eth_dst, mod_dst_mac, 6);
+	oxm.ipv4_dst = ntohl(mod_dst_ip);
+	oxm.vlan_vid = vlan_id;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(match_ip);
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	if (0 == get_nat_physical_switch_flag()) {
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	}
+	else {
+		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+	}
+
+	install_fabric_clear_stat_flows(sw, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_PRIORITY_FLOATING_FLOW,
+			flow_table_id, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+
 
 // 下发流表规则
 void install_fabric_nat_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
@@ -3017,6 +3055,43 @@ void install_fabric_flows(gn_switch_t * sw,
 	flow_mod_req.out_group = 0xffffffff;
 	flow_mod_req.command = command;
 	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
+	flow_mod_req.flow = &flow;
+
+    // add_flow_entry(sw,&flow);
+	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
+	clear_flow_temp_data(flow.instructions);
+}
+
+void install_fabric_clear_stat_flows(gn_switch_t * sw,
+						  UINT2 idle_timeout,
+						  UINT2 hard_timeout,
+						  UINT2 priority,
+						  UINT1 table_id,
+						  UINT1 command,
+						  flow_param_t* flow_param)
+{
+	// printf("%s\n", FN);
+	flow_mod_req_info_t flow_mod_req;
+    gn_flow_t flow;
+    memset(&flow, 0, sizeof(gn_flow_t));
+	flow.create_time = g_cur_sys_time.tv_sec;
+	flow.idle_timeout = idle_timeout;
+	flow.hard_timeout = hard_timeout;
+	flow.priority = priority;
+	flow.table_id = table_id;
+	flow.match.type = OFPMT_OXM;
+
+	set_flow_match(&flow.match.oxm_fields, flow_param->match_param);
+	// printf("flow match mask is %llu\n", flow.match.oxm_fields.mask);
+	flow.instructions = set_flow_instruction(flow.instructions, flow_param->instruction_param);
+	set_flow_action(flow.instructions, flow_param->action_param, OFPIT_APPLY_ACTIONS);
+	set_flow_action(flow.instructions, flow_param->write_action_param, OFPIT_WRITE_ACTIONS);
+
+	flow_mod_req.buffer_id = 0xffffffff;
+	flow_mod_req.out_port = 0xffffffff;
+	flow_mod_req.out_group = 0xffffffff;
+	flow_mod_req.command = command;
+	flow_mod_req.flags = OFPFF13_RESET_COUNTS;
 	flow_mod_req.flow = &flow;
 
     // add_flow_entry(sw,&flow);

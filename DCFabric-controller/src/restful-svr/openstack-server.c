@@ -69,7 +69,7 @@ void getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 {
 	int sockfd, ret, i, h;
     struct sockaddr_in servaddr;
-	char str1[4096], str2[4096], buf1[4096], buf2[4096], str[128];
+	char str1[4096], str2[4096], buf1[4096], buf2[819200], str[128];
 	socklen_t len;
 	fd_set   t_set1;
 	struct timeval  tv;
@@ -123,7 +123,7 @@ void getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 	    exit(0);
 	}
 
-    memset(buf2, 0, 4096);
+    memset(buf2, 0, 819200);
 	while(1)
     {
 		// usleep(1000000);

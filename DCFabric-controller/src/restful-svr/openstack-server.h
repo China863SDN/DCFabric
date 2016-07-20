@@ -36,6 +36,7 @@
 
  
 void getNewTokenId(char *ip,char *tenantName,char *username,char *password);
+void getNewTokenId2(char *ip,char *tenantName,char *username,char *password);
 void getOpenstackInfo(char *ip,char *url,int port,char *string);
 void initOpenstackFabric();
 void updateOpenstackFloating();
