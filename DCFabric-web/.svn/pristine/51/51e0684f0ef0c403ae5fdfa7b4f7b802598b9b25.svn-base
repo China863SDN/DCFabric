@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>SDN登录</title>
+    <link href="css/application.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <meta charset="utf-8">
+    <script src="js/jquery/jquery.1.9.0.min.js"> </script>
+    <script src="js/cookie.js"></script>
+    <script>
+        var user = getCookie("user");
+        if (user) {
+            addCookie("user", user);
+            window.location = "cluster_config/cluster_config.html";
+        }
+    </script>
+</head>
+<body class='background-dark'>
+<div class="single-widget-container">
+    <section class="widget login-widget">
+        <header class="text-align-center">
+            <h3>用户登录</h3>
+        </header>
+        <div class="body">
+            <form class="no-margin"
+                  action="index.html" method="get">
+                <fieldset>
+                    <div class="control-group no-margin">
+                        <div class="control">
+                            <div class="input-prepend input-padding-increased">
+                                <span class="add-on">
+                                    <i class="eicon-user icon-large"></i>
+                                </span>
+                                <input id="username" type="text" placeholder="Your Username">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <div class="control">
+                            <div class="input-prepend input-padding-increased">
+                                <span class="add-on">
+                                    <i class="icon-lock icon-large"></i>
+                                </span>
+                                <input id="password" type="password" placeholder="Your Password">
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
+                <div class="form-actions">
+                    <a href="javascript:login()" class="btn btn-block btn-large btn-danger">
+                        <span class="small-circle"><i class="icon-caret-right"></i></span>
+                        <small>登录</small>
+                    </a>
+                    <p></p>
+                    <!-- <div class="forgot"><a class="forgot" href="#">Forgot Username or Password?</a></div> -->
+                </div>
+            </form>
+        </div>
+        <!-- <footer>
+            <div class="facebook-login">
+                <a href="index.html"><span><i class="icon-facebook-sign icon-large"></i> LogIn with Facebook</span></a>
+            </div>
+        </footer> -->
+    </section>
+</div>
+<script type="text/javascript">
+    function login(){
+        var username = $("#username").val();
+        var password = $("#password").val();
+        if(username=="admin"&&password=="1234"){
+            addCookie("user", username);
+            window.location = "cluster_config/cluster_config.html";
+        }else if(username==""||password==""){
+            alert("用户名、密码不能为空！")
+        }else{
+            alert("用户名、密码不匹配！")
+        }
+    }
+    $(function(){
+        $("input").on('keypress',function(event){
+            if (event.which == 13) {
+                login();
+            }
+        });
+    });
+</script>
+</body>
+</html>
