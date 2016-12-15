@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>系统状态</title>
+        <link href="../css/application.min.css" rel="stylesheet">
+        <link rel="shortcut icon" href="img/favicon.png">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="">
+        <meta name="author" content="">
+        <meta charset="utf-8">
+        <script src="../js/cookie.js"></script>
+        <script>
+            var user = getCookie("user");
+            if (user) {
+                addCookie("user", user);
+            } else {
+                window.location = "../login.html";
+            }
+        </script>
+    </head>
+    <body class="background-dark">
+        <div class="logo">
+            <h2 class="page-title">
+                  <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
+        DCFabric <small>配置管理</small></h2>
+        </div>
+        <nav id="sidebar" class="sidebar nav-collapse collapse">
+            <ul id="side-nav" class="side-nav">
+                <li class='accordion-group'>
+                    <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+                </li>
+                <li class='accordion-group'>
+                    <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+                </li>
+                <li class='accordion-group'>
+                    <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+                </li>
+                <li class='accordion-group active'>
+                    <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+                </li>
+                <li class="accordion-group">
+                    <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+                </li>
+                <li class='accordion-group'>
+                    <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+                </li>
+                <li class='accordion-group'>
+                    <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+                </li>
+                <li class='accordion-group'>
+                    <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+                </li>
+                <li class='accordion-group'>
+                    <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
+                </li>
+        </nav>
+        <div class="wrap">
+            <header class="page-header">
+                <div class="navbar">
+                    <div class="navbar-inner">
+                        <ul class="nav pull-right">
+                            <li class="hidden-phone" id="user_login"><span></span><a href="javascript:void(0);" onclick="logout();"><i class="icon-signout"></i></a></li>
+                        </ul>
+                    </div>
+                </div>
+            </header>
+            <div class="content container-fluid">
+                <div class="row-fluid">
+                    <div class="span12">
+                        <h4 class="page-title">流表配置 <small></small></h4>
+                    </div>
+                </div>
+                <div class="row-fluid">
+                    <div class="span12">
+                        <section class="widget">
+                            <header style="padding-bottom: 20px;">
+                                <h4 style="display: block;float: left;">
+                                    <i class="icon-file-alt"></i>
+                                    编辑流表配置
+                                </h4>
+                            </header> 
+                            <div id="myModal2" class="" style="width: 100%;">
+                                <form id="user-form" class="form-horizontal" novalidate="novalidate" method="post" data-validate="parsley">
+                                    <fieldset class="getflow_val" level="l1">
+                                        <div class="span6">
+                                            <div class="control-group hidden">
+                                                <label class="control-label" for="controller">控制器</label>
+                                                <div class="controls">
+                                                    <input type="text" id="controller" name="controller" class="span12" disabled="disabled" placeholder="控制器"/>
+                                                </div>
+                                            </div>
+                                            <div class="control-group">
+                                                <label class="control-label" for="dpid">DPID</label>
+                                                <div class="controls">
+                                                    <input type="text" id="dpid" level="l1" name="DPID" class="span12" disabled="disabled" placeholder="DPID"/>
+                                                </div>
+                                            </div>
+                                            <div class="control-group ">
+                                                <label class="control-label" for="uuid">uuid</label>
+                                                <div class="controls">
+                                                    <input type="text" id="uuid" level="l1" name="uuid" class="span12" disabled="disabled" placeholder="表号[Default: 0]">
+                                                </div>
+                                            </div>
+                                            <div class="control-group ">
+                                                <label class="control-label" for="creater">creater</label>
+                                                <div class="controls">
+                                                    <input type="text" id="creater" name="creater" class="span12" disabled="disabled" placeholder="表号[Default: 0]">
+                                                </div>
+                                            </div>
+                                            <div class="control-group ">
+                                                <label class="control-label" for="createTime">createTime</label>
+                                                <div class="controls">
+                                                    <input type="text" id="createTime" name="createTime" class="span12" disabled="disabled" placeholder="控制器"/>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="span6">
+                                            <div class="control-group">
+                                                <label class="control-label" for="tableId">tableId</label>
+                                                <div class="controls">
+                                                    <input type="text" id="tableId" name="tableId" class="span12" disabled="disabled" placeholder="tableId"/>
+                                                </div>
+                                            </div>
+                                            <div class="control-group ">
+                                                <label class="control-label" for="idleTimeout">idleTimeout</label>
+                                                <div class="controls">
+                                                    <input type="text" id="idleTimeout" name="idleTimeout" class="span12" disabled="disabled" placeholder="表号[Default: 0]">
+                                                </div>
+                                            </div>
+                                            <div class="control-group ">
+                                                <label class="control-label" for="hardTimeout">hardTimeout</label>
+                                                <div class="controls">
+                                                    <input type="text" id="hardTimeout" name="hardTimeout" class="span12" disabled="disabled" placeholder="表号[Default: 0]">
+                                                </div>
+                                            </div>
+                                            <div class="control-group ">
+                                                <label class="control-label" for="priority">priority</label>
+                                                <div class="controls">
+                                                    <input type="text" id="priority" name="priority" class="span12" disabled="disabled" placeholder="表号[Default: 0]">
+                                                </div>
+                                            </div>
+                                        </div>  
+                                         <!--manth-->
+                                         <div id="match" class="control-group child span12" style="margin-left: 0;">
+                                            <div class="accordion-group ">
+                                                <div class="accordion-heading">
+                                                    <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseOne">match
+                                                    </a>
+                                                </div>
+                                                <div id="collapseOne" class="accordion-body  collapse">
+                                                    <div class="accordion-inner">
+                                                        <div class="span4">
+                                                            <div class="control-group ">
+                                                                <label class="control-label" for="inport">inport</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="inport" disabled="disabled" name="inport" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group">
+                                                                <label class="control-label" for="ethDst">ethDst</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="ethDst" disabled="disabled" name="ethDst" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group">
+                                                                <label class="control-label" for="ethSrc">ethSrc</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="ethSrc" disabled="disabled" name="ethSrc" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia4">
+                                                                <label class="control-label" for="ethType">ethType</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="ethType" disabled="disabled" name="ethType" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia5">
+                                                                <label class="control-label" for="vlanId">VLAN ID</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="vlanId" disabled="disabled" name="vlanId" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia6">
+                                                                <label class="control-label" for="vlanPcp">vlanPcp</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="vlanPcp" disabled="disabled" name="vlanPcp" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia7">
+                                                                <label class="control-label" for="ipDscp">DSCP</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="ipDscp" disabled="disabled" name="ipDscp" class="span12">
+                                                                </div>
+                                                           </div>
+                                                        </div>
+                                                        <div class="span4">
+                                                            <div class="control-group lia8">
+                                                                <label class="control-label" for="ipEcn">ECN</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="ipEcn" disabled="disabled" name="ipEcn" class="span12" level="l11">
+                                                                </div>
+                                                            </div>  
+                                                            <div class="control-group lia9">
+                                                                <label class="control-label" for="ipProto">ipProto</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="ipProto" disabled="disabled" name="ipProto" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia10">
+                                                                <label class="control-label" for="ipv4Src">ipv4Src</label>
+                                                                <div class="controls">
+                                                                    <input type="text" id="ipv4Src" disabled="disabled" name="ipv4Src" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia11">
+                                                                <label class="control-label" for="ipv4Dst">ipv4Dst</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="ipv4Dst" disabled="disabled" name="ipv4Dst" class="span12">
+                                                                </div>
+                                                            </div> 
+                                                            <div class="control-group">
+                                                                <label class="control-label" for="tcpSrc">tcpSrc</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="tcpSrc" disabled="disabled" name="tcpSrc" class="span12">
+                                                                </div>
+                                                            </div> 
+                                                            <div class="control-group lia13">
+                                                                <label class="control-label" for="tcpDst">tcpDst</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="tcpDst" disabled="disabled" name="tcpDst" class="span12">
+                                                                </div>
+                                                            </div> 
+                                                            <div class="control-group lia14">
+                                                                <label class="control-label" for="udpSrc">udpSrc</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="udpSrc" disabled="disabled" name="udpSrc" class="span12">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <div class="span4">
+                                                            <div class="control-group lia15">
+                                                                <label class="control-label" for="udpDst">udpDst</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="udpDst" disabled="disabled" name="udpDst" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia16">
+                                                                <label class="control-label" for="arpOp">arpOp</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="arpOp" disabled="disabled" name="arpOp" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia17">
+                                                                <label class="control-label" for="arpSpa">arpSpa</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="arpSpa" disabled="disabled" name="arpSpa" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia18">
+                                                                <label class="control-label" for="arpTpa">arpTpa</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="arpTpa" disabled="disabled" name="arpTpa" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia19">
+                                                                <label class="control-label" for="arpSha">arpSha</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="arpSha" disabled="disabled" name="arpSha" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia20">
+                                                                <label class="control-label" for="arpTha">arpTha</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="arpTha" disabled="disabled" name="arpTha" class="span12">
+                                                                </div>
+                                                            </div>
+                                                            <div class="control-group lia21">
+                                                                <label class="control-label" for="mplsLabel">mplsLabel</label>
+                                                                <div class="controls ">
+                                                                    <input type="text" id="mplsLabel" disabled="disabled" name="mplsLabel" class="span12">
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <!--instruction-->
+                                        <div id="instruction" class="control-group child span12" level="l1" style="margin-left: 0;">
+                                            <div class="accordion-group">
+                                                <div class="accordion-heading">
+                                                    <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseactions">
+                                                        instruction
+                                                    </a>
+                                                </div>
+                                                <div id="collapseactions" class="accordion-body  collapse" >
+                                                    <div class="accordion-inner">
+                                                        <!--applyAction-->
+                                                        <div id="applyAction" class="accordion-group child" level="l11">
+                                                            <div class="accordion-heading">
+                                                                <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapseapplyAction">
+                                                                    applyAction
+                                                                </a>
+                                                            </div>
+                                                            <div id="collapseapplyAction" class="accordion-body collapse ">
+                                                                <div class="accordion-inner " >
+                                                                    <div class="span6">
+                                                                        <div class="control-group " >
+                                                                            <label class="control-label" for="output" >output</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="output" name="output" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group ">
+                                                                            <label class="control-label" for="pushVlan">pushVlan</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="pushVlan" name="pushVlan" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group ">
+                                                                            <label class="control-label" for="popVlan">popVlan</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="popVlan" name="popVlan" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="span6">
+                                                                        <div class="control-group ">
+                                                                            <label class="control-label" for="pushMpls">pushMpls</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="pushMpls" name="pushMpls" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="popMpls">popMpls</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="popMpls" name="popMpls" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="group">group</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="group" name="group" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <!--setField-->
+                                                                    <div id="setField" class="accordion-group span12 child" level="l111" style="margin-left: 0;">
+                                                                        <div class="accordion-heading">
+                                                                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapsetgroup">
+                                                                                setField
+                                                                            </a>
+                                                                        </div>
+                                                                        <div id="collapsetgroup" class="accordion-body collapse" >
+                                                                            <div class="accordion-inner">
+                                                                                <div class="span4">
+                                                                                    <div class="control-group ">
+                                                                                        <label class="control-label" for="inport">inport</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="inport" name="inport" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group ">
+                                                                                        <label class="control-label" for="ethDst">ethDst</label>
+                                                                                        <div class="controls">
+                                                                                            <input type="text" level="l1111" id="ethDst" name="ethDst" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ethSrc">ethSrc</label>
+                                                                                        <div class="controls">
+                                                                                            <input type="text"level="l1111" id="ethSrc" name="ethSrc" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ethType">ethType</label>
+                                                                                        <div class="controls">
+                                                                                            <input type="text" level="l1111" id="ethType" name="ethType" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="vlanId">vlanId</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"level="l1111" id="vlanId" name="vlanId" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="vlanPcp">vlanPcp</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="vlanPcp" name="vlanPcp" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipDscp">ipDscp</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="ipDscp" name="ipDscp" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                </div>
+                                                                                <div class="span4">
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipEcn">ipEcn</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="ipEcn" name="ipEcn" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipProto">ipProto</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="ipProto" name="ipProto" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipv4Src">ipv4Src</label>
+                                                                                        <div class="controls">
+                                                                                            <input type="text" level="l1111" id="ipv4Src" name="ipv4Src" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipv4Dst">ipv4Dst</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="ipv4Dst" name="ipv4Dst" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="tcpSrc">tcpSrc</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="tcpSrc" name="tcpSrc" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="tcpDst">tcpDst</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="tcpDst" name="tcpDst" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="udpSrc">udpSrc</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="udpSrc" name="udpSrc" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="span4">
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="udpDst">udpDst</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="udpDst" name="udpDst" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpOp">arpOp</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpOp" name="arpOp" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpSpa">arpSpa</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpSpa" name="arpSpa" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpTpa">arpTpa</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpTpa" name="arpTpa" class="span12">
+                                                                                        </div>
+                                                                                    </div>  
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpSha">arpSha</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpSha" name="arpSha" class="span12">
+                                                                                        </div>
+                                                                                    </div>  
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpTha">arpTha</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpTha" name="arpTha" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="mplsLabel">mplsLabel</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="mplsLabel" name="mplsLabel" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <!--writeAction-->
+                                                        <div id="writeAction" class="accordion-group child" level="l11">
+                                                            <div class="accordion-heading">
+                                                                <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapsewriteAction">
+                                                                    writeAction
+                                                                </a>
+                                                            </div>
+                                                            <div id="collapsewriteAction" class="accordion-body collapse">
+                                                                <div class="accordion-inner">
+                                                                    <div class="span6">
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="output">output</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="output" name="output" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group ">
+                                                                            <label class="control-label" for="pushVlan">pushVlan</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="pushVlan" name="pushVlan" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="popVlan">popVlan</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="popVlan" name="popVlan" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="span6">
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="pushMpls">加MPLS标签</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="pushMpls" name="pushMpls" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="popMpls">popMpls</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="popMpls" name="popMpls" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="control-group">
+                                                                            <label class="control-label" for="group">group</label>
+                                                                            <div class="controls ">
+                                                                                <input type="text" level="l111" id="group" name="group" class="span12">
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <!--setField-->
+                                                                    <div id="setField" class="accordion-group span12 child"  level="l111" style="margin-left: 0;">
+                                                                        <div class="accordion-heading">
+                                                                            <a class="accordion-toggle" data-toggle="collapse" data-parent="#accordion2" href="#collapesetField">
+                                                                                setField
+                                                                            </a>
+                                                                        </div>
+                                                                        <div id="collapesetField" class="accordion-body in collapse" style="height: auto;">
+                                                                            <div class="accordion-inner">
+                                                                                <div class="span4">
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="inport">inport</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="inport" name="inport" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label"  for="ethDst">ethDst</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ethDst" name="ethDst" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ethSrc">ethSrc</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ethSrc" name="ethSrc" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="vlanId">vlanId</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="vlanId" name="vlanId" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="vlanPcp">vlanPcp</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="vlanPcp" name="vlanPcp" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipDscp">ipDscp</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ipDscp" name="ipDscp" class="span12">
+                                                                                        </div>
+                                                                                    </div>  
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipEcn">ipEcn</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ipEcn" name="ipEcn" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="span4">  
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipProto">ipProto</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ipProto" name="ipProto" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipv4Src">ipv4Src</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ipv4Src" name="ipv4Src" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="ipv4Dst">ipv4Dst</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="ipv4Dst" name="ipv4Dst" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="tcpSrc">tcpSrc</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="tcpSrc" name="tcpSrc" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="tcpDst">tcpDst</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="tcpDst" name="tcpDst" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="udpSrc">udpSrc</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="udpSrc" name="udpSrc" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="udpDst">udpSrc</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text"  level="l1111" id="udpDst" name="udpDst" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                                <div class="span4">
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpOp">arpOp</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpOp" name="arpOp" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpSpa">arpSpa</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpSpa" name="arpSpa" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpTpa">arpTpa</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpTpa" name="arpTpa" class="span12">
+                                                                                        </div>
+                                                                                    </div>  
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpSha">arpSha</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpSha" name="arpSha" class="span12">
+                                                                                        </div>
+                                                                                    </div>  
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="arpTha">arpTha</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="arpTha" name="arpTha" class="span12">
+                                                                                        </div>
+                                                                                    </div> 
+                                                                                    <div class="control-group">
+                                                                                        <label class="control-label" for="mplsLabel">mplsLabel</label>
+                                                                                        <div class="controls ">
+                                                                                            <input type="text" level="l1111" id="mplsLabel" name="mplsLabel" class="span12">
+                                                                                        </div>
+                                                                                    </div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <!--clearAction-->
+                                                        <div class="control-group "  style="margin-top: 10px;">
+                                                            <label class="control-label" for="clearAction">clearAction</label>
+                                                            <div class="controls ">
+                                                                <input type="text" id="clearAction" level="l11" name="clearAction" class="span6" placeholder="表示清空所有Action[无需赋值]">
+                                                            </div>
+                                                        </div>
+                                                        <!--gotoTable-->
+                                                        <div class="control-group " >
+                                                            <label class="control-label" for="gotoTable">gotoTable</label>
+                                                            <div class="controls ">
+                                                                <input type="text" id="gotoTable" level="l11" name="gotoTable" class="span6" placeholder="table ID">
+                                                            </div>
+                                                        </div>
+                                                        <!--meter-->
+                                                        <div class="control-group " >
+                                                            <label class="control-label" for="meter">meter</label>
+                                                            <div class="controls ">
+                                                                <input type="text" id="meter" level="l11" name="meter" class="span6" placeholder="计量表ID">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </fieldset>
+                                </form> 
+                            </div> 
+                            <div class="form-actions">
+                                <div class="pull-right">
+                                    <button class="btn btn-success" id="flow_preserve" >保存</button>
+                                    <a  class="btn" href="flow_table_config.html">返回</a>
+                                </div>
+                            </div>
+                        </section>
+                    </div>
+                </div>
+                <div id="myModal" class="modal hide fade" tabindex="-1" role="dialog">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" >×</button>
+                        <h4 id="myModalLabel">查看流表详细信息</h4>
+                    </div>
+                    <div class="modal-body">
+                        <div id="flow_details" class="row" style='margin-left:0px;'>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button class="btn" data-dismiss="modal">关闭</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- jquery and friends -->
+        <script src="../js/jquery/jquery.1.9.0.min.js"></script>
+        <script src="../js/jquery/jquery-migrate-1.1.0.min.js"></script>
+        <!-- jquery plugins -->
+        <script src="../js/jquery/jquery.maskedinput.js"></script>
+        <script src="../js/parsley.js"></script>
+        <script src="../js/jquery/jquery.uniform.js"></script>
+        <script src="../js/select2.js"></script>
+        <script src="../js/jquery/jquery.dataTables.min.js"></script>
+
+        <!-- bootstrap default plugins -->
+        <script src="../js/bootstrap/bootstrap-transition.js"></script>
+        <script src="../js/bootstrap/bootstrap-collapse.js"></script>
+        <script src="../js/bootstrap/bootstrap-alert.js"></script>
+        <script src="../js/bootstrap/bootstrap-tooltip.js"></script>
+        <script src="../js/bootstrap/bootstrap-popover.js"></script>
+        <script src="../js/bootstrap/bootstrap-button.js"></script>
+        <script src="../js/bootstrap/bootstrap-dropdown.js"></script>
+        <script src="../js/bootstrap/bootstrap-modal.js"></script>
+        <script src="../js/bootstrap/bootstrap-tab.js"></script>
+
+        <!--backbone and friends -->
+        <script src="../js/underscore-min.js"></script>
+        <script src="../js/backbone-min.js"></script>
+        <script src="../js/backbone-pageable.js"></script>
+        <script src="../js/backgrid.js"></script>
+        <script src="../js/backgrid-paginator.js"></script>
+
+        <!-- page-specific js -->
+        <script src="../js/tables-dynamic.js"></script>
+
+        <script src="../js/Base64.js"></script>
+
+        <script type="text/javascript">
+
+            function getQueryString(name) {
+                var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)", "i");
+                var r = window.location.search.substr(1).match(reg);
+                if (r != null)
+                    return unescape(r[2]);
+                return null;
+            }
+
+            function getControl(doms, callback) {
+                $.post("../control/list", {}, function (data) {
+                    if (data.status == "0" || data.status == 0) {
+                        data = data.data;
+                        var aaData = [];
+                        for (var i in data) {
+                            _.each(doms, function (obj) {
+                                obj.append("<option value='" + data[i].ip + "|" + data[i].port + "'>" + data[i].ip + ":" + data[i].port + "</option>");
+                            });
+                        }
+                    }
+                    callback();
+                }, "json");
+            }
+
+            function loop_for_value_by_id(obj, level) {
+                var tmp = {};
+                var lvl = obj.attr("level");
+                obj.find("[level='" + lvl + level + "']").each(function () {
+                    if ($(this).hasClass("child")) {
+                        tmp[$(this).attr("id")] = loop_for_value_by_id($(this), "1");
+                    } else {
+                        tmp[$(this).attr("id")] = $(this).val();
+                    }
+                });
+                return tmp;
+            }
+
+            function add() {
+                var content = {};
+                content = loop_for_value_by_id($(".getflow_val"), "");
+                
+                var ip = $("#controller").val().split("|")[0];
+                var port = $("#controller").val().split("|")[1];
+
+                $.post("../flowtable/edit", {ip: ip, port: port, content: JSON.stringify(content)}, function (data) {
+                    if (data.status == "0" || data.status == 0) {
+                        if (data.data) {
+                            alert("添加成功！")
+                            /*$("#myModal2").hide();
+                            search();*/
+                            window.location = "flow_table_config.html";
+                        } else {
+                            alert("添加失败！");
+                        }
+                    }
+                }, 'json');
+            }
+            
+            function loop_obj(obj, dom){
+                for(var o in obj){
+                    var selector = $("#"+o, dom);
+                    if(typeof(obj[o])==="object"){
+                        loop_obj(obj[o], selector);
+                    }else{
+                        selector.val(obj[o]);
+                    }
+                }
+            }
+            function registEventListener() {
+                $("#flow_preserve").click(function () {
+                    add();
+                });
+            }
+
+            $(function () {
+                registEventListener();
+                
+                var b = new Base64();
+
+                var params = getQueryString("obj");
+                params = b.decode(params);
+                params = JSON.parse(params);
+                $("#controller").val(params.cip + "|" + params.cport);
+                loop_obj(params, $("body"));
+
+            });
+        </script>
+
+    </body>
+</html>

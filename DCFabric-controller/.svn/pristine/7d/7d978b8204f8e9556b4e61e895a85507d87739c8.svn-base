@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>系统状态</title>
+    <link href="../css/application.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="img/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <meta charset="utf-8">
+    <script src="../js/cookie.js"></script>
+    <script>
+        var user = getCookie("user");
+        if (user) {
+            addCookie("user", user);
+        } else {
+            window.location = "../login.html";
+        }
+    </script>
+</head>
+<body class="background-dark">
+<div class="logo">
+
+    <h2 class="page-title">
+        <img src="../img/telecom.png" style="width: 150px;position: relative;top: -7px;">
+        SDN <small>配置管理</small>
+    </h2>
+</div>
+<nav id="sidebar" class="sidebar nav-collapse collapse">
+    <ul id="side-nav" class="side-nav">
+        <li class='accordion-group active'>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+        </li>
+        <li class="accordion-group">
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
+        </li>
+</nav>
+<div class="wrap">
+    <header class="page-header">
+        <div class="navbar">
+            <div class="navbar-inner">
+                <ul class="nav pull-right">
+                    <!--<li class="hidden-phone dropdown">
+                        <a href="#" title="Account" id="account"
+                           class="dropdown-toggle"
+                           data-toggle="dropdown">
+                            <i class="icon-user"></i>
+                        </a>
+                        <ul id="account-menu" class="dropdown-menu account" role="menu">
+                            <li role="presentation" class="account-picture">
+                                <img src="../img/2.jpg" alt="">
+                                Philip Daineka
+                            </li>
+                            <li role="presentation">
+                                <a href="form_account.html" class="link">
+                                    <i class="icon-user"></i>
+                                    Profile
+                                </a>
+                            </li>
+                            <li role="presentation">
+                                <a href="component_calendar.html" class="link">
+                                    <i class="icon-calendar"></i>
+                                    Calendar
+                                </a>
+                            </li>
+                            <li role="presentation">
+                                <a href="#" class="link">
+                                    <i class="icon-inbox"></i>
+                                    Inbox
+                                </a>
+                            </li>
+                        </ul>
+                    </li>-->
+                    <li class="hidden-phone" id="user_login"><span></span><a href="javascript:void(0);" onclick="logout();"><i class="icon-signout"></i></a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+    <div class="content container-fluid">
+        <div class="row-fluid">
+            <div class="span12">
+                <h4 class="page-title">集群配置 <small>控制器配置</small></h4>
+            </div>
+        </div>
+        <div class="row-fluid">
+            <div class="span12">
+                <section class="widget">
+                    <header style="padding-bottom: 20px;">
+                        <h4 style="display: block;float: left;">
+                            <i class="icon-file-alt"></i>
+                            控制器列表
+                        </h4>
+                        <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" data-toggle="modal" data-target="#myModal2">添加控制器</button></div>
+                        <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" >×</button>
+                                <h4 id="myModalLabel2">添加控制器</h4>
+                            </div>
+                            <div class="modal-body">
+                                <form id="user-form" class="form-horizontal label-right">
+                                    <div class="control-group">
+                                        <label class="control-label" for="ip">IP地址</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="ip" name="ip" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="port">端口</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="port" name="port" class="span6">
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn" data-dismiss="modal">关闭</button>
+                                <button class="btn btn-primary" onclick='add()'>提交</button>
+                            </div>
+                        </div>
+                    </header>
+                    <div class="body">
+                        <table id="datatable-table" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>IP</th>
+                                    <th>端口</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- jquery and friends -->
+<script src="../js/jquery/jquery.1.9.0.min.js"> </script>
+<script src="../js/jquery/jquery-migrate-1.1.0.min.js"> </script>
+<!-- jquery plugins -->
+<script src="../js/jquery/jquery.maskedinput.js"></script>
+<script src="../js/parsley.js"> </script>
+<script src="../js/jquery/jquery.uniform.js"></script>
+<script src="../js/select2.js"></script>
+<script src="../js/jquery/jquery.dataTables.min.js"></script>
+
+<!-- bootstrap default plugins -->
+<script src="../js/bootstrap/bootstrap-transition.js"></script>
+<script src="../js/bootstrap/bootstrap-collapse.js"></script>
+<script src="../js/bootstrap/bootstrap-alert.js"></script>
+<script src="../js/bootstrap/bootstrap-tooltip.js"></script>
+<script src="../js/bootstrap/bootstrap-popover.js"></script>
+<script src="../js/bootstrap/bootstrap-button.js"></script>
+<script src="../js/bootstrap/bootstrap-dropdown.js"></script>
+<script src="../js/bootstrap/bootstrap-modal.js"></script>
+<script src="../js/bootstrap/bootstrap-tab.js"> </script>
+
+<!--backbone and friends -->
+<script src="../js/underscore-min.js"></script>
+<script src="../js/backbone-min.js"></script>
+<script src="../js/backbone-pageable.js"></script>
+<script src="../js/backgrid.js"></script>
+<script src="../js/backgrid-paginator.js"></script>
+
+<!-- page-specific js -->
+<script src="../js/tables-dynamic.js"></script>
+</body>
+<script type="text/javascript">
+    function search(){
+        $.post("../control/list",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                var aaData = [];
+                for(var i in data){
+                    var oper = "<button type='button' class='btn btn-danger btn-small' onclick='del(" + JSON.stringify(data[i]) + ")''>删除</button>"+
+                            "<button type='button' class='btn btn-primary btn-small' onclick='viewSwitchesInfo(" + JSON.stringify(data[i]) + ")'>查看交换机信息</button>";
+                    var obj = [
+                        data[i].ip,
+                        data[i].port,
+                        oper
+                    ];
+
+                    aaData.push(obj);
+                }
+                showTable(aaData);
+            }
+        },"json");
+    }
+    function add(){
+        var ip = $("#ip").val();
+        var port = $("#port").val();
+        $.post("../control/add",{ip:ip,port:port},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("添加成功！")
+                    $("#myModal2").hide();
+                    search();
+                }else{
+                    alert("添加失败！")
+                }
+            }
+        },'json')
+    }
+    function viewSwitchesInfo (obj) {
+        var control = obj.ip + "|" + obj.port;
+        window.location = "../interchanger_desc/interchanger_desc.html?control="+control;
+    }
+    function del(obj){
+        var flag = window.confirm("是否删除该项？");
+        if(flag==false){return;}
+        $.post("../control/del",{ip:obj.ip,port:obj.port},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("删除成功！")
+                    search();
+                }else{
+                    alert("删除失败！")
+                }
+            }
+        },'json')
+    }
+    $(function(){
+        $("#user_login span").html(user);
+        search();
+    })
+</script>
+</html>

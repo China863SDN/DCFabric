@@ -1,0 +1,896 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>系统状态</title>
+    <link href="../css/application.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="img/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <meta charset="utf-8">
+    <script src="../js/cookie.js"></script>
+    <script>
+        var user = getCookie("user");
+        if (user) {
+            addCookie("user", user);
+        } else {
+            window.location = "../login.html";
+        }
+    </script>
+</head>
+<body class="background-dark">
+<div class="logo">
+    <h2 class="page-title">
+          <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
+        DCFabric <small>配置管理</small></h2>
+</div>
+<nav id="sidebar" class="sidebar nav-collapse collapse">
+    <ul id="side-nav" class="side-nav">
+        <li class='accordion-group'>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+        </li>
+        <li class='accordion-group active'>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+        </li>
+        <li class="accordion-group">
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
+        </li>
+         <li class='accordion-group'>
+            <a href="../open_manage/openstack_main.html"><i class="icon-desktop"></i> <span class="name">openstack</span></a>
+        </li>
+</nav>
+<div class="wrap">
+    <header class="page-header">
+        <div class="navbar">
+            <div class="navbar-inner">
+                <ul class="nav pull-right">
+                    <!--<li class="hidden-phone dropdown">
+                        <a href="#" title="Account" id="account"
+                           class="dropdown-toggle"
+                           data-toggle="dropdown">
+                            <i class="icon-user"></i>
+                        </a>
+                        <ul id="account-menu" class="dropdown-menu account" role="menu">
+                            <li role="presentation" class="account-picture">
+                                <img src="../img/2.jpg" alt="">
+                                Philip Daineka
+                            </li>
+                            <li role="presentation">
+                                <a href="form_account.html" class="link">
+                                    <i class="icon-user"></i>
+                                    Profile
+                                </a>
+                            </li>
+                            <li role="presentation">
+                                <a href="component_calendar.html" class="link">
+                                    <i class="icon-calendar"></i>
+                                    Calendar
+                                </a>
+                            </li>
+                            <li role="presentation">
+                                <a href="#" class="link">
+                                    <i class="icon-inbox"></i>
+                                    Inbox
+                                </a>
+                            </li>
+                        </ul>
+                    </li>-->
+                    <li class="hidden-phone" id="user_login"><span></span><a href="javascript:void(0);" onclick="logout();"><i class="icon-signout"></i></a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+    <div class="content container-fluid">
+        <div class="row-fluid">
+            <div class="span12">
+                <h4 class="page-title">流表配置 <small></small></h4>
+            </div>
+        </div>
+        <div class="row-fluid">
+            <div class="span12">
+                <section class="widget">
+                    <header style="padding-bottom: 20px;">
+                        <h4 style="display: block;float: left;">
+                            <i class="icon-file-alt"></i>
+                            流表配置列表
+                        </h4>
+                        <div style="display: block;float: right;">
+                            <div style="display: block;float: right;">
+                            控制器IP：
+                            <!-- <input type='text' style='width:80px;height:15px;margin-top: 10px;margin-right:20px;'> -->
+                            <select id="control" style='width:160px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'><option value="all|all">全部</option></select>
+                              <!-- 流表类型:
+                            <select id="type" style='width:120px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'>
+                                <option value="0">全部</option>
+                                <option value="1">静态流表</option>
+                                <option value="2">动态流表</option>
+                            </select> -->
+                            <button type="button" class="btn btn-success btn-small" onclick="search()">查&nbsp;询</button>
+                            <a class="btn btn-primary btn-small" href="add_flow_table.html">添加流表</a>
+                            <button type="button" class="btn btn-small" data-toggle="modal" data-target="#myModal3">清空流表</button>
+                        </div>
+                        <!-- 添加流表弹窗 -->
+                        <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" >×</button>
+                                <h4 id="myModalLabel2">添加流表</h4>
+                            </div>
+                            <div class="modal-body">
+                                <form id="user-form" class="form-horizontal label-right">
+                                    <div class="control-group">
+                                        <label class="control-label" for="controlip">controlip</label>
+                                        <div class="controls controls-row">
+                                            <select id="controlip" class="span6">
+                                                <option>请选择...</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="switchid">switchid</label>
+                                        <div class="controls controls-row">
+                                            <select id="switchid" class="span6"></select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="src-inport">src-inport</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="src-inport" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="vlan-id">vlan-id</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="vlan-id" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="src-mac">src-mac</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="src-mac" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="dst-mac">dst-mac</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="dst-mac" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="dl-type">dl-type</label>
+                                        <div class="controls controls-row">
+                                            <select id="dl-type" class="span6">
+                                                <option value="">请选择...</option>
+                                                <option>ARP</option>
+                                                <option>IPv4</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="src-ip">src-ip</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="src-ip" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="dst-ip">dst-ip</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="dst-ip" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="nw-proto">nw-proto</label>
+                                        <div class="controls controls-row">
+                                            <select id="nw-proto" class="span6">
+                                                <option value="">请选择...</option>
+                                                <option>TCP</option>
+                                                <option>UDP</option>
+                                                <option>ICMP</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_spa">arp_spa</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_spa" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_tpa">arp_tpa</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_tpa" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_sha">arp_sha</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_sha" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_tha">arp_tha</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_tha" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="mpls_lable">mpls_lable</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="mpls_lable" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="tp-src">tp-src</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="tp-src" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="tp-dst">tp-dst</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="tp-dst" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="vlan-priority">vlan-priority</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="vlan-priority" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="nw-tos">nw-tos</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="nw-tos" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="priority">priority</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="priority" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="action">action</label>
+                                        <div class="controls controls-row">
+                                            <select id="action_key" class="span6">
+                                                <option value="">请选择...</option>
+                                                <option value="output">output</option>
+                                            </select><input type="text" id="action_value" name="prefix" class="span6" style="display: none;">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="idle_timeout">idle_timeout</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="idle_timeout" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="hard_timeout">hard_timeout</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="hard_timeout" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="meter-id">meter-id</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="meter-id" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="group-id">group-id</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="group-id" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn" data-dismiss="modal">关闭</button>
+                                <button class="btn btn-primary" onclick="add()">提交</button>
+                            </div>
+                        </div>
+                        <!-- 添加流表弹窗 -->
+                        <div id="myModal1" class="modal hide fade" tabindex="-1" role="dialog">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" >×</button>
+                                <h4 id="myModalLabel2">编辑流表</h4>
+                            </div>
+                            <div class="modal-body">
+                                <form id="user-form" class="form-horizontal label-right">
+                                    <div class="control-group">
+                                        <label class="control-label" for="controlip">controlip</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="controlip" name="prefix" class="span6" disabled>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="switchid">switchid</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="switchid" name="prefix" class="span6" disabled>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="src-inport">src-inport</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="src-inport" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="vlan-id">vlan-id</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="vlan-id" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="src-mac">src-mac</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="src-mac" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="dst-mac">dst-mac</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="dst-mac" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="dl-type">dl-type</label>
+                                        <div class="controls controls-row">
+                                            <select id="dl-type" class="span6">
+                                                <option value="">请选择...</option>
+                                                <option>ARP</option>
+                                                <option>IPv4</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="src-ip">src-ip</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="src-ip" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="dst-ip">dst-ip</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="dst-ip" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="nw-proto">nw-proto</label>
+                                        <div class="controls controls-row">
+                                            <select id="nw-proto" class="span6">
+                                                <option value="">请选择...</option>
+                                                <option>TCP</option>
+                                                <option>UDP</option>
+                                                <option>ICMP</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_spa">arp_spa</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_spa" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_tpa">arp_tpa</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_tpa" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_sha">arp_sha</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_sha" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="arp_tha">arp_tha</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="arp_tha" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="mpls_lable">mpls_lable</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="mpls_lable" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="tp-src">tp-src</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="tp-src" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="tp-dst">tp-dst</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="tp-dst" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="vlan-priority">vlan-priority</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="vlan-priority" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="nw-tos">nw-tos</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="nw-tos" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="priority">priority</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="priority" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="action">action</label>
+                                        <div class="controls controls-row">
+                                            <select id="action_key" class="span6">
+                                                <option value="">请选择...</option>
+                                                <option value="output">output</option>
+                                            </select><input type="text" id="action_value" name="prefix" class="span6" style="display: none;">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="idle_timeout">idle_timeout</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="idle_timeout" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="hard_timeout">hard_timeout</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="hard_timeout" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="meter-id">meter-id</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="meter-id" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="group-id">group-id</label>
+                                        <div class="controls controls-row">
+                                            <input type="text" id="group-id" name="prefix" class="span6">
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn" data-dismiss="modal">关闭</button>
+                                <button class="btn btn-primary" onclick="edit()">提交</button>
+                            </div>
+                        </div>
+                        <!-- 清空流表弹窗 -->
+                        <div id="myModal3" class="modal hide fade" tabindex="-1" role="dialog">
+                            <div class="modal-header">
+                                <button type="button" class="close" data-dismiss="modal" >×</button>
+                                <h4 id="myModalLabel3">清空流表</h4>
+                            </div>
+                            <div class="modal-body">
+                                <form id="user-form" class="form-horizontal label-right">
+                                    <div class="control-group">
+                                        <label class="control-label" for="controlip">controlip</label>
+                                        <div class="controls controls-row">
+                                            <select id="controlip" class="span6">
+                                                <option value="">请选择...</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="control-group">
+                                        <label class="control-label" for="switchid">DPID</label>
+                                        <div class="controls controls-row">
+                                            <select id="switchid" class="span6"></select>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="modal-footer">
+                                <button class="btn" data-dismiss="modal">关闭</button>
+                                <button class="btn btn-primary" onclick="clearFlowTable()">清空</button>
+                            </div>
+                        </div>
+                    </header>
+                    <div class="body">
+                        <table id="datatable-table" class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>DPID</th>
+                                    <th>UUID</th>
+                                    <th>creater</th>
+                                    <th>createTime</th>
+                                    <th>tableId</th>
+                                    <th>idleTimeout</th>
+                                    <th>hardTimeout</th>
+                                    <th>priority</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </div>
+        <div id="myModal" class="modal hide fade" tabindex="-1" role="dialog">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" >×</button>
+                <h4 id="myModalLabel">查看流表详细信息</h4>
+            </div>
+            <div class="modal-body">
+                <div id="flow_details" class="row" style='margin-left:0px;'>
+                    
+                </div>
+                
+            </div>
+            <div class="modal-footer">
+                <button class="btn" data-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- jquery and friends -->
+<script src="../js/jquery/jquery.1.9.0.min.js"> </script>
+<script src="../js/jquery/jquery-migrate-1.1.0.min.js"> </script>
+<!-- jquery plugins -->
+<script src="../js/jquery/jquery.maskedinput.js"></script>
+<script src="../js/parsley.js"> </script>
+<script src="../js/jquery/jquery.uniform.js"></script>
+<script src="../js/select2.js"></script>
+<script src="../js/jquery/jquery.dataTables.min.js"></script>
+
+<!-- bootstrap default plugins -->
+<script src="../js/bootstrap/bootstrap-transition.js"></script>
+<script src="../js/bootstrap/bootstrap-collapse.js"></script>
+<script src="../js/bootstrap/bootstrap-alert.js"></script>
+<script src="../js/bootstrap/bootstrap-tooltip.js"></script>
+<script src="../js/bootstrap/bootstrap-popover.js"></script>
+<script src="../js/bootstrap/bootstrap-button.js"></script>
+<script src="../js/bootstrap/bootstrap-dropdown.js"></script>
+<script src="../js/bootstrap/bootstrap-modal.js"></script>
+<script src="../js/bootstrap/bootstrap-tab.js"> </script>
+
+<!--backbone and friends -->
+<script src="../js/underscore-min.js"></script>
+<script src="../js/backbone-min.js"></script>
+<script src="../js/backbone-pageable.js"></script>
+<script src="../js/backgrid.js"></script>
+<script src="../js/backgrid-paginator.js"></script>
+
+<!-- page-specific js -->
+<script src="../js/tables-dynamic.js"></script>
+
+<script src="../js/Base64.js"></script>
+
+<script type="text/javascript">
+    var b = new Base64(); 
+    
+    function getControl(doms){
+        $.post("../control/list",{},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                var aaData = [];
+                for(var i in data){                    
+                    _.each(doms, function(obj) {obj.append("<option value='"+data[i].ip+"|"+data[i].port+"'>"+data[i].ip+":"+data[i].port+"</option>");});
+                }
+            }
+        },"json");
+    }
+    function clearFlowTable() {
+        var info = $("#myModal3 #controlip").val();
+        var switchID = $("#myModal3 #switchid").val();
+        if (info && switchID && info != "" && switchID != "") {
+            var info = info.split("|"), ip = info[0], port = info[1];
+            $.post("../flowtable/cleanflow", {ip: ip, port:port, switchid:switchID}, function(resp){
+                if (resp.status == "0" || resp.status == 0) {
+                    alert("清空完成！");
+                    $("#myModal3").modal('hide');
+                    search();
+                }
+            }, "json");
+        }
+    }
+    function viewDetails(obj){
+//        var hideFields = ["cip", "cport", "flow_type"];
+//        var cont = "";
+//        for(var i in obj){
+//            if (_.contains(hideFields, i)) {
+//                continue;
+//            }
+//            cont += "<div class='span4' style='margin-left:0px;padding: 5px;width: 240px;'>"
+//            cont +=     "<p>"+i+"：<strong style='color:#555'>"+obj[i]+"</strong></p>"
+//            cont += "</div>";
+//        }
+//        $("#flow_details").html("");
+//        $("#flow_details").append(cont);
+//        $("#myModal").modal('show');
+          window.location = "edit_flow_table.html?obj="+b.encode(JSON.stringify(obj));
+    }
+    function search(){
+        var ip = $("#control").val().split("|")[0];
+        var port = $("#control").val().split("|")[1];
+//        var type = $("#type").val();
+        $.post("../flowtable/search",{ip:ip,port:port},function(data){
+            if(data.status=="0"||data.status==0){
+                data = data.data;
+                var aaData = [];
+                var oper = "-";
+                for(var i in data){
+                    var obj1 = {
+                        "dpid": "-", 
+                        "uuid": "-",
+                        "creater": "-",
+                        "createTime": "-",
+                        "idleTimeout": "-",
+                        "hardTimeout": "-",
+                        "priority":"-"
+                    }
+                    var datas = $.extend(obj1,data[i]);
+                    oper = "<button type='button' class='btn btn-success btn-small' onclick='viewDetails(" + JSON.stringify(datas) + ")'>查看</button>";
+                    //if (datas["flow_type"] == 0) {
+                        //oper += "<button type'button' class='btn btn-primary btn-small' onclick='editFlowItem("+JSON.stringify(datas) + ")'>编辑</button>";
+                        oper += "<button type'button' class='btn btn-danger btn-small' onclick='delFlowItem("+JSON.stringify(datas) + ")'>删除</button>";
+                    //}
+                    var obj = [
+                        datas["dpid"],
+                        datas["uuid"],
+                        datas["creater"],
+                        datas["createTime"],
+                        datas["tableId"],
+                        datas["idleTimeout"],
+                        datas["hardTimeout"],
+                        datas["priority"],
+                        oper
+                    ]
+                    aaData.push(obj);
+                }
+                showTable(aaData);
+                $("#datatable-table").show();
+            }
+        },"json");
+    }
+    function add(){
+        var ip = $("#myModal2 #controlip").val().split("|")[0];
+        var port = $("#myModal2 #controlip").val().split("|")[1];
+        
+        var action = "";
+        if ($("#myModal2 #action_key").val() !== "") {
+            action = $("#myModal2 #action_key").val() + "=" + $("#myModal2 #action_value").val();
+        }
+        var content = {
+//            "switchid":$("#myModal2 #switchid").val(),
+//            "src-inport":$("#myModal2 #src-inport").val(),
+//            "idle_timeout": $("#myModal2 #idle_timeout").val(),
+//            "hard_timeout": $("#myModal2 #hard_timeout").val(),
+//            "arp_spa": $("#myModal2 #arp_spa").val(),
+//            "arp_tpa": $("#myModal2 #arp_tpa").val(),
+//            "arp_sha": $("#myModal2 #arp_sha").val(),
+//            "arp_tha": $("#myModal2 #arp_tha").val(),
+//            "mpls_lable": $("#myModal2 #mpls_lable").val(),
+//            "vlan-id":$("#myModal2 #vlan-id").val(),
+//            "src-mac":$("#myModal2 #src-mac").val(),
+//            "dst-mac":$("#myModal2 #dst-mac").val(),
+//            "dl-type":$("#myModal2 #dl-type").val(),
+//            "src-ip":$("#myModal2 #src-ip").val(),
+//            "dst-ip":$("#myModal2 #dst-ip").val(),
+//            "nw-proto":$("#myModal2 #nw-proto").val(),
+//            "tp-src":$("#myModal2 #tp-src").val(),
+//            "tp-dst":$("#myModal2 #tp-dst").val(),
+//            "vlan-priority":$("#myModal2 #vlan-priority").val(),
+//            "nw-tos":$("#myModal2 #nw-tos").val(),
+//            "priority":$("#myModal2 #priority").val(),
+//            "action":action,
+//            "meter-id":$("#myModal2 #meter-id").val(),
+//            "group-id":$("#myModal2 #group-id").val()
+        };
+        
+        
+        
+        for(var i in content){
+            if(content[i]==""){
+                delete content[i];
+            }
+        }
+        $.post("../flowtable/add",{ip:ip,port:port,content:JSON.stringify(content)},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("添加成功！")
+                    $("#myModal2").hide();
+                    search();
+                }else{
+                    alert("添加失败！")
+                }
+            }
+        },'json')
+    }
+    function editFlowItem(obj) {
+        $("#myModal1 #controlip").val(obj.cip + "|" + obj.cport);
+        $("#myModal1 #switchid").val(obj.dpid);
+        $("#myModal1 #idle_timeout").val(obj["idle_timeout"] == "-" ? "" : obj["idle_timeout"]);
+        $("#myModal1 #hard_timeout").val(obj["hard_timeout"] == "-" ? "" : obj["hard_timeout"]);
+        $("#myModal1 #arp_spa").val(obj["arp_spa"] == "-" ? "" : obj["arp_spa"]);
+        $("#myModal1 #arp_tpa").val(obj["arp_tpa"] == "-" ? "" : obj["arp_tpa"]);
+        $("#myModal1 #arp_sha").val(obj["arp_sha"] == "-" ? "" : obj["arp_sha"]);
+        $("#myModal1 #arp_tha").val(obj["arp_tha"] == "-" ? "" : obj["arp_tha"]);
+        $("#myModal1 #vlan-id").val(obj["vlan-id"] == "-" ? "" : obj["vlan-id"]);
+        $("#myModal1 #src-mac").val(obj["src-mac"] == "-" ? "" : obj["src-mac"]);
+        $("#myModal1 #dst-mac").val(obj["dst-mac"] == "-" ? "" : obj["dst-mac"]);
+        $("#myModal1 #dl-type").val(obj["dl-type"] == "-" ? "" : obj["dl-type"]);
+        $("#myModal1 #src-ip").val(obj["src-ip"] == "-" ? "" : obj["src-ip"]);
+        $("#myModal1 #dst-ip").val(obj["dst-ip"] == "-" ? "" : obj["dst-ip"]);
+        $("#myModal1 #nw-proto").val(obj["nw-proto"] == "-" ? "" : obj["nw-proto"]);
+        $("#myModal1 #tp-src").val(obj["tp-src"] == "-" ? "" : obj["tp-src"]);
+        $("#myModal1 #tp-dst").val(obj["tp-dst"] == "-" ? "" : obj["tp-dst"]);
+        $("#myModal1 #vlan-priority").val(obj["vlan-priority"] == "-" ? "" : obj["vlan-priority"]);
+        $("#myModal1 #nw-tos").val(obj["nw-tos"] == "-" ? "" : obj["nw-tos"]);
+        $("#myModal1 #priority").val(obj["priority"] == "-" ? "" : obj["priority"]);
+        $("#myModal1 #meter-id").val(obj["meter-id"] == "-" ? "" : obj["meter-id"]);
+        $("#myModal1 #group-id").val(obj["group-id"] == "-" ? "" : obj["group-id"]);
+        
+        // action 
+        if (obj["action"] != "-") {
+            var paris = obj["action"].split("=");
+            $("#myModal1 #action_key").val(paris[0]);
+            $("#myModal1 #action_value").val(paris[1]);
+        } else {
+            $("#myModal1 #action_key").val("");
+            $("#myModal1 #action_value").val("");
+        }
+        $("#myModal1 #action_key").trigger("change");
+        
+        $("#myModal1").modal('show');
+        
+    }
+    function edit() {
+        var ip = $("#myModal1 #controlip").val().split("|")[0];
+        var port = $("#myModal1 #controlip").val().split("|")[1];
+        
+        var action = "";
+        if ($("#myModal1 #action_key").val() !== "") {
+            action = $("#myModal1 #action_key").val() + "=" + $("#myModal1 #action_value").val();
+        }
+        var content = {
+            "switchid":$("#myModal1 #switchid").val(),
+            "src-inport":$("#myModal1 #src-inport").val(),
+            "idle_timeout": $("#myModal1 #idle_timeout").val(),
+            "hard_timeout": $("#myModal1 #hard_timeout").val(),
+            "arp_spa": $("#myModal1 #arp_spa").val(),
+            "arp_tpa": $("#myModal1 #arp_tpa").val(),
+            "arp_sha": $("#myModal1 #arp_sha").val(),
+            "arp_tha": $("#myModal1 #arp_tha").val(),
+            "mpls_lable": $("#myModal1 #mpls_lable").val(),
+            "vlan-id":$("#myModal1 #vlan-id").val(),
+            "src-mac":$("#myModal1 #src-mac").val(),
+            "dst-mac":$("#myModal1 #dst-mac").val(),
+            "dl-type":$("#myModal1 #dl-type").val(),
+            "src-ip":$("#myModal1 #src-ip").val(),
+            "dst-ip":$("#myModal1 #dst-ip").val(),
+            "nw-proto":$("#myModal1 #nw-proto").val(),
+            "tp-src":$("#myModal1 #tp-src").val(),
+            "tp-dst":$("#myModal1 #tp-dst").val(),
+            "vlan-priority":$("#myModal1 #vlan-priority").val(),
+            "nw-tos":$("#myModal1 #nw-tos").val(),
+            "priority":$("#myModal1 #priority").val(),
+            "action":action,
+            "meter-id":$("#myModal1 #meter-id").val(),
+            "group-id":$("#myModal1 #group-id").val()
+        };
+        for(var i in content){
+            if(content[i]==""){
+                delete content[i];
+            }
+        }
+        $.post("../flowtable/edit",{ip:ip,port:port,content:JSON.stringify(content)},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("修改成功！")
+                    $("#myModal1").modal('hide');
+                    search();
+                }else{
+                    alert("修改失败！")
+                }
+            }
+        },'json')
+    }
+    function delFlowItem(obj){
+        var flag = window.confirm("是否删除该项？");
+        if(flag==false){return;}
+        var cip = obj.cip;
+        var cport = obj.cport;
+        var o = {
+            DPID: obj.dpid,
+            uuid: obj.uuid
+        };
+        
+        $.post("../flowtable/del",{ip:cip,port:cport, content:JSON.stringify(o)},function(data){
+            if(data.status=="0"||data.status==0){
+                if(data.data){
+                    alert("删除成功！")
+                    search();
+                }else{
+                    alert("删除失败！")
+                }
+            }
+        },'json')
+    }
+    $(function(){
+        $("#user_login span").html(user);
+        $("#datatable-table").hide();
+        $("#myModal3 #controlip").change(function(){
+            var info = $("#myModal3 #controlip").val();
+            if (info && info != "") {
+                var info = info.split("|"), ip = info[0], port = info[1];
+                $.post("../switchinfo", {ip:ip, port:port}, function(data){
+                    if(data.status == 0 || data.status == "0") {
+                        data = data.data;
+                        $("#myModal3 #switchid").html("");
+                        for (var i in data) {
+                            $("#myModal3 #switchid").append("<option value='" + data[i].dpid + "'>" + data[i].dpid + "</option>");
+                        }
+                    }
+                }, "json");
+            } else {
+                $("#myModal3 #switchid").html("");
+            }
+        });
+        $("#myModal2 #controlip").change(function(){
+            var ip = $("#myModal2 #controlip").val().split("|")[0];
+            var port = $("#myModal2 #controlip").val().split("|")[1];
+            $.post("../switchinfo",{ip:ip,port:port},function(data){
+                if(data.status=="0"||data.status==0){
+                    data = data.data;
+                    $("#myModal2 #switchid").html("");
+                    for(var i in data){
+                        $("#myModal2 #switchid").append("<option>"+data[i].dpid+"</option>")
+                    }
+                }
+            },"json");
+        });
+        
+        $("#myModal2 #action_key").change(function(){
+            var value = $(this).val();
+            if (value !== "") {
+                $("#myModal2 #action_value").show();
+            } else {
+                $("#myModal2 #action_value").hide();
+            }
+        });
+        
+        $("#myModal1 #action_key").change(function(){
+            var value = $(this).val();
+            if (value !== "") {
+                $("#myModal1 #action_value").show();
+            } else {
+                $("#myModal1 #action_value").hide();
+            }
+        });
+        getControl([$("#control"), $("#myModal2 #controlip"), $("#myModal3 #controlip")]);
+    })
+</script>
+</body>
+</html>
