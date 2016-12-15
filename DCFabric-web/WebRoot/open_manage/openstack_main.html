@@ -56,9 +56,6 @@
         <li class='accordion-group active'>
             <a href="../open_manage/openstack_main.html"><i class="icon-desktop"></i> <span class="name">openstack</span></a>
         </li>
-         <li class='accordion-group'>
-            <a href="../open_qos/openstack_qos.html"><i class="icon-desktop"></i> <span class="name">QoS manager</span></a>
-        </li>
 </nav>
 <div id="wrapbar" class="wrap">
     <header id="headbar" class="page-header">
@@ -539,12 +536,7 @@
 	                    if(firstobj[i].portNumber == bandPort){
 	                       checked="selected=selected";
 	                    }
-	                    var portTenNumber ;
-			            if (firstobj[i].portNumber == "fffffffe")
-			                portTenNumber = "-1";
-			            else
-			                portTenNumber = parseInt(firstobj[i].portNumber,16).toString(10);
-	                    var strr = "<option value='"+portTenNumber+"'  "+checked+">网口号："+portTenNumber+"</option>";
+	                    var strr = "<option value='"+firstobj[i].portNumber+"'  "+checked+">网口号："+firstobj[i].portNumber+"</option>";
 	                   $("#selecttwo"+str).append(strr);
 	                }
                 }
@@ -559,14 +551,9 @@
     }
     function showRoutePort(str){
        var obj =  JSON.parse($("#selectone"+str).val()) ;
-       $("#selecttwo"+str).html("");
+        $("#selecttwo"+str).html("");
        for(var i in obj){
-          var portTenNumber ;
-          if (obj[i].portNumber == "fffffffe")
-               portTenNumber = "-1";
-           else
-               portTenNumber = parseInt(obj[i].portNumber,16).toString(10);
-          var strr = "<option value='"+portTenNumber+"'>网口号："+portTenNumber+"</option>";
+          var strr = "<option value='"+obj[i].portNumber+"'>网口号："+obj[i].portNumber+"</option>";
           $("#selecttwo"+str).append(strr);
        }
     }
@@ -583,19 +570,17 @@
         },"json");
     }
     function searchExternal(){
-        var ip = $("#control").val().split("|")[0];
-        var port = $("#control").val().split("|")[1];
         $("#datatable-table7").hide();
-        $.post("../openstack/allExternal",{ip:ip,port:port},function(data){
+        $.post("../openstack/allExternal",{},function(data){
             if(data.status=="0"||data.status==0){
                 data = data.data;
                 $("#datatable-table7 tbody").html("");
                 for(var i in data){
-                   $("#datatable-table7 tbody").append("<tr><td id='tdone"+i+"' >"+data[i]["external_out_interface_ip"]+
-                   "</td><td>"+data[i]["external_out_interface_mac"]+"</td><td>"+
-                   data[i]["external_gateway_ip"]+"</td><td>"+
-                   data[i]["external_gateway_mac"]+"</td><td>"+
-                   "<button id='btone"+i+"' type='button' class='btn btn-success btn-small' onclick=showNetCommand("+i+",'"+data[i]["external_dpid"]+"','"+data[i]["external_port"]+"')>绑定交换机端口</button>"+
+                   $("#datatable-table7 tbody").append("<tr><td id='tdone"+i+"' >"+data[i]["outer_interface_ip"]+
+                   "</td><td>"+data[i]["mac"]+"</td><td>"+
+                   data[i]["gatwayip"]+"</td><td>"+
+                   data[i]["gatewaymac"]+"</td><td>"+
+                   "<button id='btone"+i+"' type='button' class='btn btn-success btn-small' onclick=showNetCommand("+i+",'"+data[i]["bandDpid"]+"','"+data[i]["bandPort"]+"')>绑定交换机端口</button>"+
                    "<div id='divone"+i+"' style='display:none'>"+
                    "<select id='selectone"+i+"' onchange='showRoutePort("+i+")'></select>"+
                    "<select id='selecttwo"+i+"'></select>"+

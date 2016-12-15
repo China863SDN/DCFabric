@@ -55,10 +55,9 @@ public class TopologyServlet extends HttpServlet {
                 JSONObject hosts = new TopologyService().getSwitchHost(ip, port);
                 printInfo(0, hosts, out);
             }else if("/exchange_host.json".equals(action)){
-            	String switchId = request.getParameter("switch_id");
-            	JSONObject hosts =  new TopologyService().getSwitchHost(ip, port,switchId);
+            	ArrayList<Map<String,Object>> maps = new TopologyService().getNodeData(ip, port);
             	response.setContentType("json;charset=UTF-8");
-            	printInfo(0, hosts, out);
+            	printInfoNew("tree",maps, out);
             } 
             
             else if("/exchange_tree.json".equals(action)){
@@ -98,18 +97,8 @@ public class TopologyServlet extends HttpServlet {
                 JSONObject hosts = new TopologyService().saveFabric(ip, port);
                 printInfo(0, hosts, out);
             } else if ("/interval_read.json".equals(action)) {
-            	response.setContentType("json;charset=UTF-8");
-            	JSONObject interal = new TopologyService().getInterval(ip, port);
+                String interal = new TopologyService().getInterval(ip, port);
                 printInfo(0, interal, out);
-            } else if ("/interval_save.json".equals(action)) {
-            	response.setContentType("json;charset=UTF-8");
-            	String interalString = request.getParameter("interval");
-                String interal = new TopologyService().saveInterval(ip, port,interalString);
-                printInfo(0, interal, out);
-            } else if ("/rate_used.json".equals(action)) {
-            	response.setContentType("json;charset=UTF-8");
-                JSONArray result = new TopologyService().getAllCountInfo(ip, port);
-                out.print(result.toString());
             } else {
                 response.setStatus(404);
             }

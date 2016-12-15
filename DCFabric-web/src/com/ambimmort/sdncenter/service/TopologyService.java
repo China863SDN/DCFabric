@@ -9,7 +9,6 @@ import com.ambimmort.sdncenter.util.StatusCode;
 
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -33,9 +32,7 @@ public class TopologyService {
 
     private static final String LINK_URL = "/gn/topo/links/json";
     private final static String HOST_URL = "/gn/topo/hosts/json";
-    private final static String OPENSTACK_HOST_URL = "/dcf/get/host/json";
     private static String STATIC_URL = "/gn/path/stats/json";
-    private static String STATUS_URL = "/gn/path/status/json";
     private final static String topo_fabric_setup = "/gn/fabric/setup/json";
     private final static String topo_fabric_delete = "/gn/fabric/delete/json";
     private final static String topo_path_optimal_path = "/gn/fabric/getpath/json";
@@ -203,26 +200,6 @@ public class TopologyService {
         return obj;
     }
 
-    public JSONArray getAllCountInfo(String ip, String port)  throws IOException, Exception {
-    	JSONObject obj = new JSONObject();
-
-        String resp = RestClient.getInstance().get("http://" + ip + ":" + port + STATUS_URL);
-        JSONObject respObj = JSONObject.fromObject(resp);
-        JSONArray hosts = respObj.getJSONArray("pathStatus");
-        JSONArray result = new JSONArray();
-        Iterator hit = hosts.iterator();
-        while(hit.hasNext()){
-        	JSONObject ob = (JSONObject)hit.next();
-            JSONObject newObj = new JSONObject();
-            newObj.put("srcNodeId", "OF|"+ob.get("srcDPID"));
-            newObj.put("dstNodeId","OF|"+ ob.get("dstDPID"));
-            newObj.put("status", ob.get("status"));
-            //newObj.put("status", 2);
-            result.add(newObj);
-        }
-        return result;
-    }
-    
     public JSONObject setFabric(String ip, String port) throws IOException {
     	JSONArray nodes = new JSONArray();
         JSONArray relation = new JSONArray();
@@ -235,14 +212,8 @@ public class TopologyService {
         RestClient.getInstance().delete("http://" + ip + ":" + port + topo_fabric_delete,"{}");
         return null;
     }
-    public JSONObject getInterval(String ip, String port) throws IOException {
-    	JSONObject rs = new JSONObject();
-    	rs.put("interval", getProterties("interval"));
-        return rs;
-    }
-    public String saveInterval(String ip, String port,String interval) throws IOException {
-    	setProterties("interval",interval);
-        return "ok";
+    public String getInterval(String ip, String port) throws IOException {
+        return "400000";
     }
     public JSONObject saveFabric(String ip, String port) throws IOException {
     	JSONArray nodes = new JSONArray();
@@ -370,37 +341,6 @@ public class TopologyService {
 
         return rs;
     }
-    
-    public JSONObject getSwitchHost(String ip, String port,String switchId) throws IOException, Exception {
-        JSONArray nodes = new JSONArray();
-        JSONArray relation = new JSONArray();
-        String switchIdWithoutOF = "";
-        if(switchId.startsWith("OF|")){
-        	switchIdWithoutOF = switchId.substring(3);
-        }else{
-        	switchIdWithoutOF = switchId;
-        }
-        String resp = RestClient.getInstance().get("http://" + ip + ":" + port + OPENSTACK_HOST_URL+"/"+switchIdWithoutOF);
-        JSONObject o = JSONObject.fromObject(resp);
-        JSONArray resp_O = o.getJSONArray("host list");
-        Iterator it = resp_O.iterator();
-        JSONArray nO = new JSONArray();
-        while (it.hasNext()) {
-        	int kk = 1;
-            JSONObject ob = (JSONObject) it.next();
-            JSONObject ho = new JSONObject();
-            ho.put("id", kk++);
-            ho.put("mac", ob.getString("Mac"));
-            ho.put("ip", ob.getString("IPv4"));
-            ho.put("name", ob.getString("IPv4"));
-            ho.put("port", ob.getString("port"));
-            nO.add(ho);
-        }
-        JSONObject rs = new JSONObject();
-        rs.put("id", switchId);
-        rs.put("nodes", nO);
-        return rs;
-    }
 
     
     private void getProterties(){
@@ -415,38 +355,5 @@ public class TopologyService {
     		}
         	propertiesString = pps.getProperty("phy-route");
     	}
-    }
-    private String getProterties(String key){
-    		Properties pps = new Properties();
-        	try {
-    			pps.load(new FileInputStream(contextPath+"phy-route.properties"));
-    		} catch (FileNotFoundException e) {
-    			e.printStackTrace();
-    		} catch (IOException e) {
-    			e.printStackTrace();
-    		}
-        	return pps.getProperty(key);
-    }
-    private void setProterties(String key,String value){
-    	Properties pps = new Properties();
-		FileOutputStream oFile=null;
-    	try {
-			pps.load(new FileInputStream(contextPath+"phy-route.properties"));
-			oFile = new FileOutputStream(contextPath+"phy-route.properties");
-			pps.setProperty(key, value);
-			pps.store(oFile, null);
-    	} catch (FileNotFoundException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}finally{
-			try{
-				if(null!=oFile){
-					oFile.close();
-				}
-			}catch(Exception e){
-				e.printStackTrace();
-			}
-		}
     }
 }

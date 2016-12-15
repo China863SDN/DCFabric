@@ -4,10 +4,12 @@
  */
 package com.ambimmort.sdncenter.servlet;
 
+import com.ambimmort.sdncenter.util.ExternalNet;
 import com.ambimmort.sdncenter.util.OpenstackManager;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.servlet.ServletException;
@@ -63,9 +65,7 @@ public class OpenstackServlet extends HttpServlet {
             	JSONArray o = OpenstackManager.getInstance().getAllPorts();
             	printInfo(0, o, out);
         	}else if("/allExternal".equals(action)){
-        		String dcfabricip = request.getParameter("ip");
-        		String port = request.getParameter("port");
-        		JSONArray o = OpenstackManager.getInstance().getAllExternal(dcfabricip,port);
+            	List<ExternalNet> o = OpenstackManager.getInstance().getAllExternal();
             	printInfo(0, o, out);
         	}else if("/updateExternal".equals(action)){
         		String dcfabricip = request.getParameter("ip");

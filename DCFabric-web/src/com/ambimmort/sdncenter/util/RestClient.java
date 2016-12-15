@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
@@ -37,7 +36,7 @@ public class RestClient {
     public String post(String uri, String content) throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
         HttpPost post = new HttpPost(uri);
-        StringEntity entity = new StringEntity(content, ContentType.create("application/json", "utf-8"));
+        StringEntity entity = new StringEntity(content, ContentType.create("text/json", "utf-8"));
         post.setEntity(entity);
         CloseableHttpResponse resp = client.execute(post);
         int code = resp.getStatusLine().getStatusCode();
@@ -57,7 +56,7 @@ public class RestClient {
     public String put(String uri, String content) throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
         HttpPut put = new HttpPut(uri);
-        StringEntity entity = new StringEntity(content, ContentType.create("application/json", "utf-8"));
+        StringEntity entity = new StringEntity(content, ContentType.create("text/json", "utf-8"));
         put.setEntity(entity);
         CloseableHttpResponse resp = client.execute(put);
         int code = resp.getStatusLine().getStatusCode();
@@ -77,7 +76,7 @@ public class RestClient {
     public String delete(String uri, String content) throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
         RestDeleteMethod post = new RestDeleteMethod(uri);
-        StringEntity entity = new StringEntity(content, ContentType.create("application/json", "utf-8"));
+        StringEntity entity = new StringEntity(content, ContentType.create("text/json", "utf-8"));
         post.setEntity(entity);
         CloseableHttpResponse resp = client.execute(post);
         int code = resp.getStatusLine().getStatusCode();
@@ -108,9 +107,8 @@ public class RestClient {
             }
             return respStr;
         }
-        throw new IOException("GET请求失败！");
+        throw new IOException("POST请求失败！");
     }
-    
     public String get(String uri,Map<String,String> header) throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
         HttpGet post = new HttpGet(uri);
@@ -135,10 +133,9 @@ public class RestClient {
             }
             return respStr;
         }
-        throw new IOException("GET请求失败！");
+        throw new IOException("POST请求失败！");
     }
-    
-    public String post(String uri, String content, Map<String,String> header) throws IOException {
+    public String post(String uri, String content,Map<String,String> header) throws IOException {
         CloseableHttpClient client = HttpClients.createDefault();
         HttpPost post = new HttpPost(uri);
         if(null!=header){
@@ -146,7 +143,7 @@ public class RestClient {
         		post.addHeader(s, header.get(s));
         	}
         }
-        StringEntity entity = new StringEntity(content, ContentType.create("application/json", "utf-8"));
+        StringEntity entity = new StringEntity(content, ContentType.create("text/json", "utf-8"));
         post.setEntity(entity);
         CloseableHttpResponse resp = client.execute(post);
         if(null!=header){
@@ -169,49 +166,4 @@ public class RestClient {
     }
     
     
-    public CloseableHttpResponse post2(String uri, String content, Map<String,String> header) throws IOException {
-        CloseableHttpClient client = HttpClients.createDefault();
-        HttpPost post = new HttpPost(uri);
-        if(null!=header){
-        	for(String s : header.keySet()){
-        		post.addHeader(s, header.get(s));
-        	}
-        }
-        StringEntity entity = new StringEntity(content, ContentType.create("application/json", "utf-8"));
-        post.setEntity(entity);
-        CloseableHttpResponse resp = client.execute(post);
-        if(null!=header){
-        	for(String s : header.keySet()){
-        		resp.addHeader(s, header.get(s));
-        	}
-        }
-        
-        return resp;
-    }
-    
-    
-    public String delete(String uri, Map<String,String> header) throws IOException {
-        CloseableHttpClient client = HttpClients.createDefault();
-        RestDeleteMethod post = new RestDeleteMethod(uri);
-        if(null!=header){
-        	for(String s : header.keySet()){
-        		post.addHeader(s, header.get(s));
-        	}
-        }
-
-        CloseableHttpResponse resp = client.execute(post);
-        int code = resp.getStatusLine().getStatusCode();
-        System.out.println(resp);
-        if (code == 200) {
-            HttpEntity respEntity = resp.getEntity();
-            String respStr = null;
-            if (respEntity != null) {
-                respStr = EntityUtils.toString(respEntity, "utf-8");
-                Logger.getLogger(RestClient.class.getName()).log(Level.INFO, "RECEIVE: {0}", respStr);
-            }
-            return respStr;
-        }
-        
-        return null;
-    }
 }

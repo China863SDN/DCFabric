@@ -438,8 +438,8 @@ var prefix = "../jtopo/";
                     node.hostLinks = null;
                 }else{
                     Topo.loadHostDatas(coreSwitch.id).done(function(response){
-                        if(!response || !response.data) return;
-                        var hosts = response.data.nodes;
+                        if(!response || !response.nodes) return;
+                        var hosts = response.nodes;
                         if(hosts.length == 0) return;
                         node.hostNodes = hosts.map(hostToNode);
 
@@ -661,8 +661,8 @@ var prefix = "../jtopo/";
                     node.hostLinks = null;
                 }else{
                     Topo.loadHostDatas(coreSwitch.id).done(function(response){
-                        if(!response || !response.data) return;
-                        var hosts = response.data.nodes;
+                        if(!response || !response.nodes) return;
+                        var hosts = response.nodes;
                         if(hosts.length == 0) return;
                         node.hostNodes = hosts.map(hostToNode);
 
@@ -909,19 +909,11 @@ var prefix = "../jtopo/";
                 }
             });
         },
-        // 改变所有线条的颜色
-        changeColorAllLink : function(){
-            this.getAllLink().forEach(function(link){
-                link.alpha=0;
-                // link.strokeColor='255,255,255';
-            });
-        },
         // 改变两个节点之间的连线颜色
         changeLinkColor: function(aId, zId, color){
             var link = this.getLink(aId, zId);
             if(link){
                 link.strokeColor = color;
-                link.alpha=100;
             }
         },
         // 显示指定link的上下行带宽
@@ -1158,7 +1150,7 @@ var prefix = "../jtopo/";
     var exchange_circle =base_path+ 'exchange_circle.json';
 
     // 获取指定交换机下的服务器列表
-    var exchange_host = base_path+'exchange_host.json';
+    var exchange_host = base_path+'data/exchange_host.json';
 
     //保存当前交换机调整后的TOPO位置
     var exchange_topo_save=base_path+'data/exchange_save.json';
@@ -1166,9 +1158,9 @@ var prefix = "../jtopo/";
 
 
     //绿色，黄色，红色，深红
-    var link_colors = ['4,220,9','255,255,0','255,150,150','255,0,0','255,0,0'];
+    var link_colors = ['4,220,9','255,255,0','255,150,150','255,0,0'];
 
-    var rate_used = [0,1,2,3,4];
+    var rate_used = [0,1,2,3];
 
     //动态增加节点、删除节点
     var dynamic_add_delete = base_path+'data/dynamic_add_delete.json';
@@ -1192,16 +1184,14 @@ var prefix = "../jtopo/";
         initUI();
 
         Topo.loadHostDatas = function(switchId){
-            return $.ajax({ url: exchange_host+"?ip="+ipp+"&port="+portt+"&switch_id=" + switchId});
+            return $.ajax({ url: exchange_host+"?ip="+ipp+"&port="+portt+"switch_id=" + switchId});
         };
         Topo.loadDynamicDatas = function(){
             //return $.ajax({url: dynamic_add_delete});
         };
         // 初始化Canvas内容
-        ipp =  getUrlParam('ipp');
-        portt =  getUrlParam('portt');
-        if(!ipp) ipp =$("#control").val().split("|")[0];
-        if(!portt) portt =$("#control").val().split("|")[1];
+        ipp =$("#control").val().split("|")[0];
+        portt =$("#control").val().split("|")[1];
         $.when($.ajax({ url: exchange_tree+"?ip="+ipp+"&port="+portt}), $.ajax({url: exchange_circle+"?ip="+ipp+"&port="+portt})).done(function(treeData, circleData){
             Topo.initTree(treeData[0], $('#canvas_tree')[0]);
             Topo.initCircle(circleData[0], $('#canvas_circle')[0]);
@@ -1518,26 +1508,18 @@ var prefix = "../jtopo/";
         //刷新频率设置
         $('#rateConfig').click(function(){
             var inputId = 'refresh_interval_input';
-            if(!refreshSettingModal ){
-            	//'\u5e26\u5bbd\u76d1\u63a7\u9891\u7387'
-            	refreshSettingModal =  '<form id="refreshSettingModal"  class="navbar-form navbar-left" role="search">'
+            if(!refreshSettingModal){
+                refreshSettingModal = one.lib.modal.spawn('one.main.config.id', '\u5e26\u5bbd\u76d1\u63a7\u9891\u7387',
+                        '<form class="navbar-form navbar-left" role="search">'
                         +' <div class="form-group">'
                         +' <input id="'+inputId+'" type="text" class="form-control" placeholder="\u6beb\u79d2" value="'+refresh_Interval+'"> '
                         +' \u6beb\u79d2'
                         +' &nbsp;&nbsp;&nbsp;&nbsp; <button type="submit" class="btn btn-default" onclick="window.updateInterval(document.getElementById(\''+inputId+'\').value);return false;">\u4fdd\u5b58\u8bbe\u7f6e</button> '
-                        + ' </div></form>';
-//                refreshSettingModal = one.lib.modal.spawn('one.main.config.id', '\u5e26\u5bbd\u76d1\u63a7\u9891\u7387',
-//                        '<form class="navbar-form navbar-left" role="search">'
-//                        +' <div class="form-group">'
-//                        +' <input id="'+inputId+'" type="text" class="form-control" placeholder="\u6beb\u79d2" value="'+refresh_Interval+'"> '
-//                        +' \u6beb\u79d2'
-//                        +' &nbsp;&nbsp;&nbsp;&nbsp; <button type="submit" class="btn btn-default" onclick="window.updateInterval(document.getElementById(\''+inputId+'\').value);return false;">\u4fdd\u5b58\u8bbe\u7f6e</button> '
-//                        + ' </div></form>', 'foot');
-            	$('#toolbar').append(refreshSettingModal);
+                        + ' </div></form>', 'foot');
             }
-            //$(refreshSettingModal).width(400);
+            $(refreshSettingModal).width(400);
             //$($modal).width(500);
-            $("#refreshSettingModal").show();
+            refreshSettingModal.modal();
             // $modal.modal('hide');
         });
 
@@ -2016,7 +1998,7 @@ var prefix = "../jtopo/";
     //加载刷新频率
     function loadInterval(){
         $.ajax({ url: topo_path_interval_load+"?ip="+ipp+"&port="+portt, context: document.body, success: function(data){
-        	refresh_Interval = data.data.interval;
+            refresh_Interval = data.interval;
         }});
     }
 
@@ -2024,12 +2006,12 @@ var prefix = "../jtopo/";
     function updateInterval(interval){
         //alert(interval);
         $.post(topo_path_interval_save,{interval:interval,ip:ipp, port:portt},function(dataObj){
-            if(dataObj.status == 0){
-                alert("success");
+            if(dataObj.status == 'true'){
+                alert(dataObj.message);
                 refresh_Interval = interval;
-                $("#refreshSettingModal").hide();
+                refreshSettingModal.modal('hide');
             }else{
-                alert("failed");
+                alert(dataObj.message);
             }
         });
     }
@@ -2356,28 +2338,21 @@ var prefix = "../jtopo/";
         //开启监控
         Topo.showLinkMonitor(srcNodeId, dstNodeId, link_colors[transmitIndex]);
         //console.log('src:'+srcNodeId+',des:'+dstNodeId)
-        Topo.changeLinkColor(srcNodeId, dstNodeId, link_colors[transmitIndex]);
+        //Topo.changeLinkColor(srcNodeId, dstNodeId, link_colors[transmitIndex]);
     }
 
     //整体刷新线条颜色
     function refreshLinkColor(){
         $.ajax({ url: topo_path_rate_used+"?ip="+ipp+"&port="+portt, type: "POST", success: function(data){
-			/*
-			 * 测试
-			 */
-			Topo.changeColorAllLink();
-
-	         
             //加载到数据...动态刷新
             for(var i=0;i<data.length;i++){
                 var srcNodeId = data[i].srcNodeId;
                 var dstNodeId = data[i].dstNodeId;
                 var status = parseInt(data[i].status);
                // var statusRec = parseInt(data[i].statusRec);
+
                 changeLinkColor(srcNodeId,dstNodeId,status);
             }
-			
-            
         }});
     }
  
@@ -2502,11 +2477,7 @@ var prefix = "../jtopo/";
 String.prototype.trim = function() {
     return this.replace(/^\s\s*/, '').replace(/\s\s*$/, '');
 }
-function getUrlParam(name) {
-    var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)"); //构造一个含有目标参数的正则表达式对象
-    var r = window.location.search.substr(1).match(reg);  //匹配目标参数
-    if (r != null) return unescape(r[2]); return null; //返回参数值
-}
+
 $(document).ready(function(){
 
 

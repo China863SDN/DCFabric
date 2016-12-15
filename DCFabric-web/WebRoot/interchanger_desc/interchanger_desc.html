@@ -205,15 +205,10 @@
     function searchNetPort(obj){
         var cont = "";
         for(var i in obj){
-            var portTenNumber ;
-            if (obj[i].portNumber == "fffffffe")
-                portTenNumber = "LOCAL";
-            else
-                portTenNumber = parseInt(obj[i].portNumber,16).toString(10);
             cont += "<div class='span4' style='margin-left:0px;padding: 5px;width: 250px;border-bottom: 1px solid #cccccc;'>"
-            cont +=     "<p>网口名称:"+obj[i].name+"</p>";
-            cont +=     "<p>网口号:"+portTenNumber+"</p>";
-            cont +=     "<p>MAC地址:"+obj[i].hardwareAddress+"</p>";
+            cont +=     "<p>网口名称:"+obj[i].name+"</p>"
+            cont +=     "<p>网口号:"+obj[i].portNumber+"</p>"
+            cont +=     "<p>MAC地址:"+obj[i].hardwareAddress+"</p>"
             cont += "</div>";
         }
         $("#netport").html("");
