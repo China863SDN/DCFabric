@@ -38,6 +38,7 @@
 #include "../cluster-mgr/cluster-mgr.h"
 #include "../cluster-mgr/hbase_sync.h"
 #include "openflow-common.h"
+#include "../qos-mgr/qos-mgr.h"
 
 
 
@@ -207,6 +208,8 @@ void of131_fabric_impl_setup(){
 	{	
 	    persist_fabric_all();
 	}
+
+	start_qos_mgr();
 
 	//printf("Fabric: v 2015/05/15 \nof131_fabric_impl_setup!\n");
 	LOG_PROC("INFO", "of131_fabric_impl_setup!");
@@ -1435,6 +1438,27 @@ UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid)
 
 	// LOG_PROC("INFO", "The port of path from %llu to %llu is %d", src_dpid, dst_dpid, path_node->port->port_no);
 	return path_node->port->port_no;
+}
+
+// this function is used to get port no between switch and host ip
+UINT4 get_port_no_between_sw_ip(gn_switch_t* sw, UINT4 dst_ip)
+{
+	p_fabric_host_node host = get_fabric_host_from_list_by_ip(dst_ip);
+	
+	if ((NULL == host) || (NULL == host->sw)) {
+		return 0;
+	}
+
+	UINT4 port_no = 0;
+	
+	if (sw == host->sw) {
+		// port_no = host->port;
+	}
+	else {
+		port_no = get_out_port_between_switch(sw->dpid, host->sw->dpid);
+	}
+
+	return port_no;
 }
 
 

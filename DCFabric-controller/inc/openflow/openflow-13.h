@@ -413,6 +413,28 @@ struct ofp13_flow_stats {
 };
 OFP_ASSERT(sizeof(struct ofp13_flow_stats) == 56);
 
+
+/* Body of reply to OFPMP_FLOW request. */
+struct ofp13_flow_stats_gn {
+    uint16_t length; /* Length of this entry. */
+    uint8_t table_id; /* ID of table flow came from. */
+    uint8_t pad;
+    struct ofp_match match; /* Description of fields. Variable size. */
+    uint32_t duration_sec; /* Time flow has been alive in seconds. */
+    uint32_t duration_nsec; /* Time flow has been alive in nanoseconds beyond
+                              duration_sec. */
+    uint16_t priority; /* Priority of the entry. */
+    uint16_t idle_timeout; /* Number of seconds idle before expiration. */
+    uint16_t hard_timeout; /* Number of seconds before expiration. */
+    uint16_t flags; /* One of OFPFF_*. */
+    uint8_t pad2[6]; /* Align to 64-bits. */
+    uint64_t cookie; /* Opaque controller-issued identifier. */
+    uint64_t packet_count; /* Number of packets in flow. */
+    uint64_t byte_count; /* Number of bytes in flow. */
+    //struct ofp_instruction instructions[0]; /* Instruction set. */
+};
+OFP_ASSERT(sizeof(struct ofp13_flow_stats_gn) == 96);
+
 /* Body for ofp_multipart_request of type OFPMP_AGGREGATE. */
 struct ofp13_aggregate_stats_request {
     uint8_t table_id; /* ID of table to read (from ofp_table_stats)

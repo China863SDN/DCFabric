@@ -34,6 +34,9 @@
 #include "fabric_openstack_external.h"
 #include "fabric_host.h"
 #include "fabric_openstack_nat.h"
+#include "../qos-mgr/qos-mgr.h"
+#include "../qos-mgr/qos-meter.h"
+#include "../qos-mgr/qos-policy.h"
 
 
 
@@ -50,6 +53,7 @@ extern t_fabric_arp_request_list g_arp_request_list;
 extern t_fabric_arp_flood_queue g_arp_flood_queue;
 extern openstack_node_p g_openstack_host_network_list;
 extern openstack_node_p g_openstack_host_subnet_list;
+extern qos_policy_p g_qos_policy_list;
 
 extern UINT4 g_openstack_on;
 extern UINT4 g_external_check_on;
@@ -1573,4 +1577,273 @@ INT1* fabric_debug_get_all_subnet()
 
 	return json_to_reply(obj, GN_OK);
 }
+
+
+INT1* fabric_debug_get_all_qos_policy()
+{
+	json_t *obj, *array, *key, *value, *entry;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("qos policy list");
+    json_insert_child(key, array);
+    json_insert_child(obj, key);
+	INT1 str_temp[48] = {0};
+
+	qos_policy_p policy_p = g_qos_policy_list;
+
+	while (policy_p) {
+		entry = json_new_object();
+
+		key = json_new_string("name");
+		value = json_new_string(policy_p->qos_policy_name);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+		key = json_new_string("id");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%d", policy_p->qos_policy_id);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+		key = json_new_string("dpid");
+		bzero(str_temp, 48);
+		dpidUint8ToStr(policy_p->sw->dpid,str_temp);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+		key = json_new_string("dst ip");
+		bzero(str_temp, 48);
+		number2ip(policy_p->dst_ip, str_temp);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+		key = json_new_string("min speed");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%llu", policy_p->min_speed);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+		key = json_new_string("max speed");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%llu", policy_p->max_speed);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+		key = json_new_string("burst");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%llu", policy_p->burst_size);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);
+
+
+		key = json_new_string("priority");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%d", policy_p->priority);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+	    json_insert_child(entry, key);		
+ 
+		if (QOS_TYPE_METER == policy_p->sw->qos_type) {
+			qos_meter_p meter_p = (qos_meter_p)policy_p->qos_service;
+
+			if (meter_p) {
+				key = json_new_string("meter id");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "%d", meter_p->meter_id);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);	
+			}
+		}
+		else if (QOS_TYPE_QUEUE == policy_p->sw->qos_type) {
+			gn_queue_t* queue_p = (gn_queue_t*)policy_p->qos_service;
+
+			if (queue_p) {
+				key = json_new_string("port no");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "%d", queue_p->port_no);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);	
+
+				key = json_new_string("queue id");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "%d", queue_p->queue_id);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+
+				key = json_new_string("queue uuid");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "%s", queue_p->queue_uuid);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+			}
+		}
+		else {
+			// do nothing
+		}
+
+		json_insert_child(array, entry);
+		
+		policy_p = policy_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+
+
+INT1 *fabric_debug_post_qos_policy(const INT1 *url, json_t *root)
+{
+    json_t *item = NULL;
+	INT1 name_str[48] = {0};
+	INT1 dpid_str[48] = {0};
+	INT4 type = 0;
+	UINT4 dst_ip = 0;
+	INT4  id = 0;
+	UINT8 min_speed = 0;
+	UINT8 max_speed = 0;
+	UINT8 burst = 0;
+	INT4 priority = 0;
+
+	item = json_find_first_label(root, "name");
+    if (item)
+    {
+        strcpy(name_str, item->child->text);
+        json_free_value(&item);
+    }
+
+    item = json_find_first_label(root, "dpid");
+    if (item)
+    {
+        strcpy(dpid_str, item->child->text);
+        json_free_value(&item);
+    }
+
+	item = json_find_first_label(root, "dst_ip");
+    if (item)
+    {
+        dst_ip = ip2number(item->child->text);
+        json_free_value(&item);
+    }
+
+	item = json_find_first_label(root, "id");
+    if (item)
+    {
+        min_speed = atoi(item->child->text);
+        json_free_value(&item);
+    }
+
+	item = json_find_first_label(root, "min_speed");
+    if (item)
+    {
+        min_speed = strtoull(item->child->text, 0, 10);
+        json_free_value(&item);
+    }
+
+	item = json_find_first_label(root, "max_speed");
+    if (item)
+    {
+        max_speed = strtoull(item->child->text, 0, 10);
+        json_free_value(&item);
+    }
+
+	item = json_find_first_label(root, "burst");
+    if (item)
+    {
+        burst = strtoull(item->child->text, 0, 10);
+        json_free_value(&item);
+    }
+
+	item = json_find_first_label(root, "priority");
+    if (item)
+    {
+        priority = atoi(item->child->text);
+        json_free_value(&item);
+    }
+
+	if (strlen(dpid_str)) {
+		if (0 == strcmp(dpid_str, "external")) {
+			type = SW_EXTERNAL;
+		}
+		else {
+			type = SW_DPID;
+		}
+	}
+	else {
+		type = SW_INVALID;
+	}
+
+	add_qos_rule_by_rest_api(name_str, id, type, dpid_str, dst_ip , min_speed, max_speed, burst, priority);
+
+	json_t *obj, *key, *value;
+	obj = json_new_object();
+	
+	key = json_new_string("qos poicy");
+	value = json_new_string("Success");
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+
+	return json_to_reply(obj, GN_OK);
+}
+
+INT1 *fabric_debug_delete_qos_policy(const INT1 *url, json_t *root)
+{
+    json_t *item = NULL;
+	INT1 dpid_str[48] = {0};
+	UINT4 dst_ip = 0;
+	INT4 type = 0;
+	INT4 return_value = 0;
+
+	item = json_find_first_label(root, "dst_ip");
+    if (item)
+    {
+        dst_ip = ip2number(item->child->text);
+        json_free_value(&item);
+    }
+
+    item = json_find_first_label(root, "dpid");
+    if (item)
+    {
+        strcpy(dpid_str, item->child->text);
+        json_free_value(&item);
+    }
+
+
+	if (strlen(dpid_str)) {
+		if (0 == strcmp(dpid_str, "external")) {
+			type = SW_EXTERNAL;
+		}
+		else {
+			type = SW_DPID;
+		}
+	}
+	else {
+		type = SW_INVALID;
+	}
+
+
+	return_value = delete_qos_rule_by_rest_api(type, dpid_str, dst_ip);
+
+	json_t *obj, *key, *value;
+	obj = json_new_object();
+	
+	key = json_new_string("qos poicy");
+	value = (0 == return_value) ? json_new_string("Fail") : json_new_string("Success");
+	json_insert_child(key, value);
+	json_insert_child(obj, key);
+
+
+	return json_to_reply(obj, GN_OK);
+}
+
 

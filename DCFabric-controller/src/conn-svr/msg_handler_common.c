@@ -30,6 +30,7 @@
 #include "msg_handler.h"
 #include "app_impl.h"
 #include "openflow-common.h"
+#include "../qos-mgr/qos-mgr.h"
 
 msg_handler_t of_message_handler[1];
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];

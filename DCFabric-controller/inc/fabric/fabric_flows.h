@@ -123,6 +123,7 @@ void install_proactive_floating_lbaas_to_external_flow(gn_switch_t* sw, INT4 typ
     UINT2 host_tcp_dst, UINT1* ext_mac, UINT4 ext_vlan_id, UINT4 floatingip, UINT2 ext_tcp_dst, UINT1* floatingmac);
 void fabric_openstack_floating_ip_install_set_vlan_out_flow(gn_switch_t * sw, UINT4 match_ip, UINT1* match_mac, UINT4 mod_src_ip, UINT1* mod_dst_mac, UINT4 vlan_id, security_param_t* src_security);
 void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port);
+void fabric_openstack_floating_ip_clear_stat(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port);
 
 /*
  * 下发流表规则

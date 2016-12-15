@@ -47,6 +47,8 @@
 #include "fabric_stats.h"
 #include "openstack_lbaas_app.h"
 #include "../group-mgr/group-mgr.h"
+#include "../meter-mgr/meter-mgr.h"
+#include "../qos-mgr/qos-mgr.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
@@ -687,6 +689,9 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
 
         sw->msg_driver.msg_handler[OFPT13_ROLE_REQUEST](sw, (UINT1 *)&role_req_info);
     }
+
+	// set qos type
+	sw->qos_type = init_sw_qos_type(sw);
 
     return GN_OK;
 }
@@ -2779,6 +2784,15 @@ UINT2 of13_add_action(UINT1 *buf, gn_action_t *action)
             }
             case OFPAT13_SET_QUEUE:
             {
+				gn_action_set_queue_t *p_action_queue = (gn_action_set_queue_t*)p_action;
+				struct ofp_action_set_queue *ofp_queue = (struct ofp_action_set_queue*)act;
+				ofp_queue->type = htons(OFPAT13_SET_QUEUE);
+				ofp_queue->len = htons(sizeof(struct ofp_action_set_queue));
+				ofp_queue->queue_id = htonl(p_action_queue->queue_id);
+
+				act += 8;
+				action_len += 8;
+				
                 break;
             }
             case OFPAT13_GROUP:
@@ -3221,10 +3235,13 @@ static INT4 of13_msg_barrier_reply(gn_switch_t *sw, UINT1 *of_msg)
     //only for test
     of13_remove_all_flow(sw, of_msg);
 
-    clear_group_entries(sw);
+    clear_group_entries(sw);	
+
+	clear_meter_entries(sw);
 
     of13_table_miss(sw, of_msg);
-    return GN_OK;
+
+	return GN_OK;
 }
 
 static INT4 of13_msg_queue_get_config_request(gn_switch_t *sw, UINT1 *of_msg)
