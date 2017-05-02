@@ -26,7 +26,8 @@
 *   Function    : .           *
 *                                                                             *
 ******************************************************************************/
-
+#include "gnflush-types.h"
+#include "gn_inet.h"
 #include "stats-mgr.h"
 #include "timer.h"
 #include "openflow-common.h"
@@ -34,13 +35,14 @@
 #include "openflow-13.h"
 #include "../conn-svr/conn-svr.h"
 #include "../flow-mgr/flow-mgr.h"
+#include <sys/prctl.h>   
 
 UINT4 g_switch_bandwidth = 100000;  //100Mb/s
 UINT4 g_stats_mgr_interval = 5;
 
 static pthread_t g_stats_mgr_threadid = 0;
 static UINT1 g_runing_flag = 0;
-
+extern void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match);
 //static UINT4 format_timestamp(UINT4 time)
 //{
 //    return time / g_stats_mgr_interval * g_stats_mgr_interval;
@@ -105,13 +107,17 @@ static void update_flow_stats(flow_stats_t *stats, UINT8 byte_count, UINT8 packe
         stats->byte_count = byte_count;
         stats->packet_count = packet_count;
         stats->duration_sec = duration_sec;
-
-//        printf("   kbps: %d\n", stats->kbps);
-//        printf("   kpps: %d\n", stats->kpps);
-//        printf("   byte_count: %d\n", stats->byte_count);
-//        printf("   packet_count: %d\n", stats->packet_count);
-//        printf("   duration_sec: %d\n", stats->duration_sec);
-//        printf("   timestamp: %d\n", stats->timestamp);
+		
+		LOG_PROC("OF13", "%s -- OFPMP_FLOW",FN);
+		/*
+        printf("   kbps: %d\n", stats->kbps);
+        printf("   kpps: %d\n", stats->kpps);
+        printf("   byte_count: %u\n", stats->byte_count);
+        printf("   packet_count: %u\n", stats->packet_count);
+        printf("   duration_sec: %d\n", stats->duration_sec);
+        printf("   timestamp: %d\n", stats->timestamp);
+		*/
+		LOG_PROC("OF13", "%s -- OFPMP_FLOW",FN);
     }
 }
 
@@ -183,7 +189,7 @@ void of10_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
                 gn_ntohll(flow_stats->packet_count), ntohl(flow_stats->duration_sec));
     }
 }
-
+//by:yhy openflow1.3 å¤„ç†ç«¯å£çŠ¶æ€
 void of13_proc_port_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
 {
     struct ofp13_port_stats *port_stats = (struct ofp13_port_stats*)stats;
@@ -219,15 +225,18 @@ void of13_proc_port_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
                 sw->ports[idx].stats.tx_bytes = new_stats.tx_bytes;
                 sw->ports[idx].stats.duration_sec = new_stats.duration_sec;
                 sw->ports[idx].stats.timestamp = timestamp;
+				LOG_PROC("OF13", "%s -- OFPMP_PORT_STATS",FN);
+				/*
+                printf("%s. Port :%s, rx_kbps: %e, tx_kbps: %e, rx_kpps: %e, tx_kpps: %e\n", sw->ports[idx].name,
+                        FN, sw->ports[idx].stats.rx_kbps, sw->ports[idx].stats.tx_kbps, sw->ports[idx].stats.rx_kpps, sw->ports[idx].stats.tx_kpps);
 
-//                printf("%s. Port :%s, rx_kbps: %d, tx_kbps: %d, rx_kpps: %d, tx_kpps: %d\n", sw->ports[idx].name,
-//                        FN, sw->ports[idx].stats.rx_kbps, sw->ports[idx].stats.tx_kbps, sw->ports[idx].stats.rx_kpps, sw->ports[idx].stats.tx_kpps);
-//
-//                printf("  rx_packets: %d\n", new_stats.rx_packets);
-//                printf("  tx_packets: %d\n", new_stats.tx_packets);
-//                printf("  rx_bytes: %d\n", new_stats.rx_bytes);
-//                printf("  tx_bytes: %d\n", new_stats.tx_bytes);
-//                printf("  duration_sec: %d\n\n", duration_sec);
+                printf("  rx_packets: %ld\n", new_stats.rx_packets);
+                printf("  tx_packets: %ld\n", new_stats.tx_packets);
+                printf("  rx_bytes: %ld\n", new_stats.rx_bytes);
+                printf("  tx_bytes: %ld\n", new_stats.tx_bytes);
+                printf("  duration_sec: %d\n", duration_sec);
+				*/
+				LOG_PROC("OF13", "%s -- OFPMP_PORT_STATS",FN);
             }
         }
     }
@@ -235,88 +244,409 @@ void of13_proc_port_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
 //    printf("\n\n\n");
 }
 
-void of13_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 length)
+
+gn_flow_t * find_flow_entry_gn(gn_switch_t *sw, gn_flow_t *flow)
 {
-//    struct ofp13_flow_stats *flow_stats = (struct ofp13_flow_stats*)stats;
-//    struct ofp13_flow_stats *p_stats = flow_stats;
-//
-//    UINT2 offset = 0;                       //¼ÇÂ¼ËùÓĞflow_stats´¦ÀíÆ«ÒÆ
-//    UINT2 cur_offset = 0;                   //¼ÇÂ¼µ±Ç°flow_stats´¦ÀíÆ«ÒÆ
-//    UINT2 stats_len = 0;
-//    gn_flow_t *p_flow = NULL;
-//    struct ofp_oxm_header *oxm = NULL;
-//    UINT2 oxm_tot_len = 0;
-//    UINT2 oxm_len = 4;
-//
-//    while(offset != length)
-//    {
-//        cur_offset = 0;
-//        stats_len = ntohs(p_stats->length);
-//
-//        p_flow = (gn_flow_t *)mem_get(g_gnflow_mempool_id);
-//        memset(p_flow, 0, sizeof(gn_flow_t));
-//        oxm_tot_len = ntohs(p_stats->match.length);
-//        oxm = (struct ofp_oxm_header *)(flow_stats->match.oxm_fields);
-//
-//        strncpy(p_flow->creater, "controller", strlen("controller") + 1);
-//        p_flow->priority = ntohs(p_stats->priority);
-//        p_flow->table_id = p_stats->table_id;
-//        p_flow->idle_timeout = ntohs(p_stats->idle_timeout);
-//        p_flow->hard_timeout = ntohs(p_stats->hard_timeout);
-//        p_flow->match.type = OFPMT_OXM;
-//
-//        while(ALIGN_8(oxm_len) < oxm_tot_len)
-//        {
-//            sw->msg_driver.convertter->oxm_convertter((UINT1 *)oxm, &(p_flow->match.oxm_fields));
-//            oxm += sizeof(struct ofp_oxm_header) + oxm->length;
-//            oxm_len += sizeof(struct ofp_oxm_header) + oxm->length;
-//        }
-//
-//        cur_offset += sizeof(struct ofp13_flow_stats);
-//        struct ofp_instruction *instructions = p_stats + ALIGN_8(sizeof(struct ofp13_flow_stats));
-//
-//
-//        p_flow = add_flow_entry(sw, &p_flow);
-//        if(p_flow)
-//        {
-//            update_flow_stats(&(p_flow->stats), gn_ntohll(p_stats->byte_count),
-//                    gn_ntohll(p_stats->packet_count), ntohl(p_stats->duration_sec));
-//        }
-//    }
+    gn_flow_t *p_flow = sw->flow_entries;
 
-
-    struct ofp13_flow_stats *flow_stats = (struct ofp13_flow_stats*)stats;
-    gn_flow_t *p_flow = NULL;
-    gn_flow_t gn_flow;
-//    UINT2 offset = 0;
-    UINT2 oxm_tot_len = ntohs(flow_stats->match.length);
-    UINT2 oxm_len = 4;
-    struct ofp_oxm_header *oxm = (struct ofp_oxm_header *)(flow_stats->match.oxm_fields);
-
-    memset(&gn_flow, 0, sizeof(gn_flow_t));
-    gn_flow.priority = ntohs(flow_stats->priority);
-    gn_flow.table_id = flow_stats->table_id;
-    while(ALIGN_8(oxm_len) < oxm_tot_len)
+    if(NULL == flow)
     {
-        sw->msg_driver.convertter->oxm_convertter((UINT1 *)oxm, &(gn_flow.match.oxm_fields));
-        oxm += sizeof(struct ofp_oxm_header) + oxm->length;
-        oxm_len += sizeof(struct ofp_oxm_header) + oxm->length;
+        return NULL;
     }
 
-    p_flow = find_flow_entry(sw, &gn_flow);
-    if(p_flow)
+    while(p_flow)
     {
-        update_flow_stats(&(p_flow->stats), gn_ntohll(flow_stats->byte_count),
-                gn_ntohll(flow_stats->packet_count), ntohl(flow_stats->duration_sec));
+        if(p_flow->table_id == flow->table_id && match_compare_strict(&(p_flow->match), &(flow->match)))
+        {
+            return p_flow;
+        }
+
+        p_flow = p_flow->next;
+    }
+
+    return NULL;
+}
+
+static UINT1 of13_oxm_convertter_gn(UINT1 *oxm, gn_oxm_t *gn_oxm)
+{
+    struct ofp_oxm_header *of_oxm = (struct ofp_oxm_header *)oxm;
+    switch(of_oxm->oxm_field_hm >> 1)
+    {
+        case (OFPXMT_OFB_IN_PORT):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IN_PORT);
+            gn_oxm->in_port = ntohl(*(UINT4 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_IN_PHY_PORT):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IN_PHY_PORT);
+            gn_oxm->in_phy_port = ntohl(*(UINT4 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_METADATA):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_METADATA);
+            gn_oxm->metadata = gn_ntohll(*(UINT8 *)(of_oxm->data));
+            if(of_oxm->length > 8)
+            {
+                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_METADATA_MASK);
+                gn_oxm->metadata_mask = gn_ntohll(*(UINT8 *)(of_oxm->data + 8));
+            }
+            break;
+        }
+        case (OFPXMT_OFB_ETH_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ETH_DST);
+            memcpy(gn_oxm->eth_dst, of_oxm->data, OFP_ETH_ALEN);
+            break;
+        }
+        case (OFPXMT_OFB_ETH_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ETH_SRC);
+            memcpy(gn_oxm->eth_src, of_oxm->data, OFP_ETH_ALEN);
+            break;
+        }
+        case (OFPXMT_OFB_ETH_TYPE):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ETH_TYPE);
+            gn_oxm->eth_type = ntohs(*(UINT2 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_VLAN_VID):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_VLAN_VID);
+            gn_oxm->vlan_vid = ntohs(*(UINT2 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_VLAN_PCP):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_VLAN_PCP);
+            gn_oxm->vlan_pcp = (*(UINT1 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_IP_DSCP):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IP_DSCP);
+            gn_oxm->ip_dscp = *(UINT1 *)(of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_IP_ECN):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IP_ECN);
+            gn_oxm->ip_ecn = *(UINT1 *)(of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_IP_PROTO):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IP_PROTO);
+            gn_oxm->ip_proto = *(UINT1 *)(of_oxm->data);
+            break;
+        }
+		/*
+        case (OFPXMT_OFB_IPV4_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC);
+            gn_oxm->ipv4_src = ntohl(*(UINT4 *)(of_oxm->data));
+
+            if(of_oxm->length > 4)
+            {
+                UINT4 netmask = ntohl(*(UINT4 *)(of_oxm->data + 4));
+                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX);
+                if(netmask == 0xff000000)
+                {
+                    gn_oxm->ipv4_src_prefix = 8;
+                }
+                else if(netmask == 0xffff0000)
+                {
+                    gn_oxm->ipv4_src_prefix = 16;
+                }
+                else if(netmask == 0xffffff00)
+                {
+                    gn_oxm->ipv4_src_prefix = 24;
+                }
+            }
+
+            break;
+        }
+	*/
+        case (OFPXMT_OFB_IPV4_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC);
+            gn_oxm->ipv4_src = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		case (OFPXMT_OFB_IPV4_SRC_PREFIX):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX);
+            gn_oxm->ipv4_src_prefix = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		/*
+        case (OFPXMT_OFB_IPV4_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST);
+            gn_oxm->ipv4_dst = ntohl(*(UINT4 *)(of_oxm->data));
+
+            if(of_oxm->length > 4)
+            {
+                UINT4 netmask = ntohl(*(UINT4 *)(of_oxm->data + 4));
+                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX);
+                if(netmask == 0xff000000)
+                {
+                    gn_oxm->ipv4_dst_prefix = 8;
+                }
+                else if(netmask == 0xffff0000)
+                {
+                    gn_oxm->ipv4_dst_prefix = 16;
+                }
+                else if(netmask == 0xffffff00)
+                {
+                    gn_oxm->ipv4_dst_prefix = 24;
+                }
+            }
+
+            break;
+        }
+	*/
+        case (OFPXMT_OFB_IPV4_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST);
+            gn_oxm->ipv4_dst = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		case (OFPXMT_OFB_IPV4_DST_PREFIX):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX);
+            gn_oxm->ipv4_dst_prefix = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+        case (OFPXMT_OFB_TCP_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_TCP_SRC);
+            gn_oxm->tcp_src = ntohs(*(UINT2 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_TCP_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_TCP_DST);
+            gn_oxm->tcp_dst = ntohs(*(UINT2 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_UDP_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_UDP_SRC);
+            gn_oxm->udp_src = ntohs(*(UINT2 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_UDP_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_UDP_DST);
+            gn_oxm->udp_dst = ntohs(*(UINT2 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_SCTP_SRC):
+        {
+            //
+            break;
+        }
+        case (OFPXMT_OFB_SCTP_DST):
+        {
+            //
+            break;
+        }
+        case (OFPXMT_OFB_ICMPV4_TYPE):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ICMPV4_TYPE);
+            gn_oxm->icmpv4_type = *(UINT1 *)(of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_ICMPV4_CODE):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ICMPV4_CODE);
+            gn_oxm->icmpv4_code = *(UINT1 *)(of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_ARP_OP):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ARP_OP);
+            gn_oxm->arp_op = *(UINT1 *)(of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_ARP_SPA):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ARP_SPA);
+            gn_oxm->arp_spa = ntohl(*(UINT4 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_ARP_TPA):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ARP_TPA);
+            gn_oxm->arp_tpa = ntohl(*(UINT4 *)(of_oxm->data));
+            break;
+        }
+        case (OFPXMT_OFB_ARP_SHA):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ARP_SHA);
+            memcpy(gn_oxm->arp_sha, of_oxm->data, OFP_ETH_ALEN);
+            break;
+        }
+        case (OFPXMT_OFB_ARP_THA):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_ARP_THA);
+            memcpy(gn_oxm->arp_tha, of_oxm->data, OFP_ETH_ALEN);
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_SRC);
+            memcpy(gn_oxm->ipv6_src, of_oxm->data, OFPXMT_OFB_IPV6_SZ);
+
+            if(of_oxm->length > OFPXMT_OFB_IPV6_SZ)
+            {
+//                UINT4 mask[4] = {0};
+//                mask[0] = ntohl(*(UINT4 *)(of_oxm->data + 4));
+//                mask[1] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4));
+//                mask[2] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4));
+//                mask[3] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4 + 4));
+//                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX);
+//
+//                //todo
+            }
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_DST);
+            memcpy(gn_oxm->ipv6_dst, of_oxm->data, OFPXMT_OFB_IPV6_SZ);
+
+            if(of_oxm->length > OFPXMT_OFB_IPV6_SZ)
+            {
+//                UINT4 mask[4] = {0};
+//                mask[0] = ntohl(*(UINT4 *)(of_oxm->data + 4));
+//                mask[1] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4));
+//                mask[2] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4));
+//                mask[3] = ntohl(*(UINT4 *)(of_oxm->data + 4 + 4 + 4 + 4));
+//                gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX);
+//
+//                //todo
+            }
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_FLABEL):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_ICMPV6_TYPE):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_ICMPV6_CODE):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_ND_TARGET):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_ND_SLL):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_ND_TLL):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_MPLS_LABEL):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_MPLS_LABEL);
+            gn_oxm->mpls_label = ntohl(*(UINT4 *)of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_MPLS_TC):
+        {
+            break;
+        }
+        case (OFPXMT_OFP_MPLS_BOS):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_PBB_ISID):
+        {
+            break;
+        }
+        case (OFPXMT_OFB_TUNNEL_ID):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_TUNNEL_ID);
+            gn_oxm->tunnel_id = ntohl(*(UINT4 *)of_oxm->data);
+            break;
+        }
+        case (OFPXMT_OFB_IPV6_EXTHDR):
+        {
+            break;
+        }
+        default:break;
+    }
+
+    return of_oxm->length;
+}
+
+static void of13_parse_match_gn(struct ofpx_match *of_match, gn_match_t *gn_match)
+{
+    UINT2 oxm_tot_len = ntohs(of_match->length);
+    UINT2 oxm_len = 4;
+    UINT1 field_len = 0;
+    UINT1 *oxm = of_match->oxm_fields;
+
+    memset(gn_match, 0, sizeof(gn_match_t));
+    while(ALIGN_8(oxm_len) < oxm_tot_len)
+    {
+        field_len = of13_oxm_convertter_gn((UINT1 *)oxm, &(gn_match->oxm_fields));
+        oxm += sizeof(struct ofp_oxm_header) + field_len;
+        oxm_len += sizeof(struct ofp_oxm_header) + field_len;
     }
 }
 
+
+
+//by:yhy å¤„ç†æµè¡¨çŠ¶æ€
+void of13_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 length)
+{
+    
+    UINT2 offset = 0;                       
+    gn_flow_t *p_flow = NULL;
+	gn_flow_t gn_flow = {0};
+
+    struct ofp13_flow_stats *flow_stats = (struct ofp13_flow_stats*)stats;
+    UINT1 *p_stats = stats;
+    offset = length;
+    while(offset)
+    {
+        memset(&gn_flow, 0x00, sizeof(gn_flow_t));
+        gn_flow.priority = ntohs(flow_stats->priority);
+        gn_flow.table_id = flow_stats->table_id;
+        of13_parse_match_gn(&(flow_stats->match), &gn_flow.match);
+
+        p_flow = find_flow_entry_gn(sw, &gn_flow);
+        if(p_flow)
+        {
+            update_flow_stats(&(p_flow->stats), gn_ntohll(flow_stats->byte_count), gn_ntohll(flow_stats->packet_count), ntohl(flow_stats->duration_sec));
+        }
+
+        offset -= ntohs(flow_stats->length);
+        p_stats += ntohs(flow_stats->length);
+        flow_stats = (struct ofp13_flow_stats *)p_stats;
+    }
+}
+
+//by:yhy openflow  å‘é€ç”¨äºè·å–switchçš„ç«¯å£çŠ¶æ€ä¿¡æ¯çš„è¯·æ±‚
 static void of_send_port_stats(gn_switch_t *sw)
 {
     stats_req_info_t stats_req_info;
     port_stats_req_data_t port_stats_req_data;
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.data = (UINT1 *)&port_stats_req_data;
 
     if(sw->ofp_version == OFP10_VERSION)
@@ -332,13 +662,14 @@ static void of_send_port_stats(gn_switch_t *sw)
         sw->msg_driver.msg_handler[OFPT13_MULTIPART_REQUEST](sw, (UINT1 *)&stats_req_info);
     }
 }
-
+//by:yhy openflow å‘é€ç”¨äºè·å–switchå½“å‰æµè¡¨çŠ¶æ€ä¿¡æ¯çš„è¯·æ±‚
 static void of_send_flow_stats(gn_switch_t *sw)
 {
     stats_req_info_t stats_req_info;
     flow_stats_req_data_t flow_stats_req_data;
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.data = (UINT1 *)&flow_stats_req_data;
 
     if(sw->ofp_version == OFP10_VERSION)
@@ -358,44 +689,44 @@ static void of_send_flow_stats(gn_switch_t *sw)
     }
 }
 
-//¶¨Ê±»ñÈ¡ËùÓĞ½»»»»úËùÓĞµÄËùÓĞÁ÷±í/Íø¿ÚÍ³¼ÆĞÅÏ¢
-void *get_throughput(void *args)
+//by:yhy ååç‡æ£€æµ‹
+void *get_throughput()
 {
     gn_switch_t *sw = NULL;
     UINT4 num = 0;
-
-    while(g_runing_flag)
+  
+    if(g_runing_flag)
     {
-        sleep(g_stats_mgr_interval);
-
-        for(num=0; num < g_server.max_switch; num++)
-        {
-            if(g_server.switches[num].state)
-            {
-                sw = &g_server.switches[num];
-                if(sw->state == 1)
-                {
-                    of_send_port_stats(sw);
-                    of_send_flow_stats(sw);
-                }
-            }
-        }
+		
+		for(num=0; num < g_server.max_switch; num++)
+		{
+			sw = &g_server.switches[num];
+			if(CONNECTED == sw->conn_state)
+			{
+				of_send_port_stats(sw);
+				//of_send_flow_stats(sw);
+			}
+		}
+		
     }
 
     return NULL;
 }
 
 
-//³õÊ¼»¯
+//by:yhy å‘¨æœŸæ€§å‘é€ç”¨äºè·å–switchç«¯å£çŠ¶æ€/æµè¡¨ä¿¡æ¯çš„è¯·æ±‚åŒ…
 INT4 init_stats_mgr()
-{
-    g_runing_flag = 1;
-    pthread_create(&g_stats_mgr_threadid, NULL, get_throughput, NULL);
+{   
+	char *val = NULL;
 
+    val = get_value(g_controller_configure, "[stats_conf]", "sampling_interval");
+    g_stats_mgr_interval = (NULL == val  ? 5 : atoi(val));
+	g_runing_flag = 1;
+    //pthread_create(&g_stats_mgr_threadid, NULL, get_throughput, NULL);
     return GN_OK;
 }
 
-//·´³õÊ¼»¯
+//
 void fini_stats_mgr()
 {
     g_runing_flag = 0;

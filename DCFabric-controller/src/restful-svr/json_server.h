@@ -33,8 +33,14 @@
 #include "restful-svr.h"
 #include "app_impl.h"
 
+
+//max length of param that pasted by rest client
+#define REST_MAX_PARAM_LEN 1024
+#define REST_MAX_ACTION_NUM 256
+
 INT4 init_json_server();
 INT1 *json_to_reply(json_t *obj, INT4 code);
+INT1 *json_to_reply_desc(json_t *obj, INT4 code, const INT1 *desc);
 INT1 *proc_restful_request(UINT1 type, const INT1 *url, json_t *root);
 
 #endif /* JSON_SERVER_H_ */

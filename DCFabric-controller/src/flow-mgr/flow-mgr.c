@@ -35,24 +35,27 @@
 #include "openflow-13.h"
 
 const UINT8 MASK_SET = 1;
+//by:yhy 全局  流表数量最大值
 UINT4 g_max_flowentry = 100000;
+//by:yhy 全局  流表内存空间首地址
 void *g_gnflow_mempool_id = NULL;
 void *g_gninstruction_mempool_id = NULL;
 void *g_gnaction_mempool_id = NULL;
 
+//by:yhy 释放流表flow的内存空间
 void gn_flow_free(gn_flow_t *flow)
 {
     gn_instruction_t *p_ins = flow->instructions, *p_ins_next;
     gn_action_t *p_act = NULL, *p_act_next;
 
     while(p_ins)
-    {
+    {//by:yhy 遍历指令集flow->instructions
         p_ins_next = p_ins->next;
         if((p_ins->type == OFPIT_APPLY_ACTIONS) || (p_ins->type == OFPIT_WRITE_ACTIONS))
         {
             p_act = ((gn_instruction_actions_t *)p_ins)->actions;
             while(p_act)
-            {
+            {//by:yhy 遍历行动集((gn_instruction_actions_t *)p_ins)->actions
                 p_act_next = p_act->next;
                 mem_free(g_gnaction_mempool_id, (void *)p_act);
                 p_act = p_act_next;
@@ -70,7 +73,7 @@ gn_flow_t * find_flow_entry_by_id(gn_switch_t *sw, gn_flow_t *flow)
 {
     gn_flow_t *p_flow = sw->flow_entries;
 
-    if((NULL == flow->uuid) || (sw->state == 0))
+    if((NULL == flow->uuid) || (sw->conn_state == INITSTATE))
     {
         return NULL;
     }
@@ -402,7 +405,7 @@ BOOL match_compare_slack(const gn_match_t *src_match, const gn_match_t *target_m
 
     if(src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC))
     {
-        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //������
+        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX))  //������
         {
             if(src_oxm_fields->ipv4_src_prefix != target_oxm_fields->ipv4_src_prefix)
             {
@@ -420,7 +423,7 @@ BOOL match_compare_slack(const gn_match_t *src_match, const gn_match_t *target_m
 
     if(src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST))
     {
-        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //������
+        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX))  //������
         {
             if(src_oxm_fields->ipv4_dst_prefix != target_oxm_fields->ipv4_dst_prefix)
             {
@@ -547,7 +550,7 @@ BOOL match_compare_slack(const gn_match_t *src_match, const gn_match_t *target_m
 
     if(src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC))
     {
-        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX))  //������
+        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_SRC_PREFIX))  //������
         {
             if(src_oxm_fields->ipv6_src_prefix != target_oxm_fields->ipv6_src_prefix)
             {
@@ -565,7 +568,7 @@ BOOL match_compare_slack(const gn_match_t *src_match, const gn_match_t *target_m
 
     if(src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST))
     {
-        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX))  //������
+        if (src_oxm_fields->mask & (MASK_SET << OFPXMT_OFB_IPV6_DST_PREFIX))  //������
         {
             if(src_oxm_fields->ipv6_dst_prefix != target_oxm_fields->ipv6_dst_prefix)
             {
@@ -629,7 +632,7 @@ gn_flow_t * find_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
     gn_flow_t *p_flow = sw->flow_entries;
 
-    if((NULL == flow) || (sw->state == 0))
+    if((NULL == flow) || (sw->conn_state == INITSTATE))
     {
         return NULL;
     }
@@ -661,11 +664,11 @@ static INT4 send_flow_mod(gn_switch_t *sw, gn_flow_t *flow, UINT1 command)
 
     return sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 }
-
+/*
 INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
     uuid_t uuid_gen;
-    if(sw->state == 0)
+    if(sw->conn_state == INITSTATE)
     {
         return GN_ERR;
     }
@@ -703,13 +706,235 @@ INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
     pthread_mutex_unlock(&sw->flow_entry_mutex);
     return GN_OK;
 }
+*/
+gn_flow_t* copy_flow_entry(gn_flow_t *src)
+{
+	gn_instruction_t *p_ins_src,*p_ins_dst;
+	gn_instruction_t *p_ins_src_next;
+	gn_instruction_t *p_ins_dst_next;
+    gn_action_t *p_act_src = NULL, *p_act_src_next = NULL;
+    gn_action_t *p_act_dst = NULL, *p_act_dst_next = NULL;
+    gn_instruction_actions_t* p_inact_src,* p_inact_dst;
+    gn_flow_t *dest = NULL;
 
+	
+	dest =(gn_flow_t *)mem_get(g_gnflow_mempool_id);
+	
+	//addedby:yhy
+	if(NULL == dest)
+	{
+		LOG_PROC("ERROR", "%s -- mem_get(g_gnflow_mempool_id) Fail",FN);
+		return NULL;
+	}
+	
+	dest->prev = NULL;
+	dest->next = NULL;
+	memcpy(dest->uuid,src->uuid,sizeof(src->uuid));
+	memcpy(dest->creater,src->creater,sizeof(src->creater));
+	dest->create_time = src->create_time;
+	dest->table_id = src->table_id;
+	dest->status = src->status;
+	dest->idle_timeout = src->idle_timeout;
+	dest->hard_timeout = src->hard_timeout;
+	dest->priority = src->priority;
+	memcpy(&dest->stats,&src->stats,sizeof(src->stats));
+	memcpy(&dest->match,&src->match,sizeof(src->match));
+	
+	if(src->instructions == NULL)
+	{
+		dest->instructions = NULL;
+		return dest;
+	}
+	
+	p_ins_src = src->instructions;
+
+    while(p_ins_src)
+    {
+        p_ins_dst_next = mem_get(g_gninstruction_mempool_id);
+		
+		//addedby:yhy
+		if(NULL == p_ins_dst_next)
+		{
+			LOG_PROC("ERROR", "%s -- mem_get(g_gninstruction_mempool_id) Fail",FN);
+			return NULL;
+		}
+		
+        p_ins_dst_next->type = p_ins_src->type;   
+        if((p_ins_src->type == OFPIT_APPLY_ACTIONS) || (p_ins_src->type == OFPIT_WRITE_ACTIONS))
+        {
+        	p_inact_src = (gn_instruction_actions_t *)p_ins_src;
+        	p_inact_dst = (gn_instruction_actions_t *)p_ins_dst_next;
+            p_act_src = p_inact_src->actions;
+           
+            while(p_act_src)
+            {
+            	p_act_dst_next = mem_get(g_gnaction_mempool_id);
+				
+				//addedby:yhy
+				if(NULL == p_act_dst_next)
+				{
+					LOG_PROC("ERROR", "%s -- mem_get(g_gnaction_mempool_id) Fail",FN);
+					return NULL;
+				}
+				
+            	memcpy(p_act_dst_next,p_act_src,sizeof(gn_action_t));
+            	p_act_dst_next->next = NULL;
+            	
+            	if(p_inact_dst->actions == NULL)
+            	{
+            		p_inact_dst->actions = p_act_dst_next;
+            	}
+            	else
+            	{
+            		p_act_dst = p_inact_dst->actions;
+            		while(p_act_dst->next)
+            		{
+            			p_act_dst = p_act_dst->next;
+            		}
+            		p_act_dst->next = p_act_dst_next;
+            	}
+                p_act_src_next = p_act_src->next; 
+                p_act_src = p_act_src_next;
+            }
+        }
+
+        if(dest->instructions == NULL)
+        {
+        	dest->instructions = p_ins_dst_next;
+        	dest->instructions->next = NULL;
+        }
+        else
+        {
+			p_ins_dst = dest->instructions;
+        	while(p_ins_dst->next)
+    		{
+    			p_ins_dst = p_ins_dst->next;
+    		}
+        	p_ins_dst->next = p_ins_dst_next;
+        }
+        
+        p_ins_src_next = p_ins_src->next;        
+        p_ins_src = p_ins_src_next;
+    }
+
+    return dest;
+}
+
+INT4 clean_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
+{
+    gn_flow_t *p_flow = NULL;
+    gn_flow_t *p_del_flow = NULL;
+
+    if(sw->conn_state == INITSTATE)
+    {
+        return EC_SW_STATE_ERR;
+    }
+
+    pthread_mutex_lock(&sw->flow_entry_mutex);
+    p_flow = sw->flow_entries;
+    while(p_flow)
+    {
+    	if(match_compare_strict(&p_flow->match,&flow->match))
+    	{
+    		//delete flow entry from list
+		    if(p_flow->next)
+		    {
+		        p_flow->next->prev = p_flow->prev;
+		    }
+
+		    if(p_flow->prev)
+		    {
+		        p_flow->prev->next = p_flow->next;
+		    }
+		    else
+		    {//头节点
+		        sw->flow_entries = p_flow->next;
+		    }
+		    
+			p_del_flow = p_flow;
+			p_flow = p_flow->next;
+    		//recycle the memory
+    		gn_flow_free(p_del_flow);
+    		continue;
+    		
+    	}
+    	p_flow = p_flow->next;
+    }
+
+    pthread_mutex_unlock(&sw->flow_entry_mutex);
+    return GN_OK;
+}
+//by:yhy 清理传入交换机的流表项sw->flow_entries
+INT4 clean_flow_entries(gn_switch_t *sw)
+{
+    gn_flow_t *p_flow_tmp, *p_flow = sw->flow_entries;
+    
+    if((NULL == sw) || (sw->conn_state == INITSTATE))
+    {
+        return GN_ERR;
+    }
+    sw->flow_entries = NULL;
+    while(p_flow)
+    {//by:yhy 内存回收
+        p_flow_tmp = p_flow->next;
+        gn_flow_free(p_flow);
+        p_flow = p_flow_tmp;
+    }
+
+    return GN_OK;
+}
+
+INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
+{
+    uuid_t uuid_gen;
+    if(sw->conn_state == INITSTATE)
+    {
+        return GN_ERR;
+    }
+
+    pthread_mutex_lock(&sw->flow_entry_mutex);
+    if(NULL == find_flow_entry(sw, flow))
+    {
+        uuid_generate_random(uuid_gen);
+        uuid_unparse(uuid_gen, flow->uuid);
+
+        gn_flow_t *p_new_flow = copy_flow_entry(flow);
+        if(0 != p_new_flow)
+        {
+            p_new_flow->status = ENTRY_ENABLED;
+            if(sw->flow_entries)
+            {
+                gn_flow_t *p_flow = sw->flow_entries;
+                while(p_flow->next)
+                {
+                    p_flow = p_flow->next;
+                };
+                p_flow->next = p_new_flow;
+                p_new_flow->prev = p_flow;
+            }
+            else
+            {
+                sw->flow_entries = p_new_flow;
+            }
+        }
+    }
+    else
+    {
+        pthread_mutex_unlock(&sw->flow_entry_mutex);
+        return GN_OK;
+    }
+
+    pthread_mutex_unlock(&sw->flow_entry_mutex);
+    return GN_OK;
+}
+
+//该函数有疑问，需要修改
 INT4 modify_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
     INT4 ret = 0;
     gn_flow_t *p_flow = NULL;
 
-    if(sw->state == 0)
+    if(sw->conn_state == INITSTATE)
     {
         return GN_ERR;
     }
@@ -732,7 +957,8 @@ INT4 modify_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
         flow->instructions = p_ins;
 
         ret = send_flow_mod(sw, p_flow, OFPFC_MODIFY_STRICT);
-        flow->status = ENTRY_ENABLED;
+        p_flow->status = ENTRY_ENABLED;
+
         pthread_mutex_unlock(&sw->flow_entry_mutex);
         return ret;
     }
@@ -743,7 +969,7 @@ INT4 enable_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
     gn_flow_t *p_flow = NULL;
     INT4 ret = 0;
 
-    if(sw->state == 0)
+    if(sw->conn_state == INITSTATE)
     {
         return GN_ERR;
     }
@@ -771,7 +997,7 @@ INT4 disable_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
     gn_flow_t *p_flow = NULL;
 
-    if(sw->state == 0)
+    if(sw->conn_state == INITSTATE)
     {
         return GN_ERR;
     }
@@ -798,7 +1024,7 @@ INT4 delete_flow_entry(gn_switch_t *sw, gn_flow_t *flow)
 {
     gn_flow_t *p_flow = NULL;
 
-    if(sw->state == 0)
+    if(sw->conn_state == INITSTATE)
     {
         return EC_SW_STATE_ERR;
     }
@@ -842,12 +1068,12 @@ INT4 clear_flow_entries(gn_switch_t *sw)
     gn_instruction_actions_t instruction;
     gn_action_output_t action;
 
-    if((NULL == sw) || (sw->state == 0))
+    if((NULL == sw) || (sw->conn_state == INITSTATE))
     {
         return GN_ERR;
     }
 
-    //ɾ����������
+    //删除所有流表
     memset(&flow, 0, sizeof(gn_flow_t));
     flow.table_id = OFPTT_ALL;
     flow.idle_timeout = 0;
@@ -856,7 +1082,7 @@ INT4 clear_flow_entries(gn_switch_t *sw)
     flow.match.type = OFPMT_OXM;
     send_flow_mod(sw, &flow, OFPFC_DELETE);
 
-    //�·�table miss����
+    //下发table miss流表
     memset(&flow, 0, sizeof(gn_flow_t));
     flow.create_time = 0;
     flow.table_id = 0;
@@ -879,6 +1105,8 @@ INT4 clear_flow_entries(gn_switch_t *sw)
     send_flow_mod(sw, &flow, OFPFC_ADD);
 
     sw->flow_entries = NULL;
+    
+    pthread_mutex_lock(&sw->flow_entry_mutex);
     while(p_flow)
     {
         p_flow_tmp = p_flow->next;
@@ -889,6 +1117,8 @@ INT4 clear_flow_entries(gn_switch_t *sw)
         p_flow = p_flow_tmp;
     }
 
+    pthread_mutex_unlock(&sw->flow_entry_mutex);
+    
     return GN_OK;
 }
 
@@ -905,7 +1135,7 @@ INT4 flow_entry_timeout(gn_switch_t *sw, gn_flow_t *flow)
         }
         else
         {
-            p_flow->prev = p_flow->next;
+            p_flow->prev->next = p_flow->next;
         }
 
         //delete flow entry from list
@@ -930,27 +1160,27 @@ INT4 flow_entry_timeout(gn_switch_t *sw, gn_flow_t *flow)
     return GN_OK;
 }
 
-
+//by:yhy 根据最大流表数量分配内存空间
 INT4 init_flow_mgr()
 {
     INT1 *value = NULL;
 
     value = get_value(g_controller_configure, "[controller]", "max_flowentry");
-    g_max_flowentry = (value == NULL ? 100000 : atoi(value));
+    g_max_flowentry = (value == NULL ? 100000 : atoll(value));
 
-    //�����ڴ��
+    //by:yhy 为流表分配内存空间
     g_gnflow_mempool_id = mem_create(sizeof(gn_flow_t), g_max_flowentry);
     if (NULL == g_gnflow_mempool_id)
     {
         return GN_ERR;
     }
-
+	//by:yhy why? 全局未发现赋值
     g_gninstruction_mempool_id = mem_create(sizeof(gn_instruction_write_metadata_t), g_max_flowentry);
     if (NULL == g_gninstruction_mempool_id)
     {
         return GN_ERR;
     }
-
+	//by:yhy why????全局未发现赋值
     g_gnaction_mempool_id = mem_create(sizeof(gn_action_set_field_t), g_max_flowentry);
     if (NULL == g_gnaction_mempool_id)
     {

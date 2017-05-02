@@ -36,6 +36,8 @@
 #include "mod-types.h"
 #include "openflow-10.h"
 #include "openflow-13.h"
+#include <sys/prctl.h>   
+
 
 const UINT1 brodcast_mac[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 const UINT1 zero_mac[] = {0x0, 0x0, 0x0, 0x0, 0x0, 0x0};
@@ -120,12 +122,15 @@ static l3_send_buf_t * queue_out_packet(UINT4 dst_ip)
     return NULL;
 }
 
+//by:yhy 绿网无用函数
 //每2s清空一次
 void *timeout_packets()
 {
     l3_send_buf_t *p_buf = NULL;
     l3_send_buf_t *tmp = NULL;
 
+	
+	prctl(PR_SET_NAME, (unsigned long) "TimeoutPktThread" ) ;  
     while(1)
     {
         pthread_mutex_lock(&g_timeout_thread_mutex);
@@ -158,7 +163,9 @@ void *timeout_packets()
         }
 
         pthread_mutex_unlock(&g_timeout_thread_mutex);
-        sleep(2);
+        //sleep(2);
+        
+		MsecSleep(2*1000);
     }
 }
 
@@ -228,6 +235,7 @@ void arp_request(gn_switch_t *sw, UINT4 src_ip, UINT4 dst_ip, UINT4 outport)
     new_arp_pkt.targetip = htonl(dst_ip);
     memcpy(new_arp_pkt.sendmac, g_controller_mac, 6);
     memcpy(new_arp_pkt.targetmac, zero_mac, 6);
+		
 
     if(sw->ofp_version == OFP10_VERSION)
     {
@@ -302,6 +310,8 @@ static INT4 l3_install_flow_local(gn_switch_t *sw, UINT4 gw_ip, UINT4 inport, et
     }
     else
     {
+		//by:yhy add 201701051305
+		LOG_PROC("ERROR", "l3_install_flow_local -- ether->proto return GN_ERR");
         return GN_ERR;
     }
 
@@ -366,7 +376,8 @@ static INT4 l3_install_flow_local(gn_switch_t *sw, UINT4 gw_ip, UINT4 inport, et
         UINT4 port_idx = 0;
         for(port_idx = 0; port_idx < sw->n_ports; port_idx++)
         {
-           if(!(sw->neighbor[port_idx]))            //从非SW互联端口寻找
+           //if(!(sw->neighbor[port_idx]))            //从非SW互联端口寻找
+           if(!(sw->neighbor[port_idx]->bValid))            //从非SW互联端口寻找
            {
                arp_request(sw, ntohl(gw_ip), dst_ip, sw->ports[port_idx].port_no);
            }
@@ -400,6 +411,8 @@ static INT4 l3_install_flow(gn_switch_t *sw, UINT4 gw_ip, UINT4 inport, ether_t 
     }
     else
     {
+		//by:yhy add 201701051305
+		LOG_PROC("ERROR", "l3_install_flow -- ether->proto return GN_ERR");
         return GN_ERR;
     }
 
@@ -457,7 +470,8 @@ static INT4 l3_install_flow(gn_switch_t *sw, UINT4 gw_ip, UINT4 inport, ether_t 
 
         for(port_idx = 0; port_idx < sw->n_ports; port_idx++)
         {
-           if(!(sw->neighbor[port_idx]))            //从非SW互联端口寻找
+           //if(!(sw->neighbor[port_idx]))            //从非SW互联端口寻找
+           if(!(sw->neighbor[port_idx]->bValid))            //从非SW互联端口寻找
            {
                arp_request(sw, ntohl(gw_ip), dst_ip, sw->ports[port_idx].port_no);
            }
@@ -503,7 +517,7 @@ void l3_flowmod_chain(UINT4 gw_ip, UINT8 src_topo_id, UINT8 dst_topo_id, UINT4 i
 
         //当前交换机
         sw_pre = g_adac_matrix.sw[src_topo_id][id_tmp];
-        if((NULL == sw_pre) || (0 == sw_pre->state))
+        if((NULL == sw_pre) || (INITSTATE == sw_pre->conn_state))
         {
             goto END;
         }
@@ -614,11 +628,15 @@ INT4 create_l3_subnet(INT1 *name, INT1 *masked_ip)
     masked_ip_parser(masked_ip, &net_mask);
     if((0 == net_mask.prefix) || (0 == net_mask.ip))
     {
+		//by:yhy add 201701051305
+		LOG_PROC("ERROR", "create_l3_subnet -- (0 == net_mask.prefix) || (0 == net_mask.ip) return GN_ERR");
         return GN_ERR;
     }
 
     if(search_l3_subnet(net_mask.ip))
     {
+		//by:yhy add 201701051305
+		LOG_PROC("ERROR", "create_l3_subnet -- search_l3_subnet(net_mask.ip) return GN_ERR");
         return GN_ERR;
     }
 
@@ -657,7 +675,7 @@ INT4 destory_l3_subnet(INT1 *masked_ip)
 
     return GN_OK;
 }
-
+//by:yhy 绿网无用函数
 INT4 init_l3()
 {
     INT1 *value = NULL;

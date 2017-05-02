@@ -41,11 +41,16 @@
 #endif
 
 #define MAX_PORTS 150
+#define MAX_QUEUE_ID 40960
 
 extern ini_file_t *g_controller_configure;
 extern UINT1 g_controller_mac[];
 extern UINT4 g_controller_ip;
 extern UINT4 g_controller_south_port;
+extern UINT1 g_is_cluster_on;
+extern UINT1 g_reserve_mac[];
+extern UINT4 g_reserve_ip;
+
 
 enum http_type
 {
@@ -54,7 +59,36 @@ enum http_type
     HTTP_PUT = 2,
     HTTP_DELETE = 3
 };
+enum forward_ip_type
+{
+	IP_DROP = 1,							//by:yhy ä¸¢å¼ƒ
+    CONTROLLER_FORWARD = 2,					//by:yhy çº¯æ‰§è¡ŒOpenFlowçš„Packet_out
+    IP_FLOOD = 3,
+    BROADCAST_DHCP = 4,						//by:yhy DHCPå¹¿æ’­
+    IP_PACKET = 5,
+	IP_HANDLE_ERR = 6,
+	Internal_port_flow = 7,
+	Internal_out_subnet_flow = 8,
+	Floating_ip_flow = 9,
+	Nat_ip_flow = 10,
+	Internal_vip_flow = 11,
+	External_vip_flow = 12,
+	Internal_floating_vip_flow = 13,
+	Portforward_ip_flow = 14,
+};
 
+enum msgsock_type
+{
+	INITSTATE,
+	NEWACCEPT,
+	CONNECTED,
+	WAITCLOSE,
+	CLOSE_ACT,
+	LLDP,
+	HEARTBEAT,
+	GETPORTSTATE,
+        PORT_FORWARD,
+};
 #pragma pack(1)
 struct gn_switch;
 struct gn_port;
@@ -68,13 +102,14 @@ typedef struct restful_handles
     restful_handler_t handler;
 }restful_handles_t;
 
+//by:yhy openflow "packet in"åŒ…çš„ç»“æ„ä½“
 typedef struct packet_in_info
 {
     UINT4 xid;          //packet in transection id
     UINT4 buffer_id;    //buffer id
-    UINT4 inport;       //Èë¿Ú½»»»»ú¶Ë¿ÚºÅ
-    UINT4 data_len;     //ÒÔÌ«ÍøÊı¾İ°ü³¤¶È
-    UINT1 *data;        //ÒÔÌ«ÍøÊı¾İ°ü
+    UINT4 inport;       //ï¿½ï¿½Ú½ï¿½ï¿½ï¿½ï¿½ï¿½Ë¿Úºï¿½
+    UINT4 data_len;     //ï¿½ï¿½Ì«ï¿½ï¿½ï¿½ï¿½İ°ï¿½ï¿½
+    UINT1 *data;        //ï¿½ï¿½Ì«ï¿½ï¿½ï¿½ï¿½İ°ï¿½
 }packet_in_info_t;
 
 typedef INT4 (*packet_in_proc_t)(struct gn_switch *sw, packet_in_info_t *packet_in_info);
@@ -82,27 +117,27 @@ typedef INT4 (*packet_in_proc_t)(struct gn_switch *sw, packet_in_info_t *packet_
 typedef struct mac_user mac_user_t;
 typedef struct mac_user_table
 {
-    UINT4 macuser_hsize;            //Ö¸¶¨ÓÃ»§¹şÏ£±í´óĞ¡  ¶ÁÅäÖÃ
-    UINT4 macuser_hsize_tot;        //Ö¸¶¨ÓÃ»§¹şÏ£±í´óĞ¡  ¶ÁÅäÖÃ
-    UINT4 macuser_lifetime;         //Ö¸¶¨ÓÃ»§µÄÉú´æÊ±¼ä  ¶ÁÅäÖÃ  ÆäÊµÊÇSDN½»»»»úµÄhard time
-    mac_user_t **macuser_tb;        //·ÖÅä´æ´¢¹şÏ£±íÊ×µØÖ·µÄÄÚ´æ
-    void *macuser_memid;            //ÄÚ´æ³Ø±êÖ¾
-    pthread_mutex_t macuser_mutex;  //È«¾Ö±í ²éÑ¯Ê±¼ÓËø
-    void *macuser_timer;            //¶¨Ê±Æ÷±êÖ¾
-    UINT4 macuser_cnt;              //¼ÇÂ¼MAC µØÖ·ÓÃ»§Êı
+    UINT4 macuser_hsize;            //Ö¸ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½Ï£ï¿½ï¿½ï¿½Ğ¡  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    UINT4 macuser_hsize_tot;        //Ö¸ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½Ï£ï¿½ï¿½ï¿½Ğ¡  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
+    UINT4 macuser_lifetime;         //Ö¸ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½  ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½  ï¿½ï¿½Êµï¿½ï¿½SDNï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½hard time
+    mac_user_t **macuser_tb;        //ï¿½ï¿½ï¿½ï¿½æ´¢ï¿½ï¿½Ï£ï¿½ï¿½ï¿½×µï¿½Ö·ï¿½ï¿½ï¿½Ú´ï¿½
+    void *macuser_memid;            //ï¿½Ú´ï¿½Ø±ï¿½Ö¾
+    pthread_mutex_t macuser_mutex;  //È«ï¿½Ö±ï¿½ ï¿½ï¿½Ñ¯Ê±ï¿½ï¿½ï¿½ï¿½
+    void *macuser_timer;            //ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½Ö¾
+    UINT4 macuser_cnt;              //ï¿½ï¿½Â¼MAC ï¿½ï¿½Ö·ï¿½Ã»ï¿½ï¿½ï¿½
 }mac_user_table_t;
 
 
 struct mac_user
 {
-    struct gn_switch *sw;     //ËùÔÚ½»»»»ú
-    UINT4 port;          //¸ÃMACµØÖ·¶ÔÓ¦µÄ¶Ë¿Ú  Ö÷»ú×Ö½ÚĞò
-    INT4 tenant_id;      //±êÊ¶¸ÃÓÃ»§ÊôÓÚÄÄ¸ö×â»§ÍøÂç
-    UINT4 ipv4;          //ip,Ö÷»ú×Ö½ÚĞò
-    UINT1 ipv6[16];      //ipv6,Ö÷»ú×Ö½ÚĞò
-    UINT1 mac[6];        //ÓÃ»§MACµØÖ·
-    time_t tv_last_sec;  //×îºó¸üĞÂµÄÊ±¼ä
-    void *timer;         //¹ØÁªµÄ¶¨Ê±Æ÷
+    struct gn_switch *sw;     //ï¿½ï¿½ï¿½Ú½ï¿½ï¿½ï¿½ï¿½ï¿½
+    UINT4 port;          //ï¿½ï¿½MACï¿½ï¿½Ö·ï¿½ï¿½Ó¦ï¿½Ä¶Ë¿ï¿½  ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
+    INT4 tenant_id;      //ï¿½ï¿½Ê¶ï¿½ï¿½ï¿½Ã»ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¸ï¿½ï¿½â»§ï¿½ï¿½ï¿½ï¿½
+    UINT4 ipv4;          //ip,ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
+    UINT1 ipv6[16];      //ipv6,ï¿½ï¿½ï¿½ï¿½ï¿½Ö½ï¿½ï¿½ï¿½
+    UINT1 mac[6];        //ï¿½Ã»ï¿½MACï¿½ï¿½Ö·
+    time_t tv_last_sec;  //ï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½Ê±ï¿½ï¿½
+    void *timer;         //ï¿½ï¿½ï¿½ï¿½ï¿½Ä¶ï¿½Ê±ï¿½ï¿½
 
     mac_user_table_t *macuser_table;
     mac_user_t *next;
@@ -123,10 +158,11 @@ typedef struct port_stats
     UINT8 rx_bytes;        //Number of received bytes.
     UINT8 tx_bytes;        //Number of transmitted bytes.
     UINT4 max_speed;       //Max port bitrate in kbps
-    UINT4 duration_sec;    //port ´æ»îÊ±³¤
-    UINT4 timestamp;       //´¦Àí³ÉÈ¡ÑùÊ±¼ä¼ä¸ôµÄÕûÊı±¶
+    UINT4 duration_sec;    //port ï¿½ï¿½ï¿½Ê±ï¿½ï¿½
+    UINT4 timestamp;       //ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 }port_stats_t;
 
+//by:yhy æ§åˆ¶å™¨è‡ªèº«severç«¯çš„é…ç½®ä¿¡æ¯
 typedef struct gn_server
 {
     UINT4 sock_fd;
@@ -135,19 +171,34 @@ typedef struct gn_server
     UINT4 buff_num;
     UINT4 buff_len;
     UINT4 max_switch;
-    UINT4 cur_switch;
+    UINT4 cur_switch;						//by:yhy å½“å‰è¿æ¥çš„äº¤æ¢æœºæ•°é‡
+	pthread_mutex_t cur_switch_mutex;
     UINT4 cpu_num;
     struct gn_switch *switches;
     UINT1 state;
     UINT1 pad[3];
 }gn_server_t;
 
+//ç½‘ç»œåº•å±‚å‘æ¥æ”¶çº¿ç¨‹ä¼ é€’æ¶ˆæ¯
+typedef struct gst_msgsock
+{
+	UINT4 uiMsgType;
+	UINT4 uiSw_Index;
+	
+	INT4  iSockFd;
+	UINT4 uiUsedFlag;
+ 
+        void * param;
+	
+}gst_msgsock_t;
+
+
 typedef struct buffer_cache
 {
-    UINT1 *start_pos;        //´¦Àíºó£¬ÏÂ´Î´¦ÀíÆğÊ¼Î»ÖÃ
-    UINT1 *buff;
+    UINT1 *start_pos;        //
+    UINT1 *buff;			 //by:yhy ç©ºé—´å¤§å°=g_server.buff_len
     UINT4 len;
-    UINT4 bak_len;           //ÉÏ¸öbufferÎ´´¦ÀíµôµÄ³¤¶È
+    UINT4 bak_len;           //
 }buffer_cache_t;
 
 typedef struct buffer_list
@@ -159,8 +210,8 @@ typedef struct buffer_list
 
 typedef struct neighbour
 {
-    struct gn_switch *neigh_sw;     //ÏàÁÚµÄ½»»»»ú
-    struct gn_port *neigh_port;  //ÓëÏàÁÚ½»»»»úÖ±Á¬µÄ¶Ë¿Ú
+    struct gn_switch *neigh_sw;     //ï¿½ï¿½ï¿½ÚµÄ½ï¿½ï¿½ï¿½ï¿½ï¿½
+    struct gn_port *neigh_port;  //ï¿½ï¿½ï¿½ï¿½ï¿½Ú½ï¿½ï¿½ï¿½ï¿½ï¿½Ö±ï¿½ï¿½ï¿½Ä¶Ë¿ï¿½
 }neighbour_t;
 
 typedef struct gn_port
@@ -175,9 +226,10 @@ typedef struct gn_port
     UINT4 peer;
     UINT4 config;
     UINT4 state;
+	//UINT4 queue_ids[MAX_QUEUE_ID];
     neighbour_t *neighbour;
     mac_user_t *user_info;
-    port_stats_t stats;     //portÊµÊ±ÍÌÍÂÁ¿ĞÅÏ¢
+    port_stats_t stats;     //portÊµÊ±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢
 } gn_port_t;
 
 typedef gn_port_t *(*port_convertter_t)(UINT1 *of_port, gn_port_t *new_port);
@@ -197,18 +249,24 @@ typedef struct msg_driver
     msg_handler_t *msg_handler;
 }msg_driver_t;
 
-typedef struct switch_desc {
-   char mfr_desc[256];       /* Manufacturer description. */
-   char hw_desc[256];        /* Hardware description. */
-   char sw_desc[256];        /* Software description. */
-   char serial_num[32];      /* Serial number. */
-   char dp_desc[256];        /* Human readable description of datapath. */
+/*---------------------------------------------
+DES:	äº¤æ¢æœºæè¿°ä¿¡æ¯
+---------------------------------------------*/
+typedef struct switch_desc 
+{
+   char mfr_desc[256];       /* 	å‚å•†è¯´æ˜			*/
+   char hw_desc[256];        /* 	ç¡¬ä»¶è¯´æ˜			*/
+   char sw_desc[256];        /* 	è½¯ä»¶è¯´æ˜			*/
+   char serial_num[32];      /* 	åºåˆ—å· 			*/
+   char dp_desc[256];        /* 	å¯è¯»çš„æ•°æ®é€šé“æè¿°	*/
 }switch_desc_t;
 
 typedef struct neighbor
 {
     struct gn_switch *sw;
     gn_port_t *port;
+    UINT8 weight;
+	BOOL  bValid;
 }neighbor_t;
 
 typedef struct gn_flowmod_helper
@@ -220,46 +278,63 @@ typedef struct gn_flowmod_helper
 }gn_flowmod_helper_t;
 
 struct mac_user_table;
+//by:yhy äº¤æ¢æœºä¿¡æ¯ç»“æ„ä½“
 typedef struct gn_switch
 {
     UINT1 ofp_version;
-    UINT1 state;
+    UINT1 rev1;							//by:yhy  æ ‡è®°Switchæ˜¯å¦å¯ç”¨
     UINT1 pad[2];
     INT4 index;
-    UINT8 dpid;
-    UINT4 sw_ip;
+    UINT8 dpid;							//by:yhy  æ•°æ®é€šè·¯å”¯ä¸€çš„ IDã€‚ä½ 48-bits æ˜¯ MAC åœ°å€,é«˜ 16 ä½æ˜¯å¼€å‘è€…å®šä¹‰
+    UINT4 sw_ip;			
     UINT4 sw_port;
-    UINT4 sock_fd;
-    UINT4 n_buffers;
-    UINT4 n_tables;
-    UINT4 n_ports;
-    UINT4 capabilities;
-    switch_desc_t sw_desc;
-    gn_port_t lo_port;
+    UINT4 sock_fd;						//by:yhy  æœ¬äº¤æ¢æœºçš„socketè¿æ¥å¥æŸ„
+    UINT4 n_buffers;					//by:yhy  ä¸€æ¬¡ç¼“å†²æœ€å¤§çš„æ•°æ®åŒ…æ•°
+    UINT4 n_tables;						//by:yhy  æ•°æ®é€šè·¯æ”¯æŒçš„è¡¨æ•°é‡
+    UINT4 n_ports;						//by:yhy  äº¤æ¢æœºç«¯å£æ•°é‡		
+    UINT4 capabilities;					//by:yhy  ä½å›¾çš„æ”¯æŒ"ofp_capabilities"
+    switch_desc_t sw_desc;				//by:yhy  äº¤æ¢æœºçš„æè¿°ä¿¡æ¯
+    gn_port_t lo_port;					//by:yhy  Local openflow "port"
     gn_port_t ports[MAX_PORTS];
-    neighbor_t *neighbor[MAX_PORTS];
+    neighbor_t *neighbor[MAX_PORTS];	//by:yhy  æ•°ç»„neighborçš„ç´¢å¼•ä¸portsçš„ç´¢å¼•åŒ¹é…,neighbor[a]å³ä¸ºports[a]çš„é‚»å±…èŠ‚ç‚¹
     mac_user_t **users;
     msg_driver_t msg_driver;
-    buffer_list_t recv_buffer;
+    buffer_list_t recv_buffer;			//by:yhy  æ¥æ”¶ç¼“å­˜
     UINT4 send_len;
-    UINT1 *send_buffer;
+    UINT1 *send_buffer;					//by:yhy  é•¿åº¦:g_sendbuf_len
     gn_flowmod_helper_t flowmod_helper;
-    gn_flow_t *flow_entries;
+    gn_flow_t *flow_entries;			//by:yhy  æœ¬äº¤æ¢æœºæµè¡¨
     gn_meter_t *meter_entries;
-    gn_group_t *group_entries;
+	INT4 qos_type;
+	gn_qos_t* qos_entries;
+    gn_group_t* group_entries;
+	gn_queue_t* queue_entries;
     pthread_mutex_t users_mutex;
     pthread_mutex_t send_buffer_mutex;
     pthread_mutex_t flow_entry_mutex;
     pthread_mutex_t meter_entry_mutex;
     pthread_mutex_t group_entry_mutex;
-    pthread_t pid_recv;   //ÊÕ°ü
-    pthread_t pid_proc;   //´¦Àí°ü
+    pthread_t pid_recv;   				//by:yhy  æ¥æ”¶çº¿ç¨‹pid
+    pthread_t pid_proc;   				//by:yhy  å¤„ç†çº¿ç¨‹pid
     UINT8 connected_since;
+    UINT8 weight;         				//by:yhy  sw_weight
+    UINT1 sock_state;     				//by:yhy  socket status  åˆ¤æ–­å½“å‰çº¿ç¨‹æ˜¯å¦æ‹¥æœ‰æ“ä½œçš„æƒåˆ©"0"æœ‰æ•ˆ
+
+	
+    UINT1 conn_state;  					//by:yhy  sw state
+    void *data;        					//by:yhy  store sock fd funptr
+    pthread_mutex_t sock_state_mutex;
+	p_loop_buffer recv_loop_buffer;
+	UINT1 TimerTask;
 }gn_switch_t;
 
 
+
+
+
+
 /*
- * ÏûÏ¢ÇëÇóĞÅÏ¢½á¹¹Ìå
+ * ï¿½ï¿½Ï¢ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ï¢ï¿½á¹¹ï¿½ï¿½
  */
 typedef struct role_req_info
 {
@@ -278,6 +353,7 @@ typedef struct packout_req_info
     UINT1 *data;
 }packout_req_info_t;
 
+//by:yhy ä¸‹å‘äº¤æ¢æœºçš„æµè¡¨æ“ä½œç»“æ„ä½“ å‚è§"openflow 1.3"->P55->struct ofp_flow_mod 
 typedef struct flow_mod_req_info
 {
     UINT4 xid;
@@ -319,12 +395,13 @@ typedef struct stats_req_info
 {
     UINT2 type;
     UINT2 flags;
+    UINT4 xid;
     UINT1 *data;
 }stats_req_info_t;
 
 typedef struct neutron_network
 {
-    BOOL is_using;               //ÊÇ·ñÒÑÕ¼ÓÃ
+    BOOL is_using;               //ï¿½Ç·ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½
     INT1 name[64];
     INT1 physical_network[64];
     BOOL admin_state_up;
@@ -338,7 +415,7 @@ typedef struct neutron_network
 
 typedef struct neutron_subnet
 {
-    BOOL is_using;              //ÊÇ·ñÒÑÕ¼ÓÃ
+    BOOL is_using;              //ï¿½Ç·ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½
     INT1 ippool_start[32];
     INT1 ippool_end[32];
     INT1 host_routes[64];
@@ -356,7 +433,7 @@ typedef struct neutron_subnet
 
 typedef struct neutron_port
 {
-    BOOL is_using;       //ÊÇ·ñÒÑÕ¼ÓÃ
+    BOOL is_using;       //ï¿½Ç·ï¿½ï¿½ï¿½Õ¼ï¿½ï¿½
     char binding_host_id[63];
 
     char allowed_address_pairs[64];
@@ -377,9 +454,14 @@ typedef struct neutron_port
 }neutron_port_t;
 #pragma pack()
 
-typedef void (*initcall_t)();
+
+//by:yhy åˆ›å»ºä¸€ä¸ªåŒä¹‰å­— initcall_t æŒ‡ä»£å‚æ•°ä¸ºç©ºè¿”å›ä¸ºvoidçš„å‡½æ•°æŒ‡é’ˆ
+typedef void (*initcall_t)();	
+//by:yhy å¼•ç”¨ä¸¤ä¸ªå¤–éƒ¨initcall_tç±»å‹å˜é‡ æŒ‡ä»£å‡½æ•°æŒ‡é’ˆèµ·å§‹åœ°å€å’Œå‡½æ•°æŒ‡é’ˆç»ˆæ­¢åœ°å€
 extern initcall_t __start_appinit_sec, __stop_appinit_sec;
+//by:yhy å®å®šä¹‰data_attr_initä¸ºç¼–è¯‘å±æ€§__attribute__ ((section ("appinit_sec"))),(å³ç¼–è¯‘åˆ°åå­—ä¸º"appinit_sec"çš„å­—æ®µé‡Œ)
 #define data_attr_init __attribute__ ((section ("appinit_sec")))
+//by:yhy app_initå…¶å®å°±æ˜¯é€ä¸ªå°†å‚æ•°å†…çš„å‡½æ•°å‹å…¥åå­—ä¸º"appinit_sec"çš„å­—æ®µ,ä¸”è¯¥å­—æ®µèµ·å§‹åœ°å€ä¸º__start_appinit_sec,ç»ˆæ­¢åœ°å€ä¸º__stop_appinit_sec
 #define app_init(x)   initcall_t _##x data_attr_init = x
 
 typedef void (*finicall_t)();

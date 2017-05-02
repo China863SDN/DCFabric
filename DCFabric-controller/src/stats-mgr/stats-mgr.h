@@ -46,4 +46,6 @@ void of13_proc_flow_stats(gn_switch_t *sw, UINT1 *stats, UINT2 length);
 INT4 init_stats_mgr();
 void fini_stats_mgr();
 
+void *get_throughput();
+
 #endif /* STATS_MGR_H_ */

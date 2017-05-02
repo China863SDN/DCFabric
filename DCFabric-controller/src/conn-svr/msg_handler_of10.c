@@ -33,10 +33,11 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 #include "gn_inet.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "openstack/openstack_host.h"
+#include "fabric_flows.h"
 
 convertter_t of10_convertter;
 msg_handler_t of10_message_handler[OFP10_MAX_MSG];
@@ -179,22 +180,26 @@ convertter_t of10_convertter =
 
 static INT4 of10_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_hello);
-    init_sendbuff(sw, OFP10_VERSION, OFPT_HELLO, total_len, 0);
-    send_of_msg(sw, total_len);
-
-    sw->msg_driver.msg_handler[OFPT_FEATURES_REQUEST](sw, of_msg);
-
+	LOG_PROC("OF10", "%s -- START",FN);
+    if (of_msg)
+	{
+    	sw->msg_driver.msg_handler[OFPT_FEATURES_REQUEST](sw, of_msg);
+	}
+	else
+	{
+		UINT2 total_len = sizeof(struct ofp_hello);
+	    init_sendbuff(sw, OFP10_VERSION, OFPT_HELLO, total_len, 0);
+	    send_of_msg(sw, total_len);
+	}
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_error(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     struct ofp_error_msg *ofp_err = (struct ofp_error_msg *)of_msg;
-
-    printf("%s: switch 0x%llx sent error type %hu code %hu     ", FN,
-               sw->dpid, ntohs(ofp_err->type), ntohs(ofp_err->code));
-
+    printf("%s: switch 0x%llx sent error type %hu code %hu     ", FN,sw->dpid, ntohs(ofp_err->type), ntohs(ofp_err->code));
     switch(ntohs(ofp_err->type))
     {
         case OFPET_HELLO_FAILED:
@@ -202,10 +207,10 @@ static INT4 of10_msg_error(gn_switch_t *sw, UINT1 *of_msg)
              break;
 
         case OFPET_BAD_REQUEST:
-             {
-                 printf("Bad request");
-                 break;
-             }
+		{
+			 printf("Bad request");
+			 break;
+		}
 
         case OFPET_BAD_ACTION:
              printf("Bad action");
@@ -226,23 +231,49 @@ static INT4 of10_msg_error(gn_switch_t *sw, UINT1 *of_msg)
         default:
             break;
     }
-
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
-
-static INT4 of10_msg_echo_request(gn_switch_t *sw, UINT1 *of_msg)
+//openflow1.0ç‰ˆæœ¬å¿ƒè·³åŒ…å‘é€
+INT4 of10_msg_echo_request(gn_switch_t *sw, UINT1 *of_msg)
 {
-    return sw->msg_driver.msg_handler[OFPT_ECHO_REPLY](sw, of_msg);
+	LOG_PROC("OF10", "%s -- START",FN);
+    if (NULL == of_msg) 
+    {
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP10_VERSION, OFPT_ECHO_REQUEST, total_len, DEFAULT_TRANSACTION_XID);
+        LOG_PROC("OF10", "%s -- STOP",FN);
+		return send_of_msg(sw, total_len);
+    }
+    else
+    {
+		LOG_PROC("OF10", "%s -- STOP",FN);
+        return sw->msg_driver.msg_handler[OFPT_ECHO_REPLY](sw, of_msg);
+    }
 }
 
 static INT4 of10_msg_echo_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP10_VERSION, OFPT_ECHO_REPLY, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF10", "%s -- START",FN);
+    //æ”¶åˆ°å¿ƒè·³å“åº”
+    if (DEFAULT_TRANSACTION_XID == ((struct ofp_header*)of_msg)->xid) 
+    {
+        pthread_mutex_lock(&sw->sock_state_mutex);
+        sw->sock_state = 1;
+        pthread_mutex_unlock(&sw->sock_state_mutex);
+		LOG_PROC("OF10", "%s -- STOP",FN);
+        return GN_OK;
+    }
+    else
+    {
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP10_VERSION, OFPT_ECHO_REPLY, total_len, 0);
+		LOG_PROC("OF10", "%s -- STOP",FN);
+        return send_of_msg(sw, total_len);
+    }
 }
 
+//by:yhy æœªä½¿ç”¨
 static INT4 of10_msg_vendor(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
@@ -251,14 +282,17 @@ static INT4 of10_msg_vendor(gn_switch_t *sw, UINT1 *of_msg)
 
 static INT4 of10_msg_features_request(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     UINT2 total_len = sizeof(struct ofp_header);
     init_sendbuff(sw, OFP10_VERSION, OFPT_FEATURES_REQUEST, total_len, 0);
     send_of_msg(sw, total_len);
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     stats_req_info_t stats_req_info;
     INT4 n_ports, i, port = 0;
     gn_port_t new_sw_ports;
@@ -276,6 +310,7 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     sw->msg_driver.msg_handler[OFPT_GET_CONFIG_REQUEST](sw, of_msg);
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.type = OFPST_DESC;
     sw->msg_driver.msg_handler[OFPT_STATS_REQUEST](sw, (UINT1 *)&stats_req_info);
 
@@ -284,7 +319,10 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
 
     if(n_ports == 0)
     {
-        return GN_ERR;
+		//by:yhy add 201701051031
+		LOG_PROC("ERROR", "of10_msg_features_reply -- n_ports == 0  Finall return GN_ERR");
+        LOG_PROC("OF10", "%s -- STOP",FN);
+		return GN_ERR;
     }
 
     if(n_ports > MAX_PORTS)
@@ -297,7 +335,7 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     {
         (sw->msg_driver.convertter->port_convertter)((UINT1 *)&osf->ports[i], &new_sw_ports);
 
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //é»˜è®¤æœ€å¤§é€ŸçŽ‡1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         if (new_sw_ports.port_no == OFPP_LOCAL)
         {
@@ -309,33 +347,39 @@ static INT4 of10_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
         port++;
     }
 
-    sw->n_ports = port; //²»°üÀ¨lo
+    sw->n_ports = port; //ä¸åŒ…æ‹¬lo
 
     {
         UINT1 dpid[8];
         ulli64_to_uc8(sw->dpid, dpid);
-        LOG_PROC("INFO", "New Openflow10 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d]", dpid[0],
-                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port));
+        LOG_PROC("INFO", "New Openflow10 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d], dpid:%llu", dpid[0],
+                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port), sw->dpid);
     }
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_get_config_request(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     UINT2 total_len = sizeof(struct ofp_header);
     init_sendbuff(sw, OFP10_VERSION, OFPT_GET_CONFIG_REQUEST, total_len, 0);
     send_of_msg(sw, total_len);
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_get_config_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     sw->msg_driver.msg_handler[OFPT_BARRIER_REQUEST](sw, of_msg);
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_set_config(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     UINT2 total_len = sizeof(struct ofp10_switch_config);
     UINT1 * data = init_sendbuff(sw, OFP10_VERSION, OFPT_SET_CONFIG, total_len, 0);
 
@@ -344,11 +388,13 @@ static INT4 of10_msg_set_config(gn_switch_t *sw, UINT1 *of_msg)
     of_config->miss_send_len = htons(1500);    /* Max bytes of new flow that datapath should send to the controller. */
 
     send_of_msg(sw, total_len);
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_packet_in(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     packet_in_info_t packet_in_info;
     struct ofp_packet_in *of_pkt = (struct ofp_packet_in *)of_msg;
 
@@ -357,23 +403,27 @@ static INT4 of10_msg_packet_in(gn_switch_t *sw, UINT1 *of_msg)
     packet_in_info.inport = (UINT4)ntohs(of_pkt->in_port);
     packet_in_info.data_len = ntohs(of_pkt->header.length) - offsetof(struct ofp_packet_in, data);
     packet_in_info.data = of_pkt->data;
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return packet_in_process(sw, &packet_in_info);
 }
 
 static INT4 of10_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     struct ofp_flow_removed *ofp_fr = (struct ofp_flow_removed *)of_msg;
     gn_flow_t flow;
 
     flow.priority = ntohs(ofp_fr->priority);
     flow.table_id = 0;
     sw->msg_driver.convertter->oxm_convertter((UINT1 *)&(ofp_fr->match), &(flow.match.oxm_fields));
-
+	
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return flow_entry_timeout(sw, &flow);
 }
 
 static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     INT4 port;
     gn_port_t new_sw_ports;
     struct ofp_port_status *ops = (struct ofp_port_status *)of_msg;
@@ -382,14 +432,17 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
     {
         LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of10_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
+        set_fabric_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
 
-        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
-
-        //Ä¬ÈÏ×î´óËÙÂÊ1000Mbps
+        //é»˜è®¤æœ€å¤§é€ŸçŽ‡1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
+        if((sw->n_ports)>(MAX_PORTS-1))
+		{
+			sw->n_ports=(MAX_PORTS-1);
+		}
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
-
+		LOG_PROC("OF10", "%s -- STOP",FN);
         return GN_OK;
     }
     else if (ops->reason == OFPPR_DELETE)
@@ -401,26 +454,28 @@ static INT4 of10_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
     }
 
-    //É¾³ýÄ¿µÄ×ª·¢¿ÚdownµôµÄÁ÷±í
+    //åˆ é™¤ç›®çš„è½¬å‘å£downæŽ‰çš„æµè¡¨
 //    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
 
-    //¸üÐÂÍØÆË
+    //æ›´æ–°æ‹“æ‰‘
     for (port = 0; port < sw->n_ports; port++)
     {
         if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
         {
             sw->ports[port].state = ntohl(ops->desc.state);
-            free(sw->neighbor[port]);
-            sw->neighbor[port] = NULL;
+            //free(sw->neighbor[port]);
+            //sw->neighbor[port] = NULL;
+            sw->neighbor[port]->bValid = FALSE;
             break;
         }
     }
-
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     packout_req_info_t *packout_req_info = (packout_req_info_t *)pktout_req;
     UINT2 total_len = sizeof(struct ofp_packet_out) + sizeof(struct ofp_action_output);
     if (packout_req_info->buffer_id == OFP_NO_BUFFER)
@@ -446,6 +501,7 @@ static INT4 of10_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
         memcpy(of10_out->data + sizeof(struct ofp_action_output), packout_req_info->data, packout_req_info->data_len);
     }
 
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return send_of_msg(sw, total_len);
 }
 
@@ -701,6 +757,7 @@ static UINT2 of10_add_action(UINT1 *buf, gn_action_t *action)
 
 static INT4 of10_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     flow_mod_req_info_t *mod_info = (flow_mod_req_info_t *)flowmod_req;
     UINT2 total_len = sizeof(struct ofp_flow_mod);
     UINT1 *data = init_sendbuff(sw, OFP10_VERSION, OFPT_FLOW_MOD, total_len, mod_info->xid);
@@ -722,9 +779,19 @@ static INT4 of10_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
     }
     ofm->header.length = htons(total_len);
 
+    if(mod_info->command == OFPFC_ADD)
+    {
+    	add_flow_entry(sw,mod_info->flow);
+    }
+    else if(mod_info->command == OFPFC_DELETE)
+    {
+		clean_flow_entry(sw,mod_info->flow);
+    }
+	
+	LOG_PROC("OF10", "%s -- START",FN);
     return send_of_msg(sw, total_len);
 }
-
+//by:yhy æœªä½¿ç”¨
 static INT4 of10_msg_port_mod(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
@@ -733,10 +800,11 @@ static INT4 of10_msg_port_mod(gn_switch_t *sw, UINT1 *of_msg)
 
 static INT4 of10_msg_stats_request(gn_switch_t *sw, UINT1 *stats_req)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     stats_req_info_t *stats_req_info = (stats_req_info_t *)stats_req;
 
     UINT2 total_len  = sizeof(struct ofp_stats_request);
-    UINT1 *data = init_sendbuff(sw, OFP10_VERSION, OFPT_STATS_REQUEST, total_len, 0);
+    UINT1 *data = init_sendbuff(sw, OFP10_VERSION, OFPT_STATS_REQUEST, total_len, stats_req_info->xid);
 
     struct ofp_stats_request *ofp_sr = (struct ofp_stats_request *)data;
     ofp_sr->type  = htons(stats_req_info->type);
@@ -790,11 +858,13 @@ static INT4 of10_msg_stats_request(gn_switch_t *sw, UINT1 *stats_req)
     }
 
     ofp_sr->header.length = htons(total_len);
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return send_of_msg(sw, total_len);
 }
 
 static INT4 of10_msg_stats_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     struct ofp_stats_reply *ofp_sr = (struct ofp_stats_reply *)of_msg;
 
     switch (ntohs(ofp_sr->type))
@@ -827,31 +897,33 @@ static INT4 of10_msg_stats_reply(gn_switch_t *sw, UINT1 *of_msg)
             break;
         }
     }
-
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
 
 static INT4 of10_msg_barrier_request(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF10", "%s -- START",FN);
     UINT2 total_len = sizeof(struct ofp_header);
     init_sendbuff(sw, OFP10_VERSION, OFPT_BARRIER_REQUEST, total_len, 0);
-
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return send_of_msg(sw, total_len);
 }
 
 static INT4 of10_msg_barrier_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
-    //todo
-    //delete all flow entries.
+    LOG_PROC("OF10", "%s -- START",FN);
+	install_delete_fabric_flow(sw);
+	LOG_PROC("OF10", "%s -- STOP",FN);
     return GN_OK;
 }
-
+//by:yhy æœªä½¿ç”¨
 static INT4 of10_msg_queue_get_config_request(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy æœªä½¿ç”¨
 static INT4 of10_msg_queue_get_config_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo

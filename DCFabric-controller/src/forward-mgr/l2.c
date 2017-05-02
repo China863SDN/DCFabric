@@ -130,7 +130,7 @@ void l2_flowmod_chain(UINT8 src_topo_id, UINT8 dst_topo_id, mac_user_t *user_src
 
         //��ǰ������
         sw_pre = g_adac_matrix.sw[src_topo_id][id_tmp];
-        if((NULL == sw_pre) || (0 == sw_pre->state))
+        if((NULL == sw_pre) || (INITSTATE == sw_pre->conn_state))
         {
             goto END;
         }
@@ -157,6 +157,7 @@ END:
 
 void l2_proc(gn_switch_t *sw, mac_user_t *user_src, mac_user_t *user_dst, packet_in_info_t *packet_in_info)
 {
+	/*Need to be deleted
     packout_req_info_t pakout_req;
     UINT4 outport = OFPP13_FLOOD;
     if(NULL != user_dst)
@@ -198,6 +199,7 @@ void l2_proc(gn_switch_t *sw, mac_user_t *user_src, mac_user_t *user_dst, packet
     {
         sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
     }
+	*/
 }
 
 INT4 init_l2()

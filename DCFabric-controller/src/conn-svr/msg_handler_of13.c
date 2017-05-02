@@ -36,30 +36,44 @@
 #include "gn_inet.h"
 #include "../flow-mgr/flow-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 #include "../stats-mgr/stats-mgr.h"
 #include "../event/event_service.h"
 #include "openstack/openstack_host.h"
+#include "fabric_impl.h"
+#include "fabric_flows.h"
+#include "openstack/fabric_openstack_nat.h"
+#include "fabric_openstack_arp.h"
+#include "fabric_stats.h"
+#include "openstack_lbaas_app.h"
+#include "../group-mgr/group-mgr.h"
+#include "../meter-mgr/meter-mgr.h"
+#include "../qos-mgr/qos-mgr.h"
 
 convertter_t of13_convertter;
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
+extern UINT4 g_openstack_on;
+
+UINT4 DEFAULT_TRANSACTION_XID = 0xFFFFFFFF;
 
 void of13_delete_line(gn_switch_t* sw,UINT4 port_index){
 	gn_switch_t* n_sw = NULL;
 	UINT4 port = 0, n_port = 0,n_port_index = 0;
 	// event delete line between 2 ports
-	if(sw->neighbor[port_index] != NULL){
+	//if(sw->neighbor[port_index] != NULL){
+	if(sw->neighbor[port_index]->bValid){
 		n_sw = sw->neighbor[port_index]->sw;
 		port = sw->ports[port_index].port_no;
 		// if neighbor is alived, find neighbor, delete port
-		if(n_sw->state != 0){
+		if(n_sw->conn_state != INITSTATE){
 			n_port = sw->neighbor[port_index]->port->port_no;
 			// get neighbor sw's neighbor
 			for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
 				if(n_sw->ports[n_port_index].port_no == n_port){
 					if(n_sw->neighbor[n_port_index] != NULL){
-			            free(n_sw->neighbor[n_port_index]);
-			            n_sw->neighbor[n_port_index] = NULL;
+			           // free(n_sw->neighbor[n_port_index]);
+			           // n_sw->neighbor[n_port_index] = NULL;
+			           n_sw->neighbor[n_port_index]->bValid = FALSE;
 			            // delete neighbor
 						event_delete_switch_port_on(n_sw,n_port);
 					}
@@ -67,8 +81,9 @@ void of13_delete_line(gn_switch_t* sw,UINT4 port_index){
 				}
 			}
 		}
-	    free(sw->neighbor[port_index]);
-	    sw->neighbor[port_index] = NULL;
+	    //free(sw->neighbor[port_index]);
+	    //sw->neighbor[port_index] = NULL;
+	    sw->neighbor[port_index]->bValid = FALSE;
 		event_delete_switch_port_on(sw,port);
 	}
 	// event end
@@ -148,7 +163,7 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
         case (OFPXMT_OFB_VLAN_PCP):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_VLAN_PCP);
-            gn_oxm->vlan_pcp = ntohs(*(UINT2 *)(of_oxm->data));
+            gn_oxm->vlan_pcp = (*(UINT1 *)(of_oxm->data));
             break;
         }
         case (OFPXMT_OFB_IP_DSCP):
@@ -169,6 +184,7 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
             gn_oxm->ip_proto = *(UINT1 *)(of_oxm->data);
             break;
         }
+		/*
         case (OFPXMT_OFB_IPV4_SRC):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC);
@@ -194,6 +210,20 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
 
             break;
         }
+		*/
+        case (OFPXMT_OFB_IPV4_SRC):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC);
+            gn_oxm->ipv4_src = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		case (OFPXMT_OFB_IPV4_SRC_PREFIX):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_SRC_PREFIX);
+            gn_oxm->ipv4_src_prefix = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		/*
         case (OFPXMT_OFB_IPV4_DST):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST);
@@ -219,6 +249,19 @@ static UINT1 of13_oxm_convertter(UINT1 *oxm, gn_oxm_t *gn_oxm)
 
             break;
         }
+        */
+        case (OFPXMT_OFB_IPV4_DST):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST);
+            gn_oxm->ipv4_dst = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
+		case (OFPXMT_OFB_IPV4_DST_PREFIX):
+        {
+            gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_IPV4_DST_PREFIX);
+            gn_oxm->ipv4_dst_prefix = ntohl(*(UINT4 *)(of_oxm->data));
+        }
+		break;
         case (OFPXMT_OFB_TCP_SRC):
         {
             gn_oxm->mask |= (MASK_SET << OFPXMT_OFB_TCP_SRC);
@@ -394,20 +437,28 @@ convertter_t of13_convertter =
     .port_convertter = of13_port_convertter,
     .oxm_convertter = of13_oxm_convertter
 };
-
-static INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
+//by:yhy 
+INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_hello);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_HELLO, total_len, 0);
-    send_of_msg(sw, total_len);
-
-    sw->msg_driver.msg_handler[OFPT13_FEATURES_REQUEST](sw, of_msg);
-
+	LOG_PROC("OF13", "of13_msg_hello -- START");
+    if (of_msg)
+    {		
+    	sw->msg_driver.msg_handler[OFPT13_FEATURES_REQUEST](sw, of_msg);
+    }
+	else 
+	{
+		Msg_Buf(struct ofp_hello);
+		UINT2 nLen = sizeof(struct ofp_hello);
+		init_header(&(pMsg->header),OFP13_VERSION,OFPT13_HELLO,nLen,0);
+		send_packet(sw, msgbuf, nLen);
+	}
+	LOG_PROC("OF13", "of13_msg_hello -- STOP");
     return GN_OK;
 }
-
+//by:yhy 仅仅将错误类型输出至屏幕
 static INT4 of13_msg_error(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "of13_msg_error -- START");
     struct ofp_error_msg *ofp_err = (struct ofp_error_msg *)of_msg;
 
     LOG_PROC("ERROR", "%s: switch %s 0x%llx sent error type %hu code %hu  ", FN,
@@ -479,22 +530,55 @@ static INT4 of13_msg_error(gn_switch_t *sw, UINT1 *of_msg)
     default:
         break;
     }
-
+	LOG_PROC("OF13", "of13_msg_error -- STOP");
     return GN_OK;
 }
 
-static INT4 of13_msg_echo_request(gn_switch_t *sw, UINT1 *echo_req)
+//openflow1.3版本心跳包发送
+INT4 of13_msg_echo_request(gn_switch_t *sw, UINT1 *echo_req)
 {
-    return sw->msg_driver.msg_handler[OFPT13_ECHO_REPLY](sw, echo_req);
-    return GN_OK;
-}
+	LOG_PROC("OF13", "of13_msg_echo_request -- START");
+    if (NULL == echo_req) 
+    {//by:yhy 发送心跳包
+		Msg_Buf(struct ofp_header);
+		UINT2 nLen = sizeof(struct ofp_header);
+		init_header(pMsg,OFP13_VERSION,OFPT13_ECHO_REQUEST,nLen,DEFAULT_TRANSACTION_XID);
+		return send_packet(sw, msgbuf, nLen);
+    }
+    else
+    {//by:yhy 收到心跳包对其进行响应
+		LOG_PROC("OF13", "of13_msg_echo_request -- STOP");
+        return sw->msg_driver.msg_handler[OFPT13_ECHO_REPLY](sw, echo_req);
+    }
 
+}
+//by:yhy 
 static INT4 of13_msg_echo_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_ECHO_REPLY, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "of13_msg_echo_reply -- START");
+    //by:yhy 收到心跳响应
+    if (DEFAULT_TRANSACTION_XID == ((struct ofp_header*)of_msg)->xid) 
+    {
+        pthread_mutex_lock(&sw->sock_state_mutex);
+        sw->sock_state = 1;
+        pthread_mutex_unlock(&sw->sock_state_mutex);
+		LOG_PROC("OF13", "of13_msg_echo_reply -- STOP");
+        return GN_OK;
+    }
+    else 
+    {
+		/*
+        UINT2 total_len = sizeof(struct ofp_header);
+        init_sendbuff(sw, OFP13_VERSION, OFPT13_ECHO_REPLY, total_len, 0);
+		LOG_PROC("OF13", "of13_msg_echo_reply -- STOP");
+        return send_of_msg(sw, total_len);
+		*/
+		
+		Msg_Buf(struct ofp_header);
+		UINT2 nLen = sizeof(struct ofp_header);
+		init_header(pMsg,OFP13_VERSION,OFPT13_ECHO_REPLY,nLen,0);
+		return send_packet(sw, msgbuf, nLen);
+    }
 }
 
 static INT4 of13_msg_experimenter(gn_switch_t *sw, UINT1 *of_msg)
@@ -502,21 +586,26 @@ static INT4 of13_msg_experimenter(gn_switch_t *sw, UINT1 *of_msg)
     //todo
     return GN_OK;
 }
-
+//by:yhy 仅仅发送请求交换机特征的数据包
 static INT4 of13_msg_features_request(gn_switch_t *sw, UINT1 *fea_req)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_FEATURES_REQUEST, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "%s-- START",FN);
+    Msg_Buf(struct ofp_header);
+    UINT2 nLen = sizeof(struct ofp_header);
+    init_header(pMsg,OFP13_VERSION,OFPT13_FEATURES_REQUEST,nLen,0);
+    return send_packet(sw, msgbuf, nLen);
 }
 
 static INT4 of13_table_miss(gn_switch_t *sw, unsigned char *of_msg)
 {
+	LOG_PROC("OF13", "of13_table_miss -- START");
     UINT2 total_len  = sizeof(struct ofp13_flow_mod) + ALIGN_8(sizeof(struct ofp_instruction)) + sizeof(struct ofp13_action_output);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_FLOW_MOD, total_len, 0);
-
-    struct ofp13_flow_mod *ofm = (struct ofp13_flow_mod *)data;
+    //UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_FLOW_MOD, total_len, 0);
+	
+	Msg_Buf(struct ofp13_flow_mod);
+	init_header(&(pMsg->header),OFP13_VERSION,OFPT13_FLOW_MOD,total_len,0);
+	
+    struct ofp13_flow_mod *ofm = (struct ofp13_flow_mod *)pMsg;
     ofm->cookie = 0x0;
     ofm->cookie_mask = 0x0;
     ofm->table_id = 0x0;
@@ -543,16 +632,20 @@ static INT4 of13_table_miss(gn_switch_t *sw, unsigned char *of_msg)
     ofp13_ao->len     = htons(16);
     ofp13_ao->port    = htonl(OFPP13_CONTROLLER);
     ofp13_ao->max_len = htons(0xffff);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "of13_table_miss -- STOP");
+    return send_packet(sw, msgbuf, total_len);
 }
 
 INT4 of13_remove_all_flow(gn_switch_t *sw, UINT1 *ofmsg)
 {
+	LOG_PROC("OF13", "%s -- START",FN);
     UINT2 total_len = sizeof(struct ofp13_flow_mod) + ALIGN_8(sizeof(struct ofp_instruction));
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_FLOW_MOD, total_len, 0);
-
-    struct ofp13_flow_mod *ofm = (struct ofp13_flow_mod *) data;
+    //UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_FLOW_MOD, total_len, 0);
+	
+	Msg_Buf(struct ofp13_flow_mod);
+	init_header(&(pMsg->header),OFP13_VERSION,OFPT13_FLOW_MOD,total_len,0);
+	
+    struct ofp13_flow_mod *ofm = (struct ofp13_flow_mod *) pMsg;
     ofm->cookie = 0x0;
     ofm->cookie_mask = 0x0;
     ofm->table_id = OFPTT_ALL;
@@ -575,11 +668,12 @@ INT4 of13_remove_all_flow(gn_switch_t *sw, UINT1 *ofmsg)
     oin->type = htons(OFPIT_APPLY_ACTIONS);
     oin->len = htons(ALIGN_8(sizeof(struct ofp_instruction)));
 
-    return send_of_msg(sw, total_len);
+    return send_packet(sw, msgbuf, total_len);
 }
-
+//by:yhy 索引"OFPT13_FEATURES_REPLY",处理交换机的特征响应包,同时配置交换机,同时请求交换机的端口描述,流表等大量信息,更新拓补
 static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "of13_msg_features_reply -- START");
     struct ofp13_switch_features *osf = (struct ofp13_switch_features *)of_msg;
     stats_req_info_t stats_req_info;
 
@@ -592,6 +686,7 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     sw->msg_driver.msg_handler[OFPT13_GET_CONFIG_REQUEST](sw, of_msg);
 
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.type = OFPMP_DESC;
     sw->msg_driver.msg_handler[OFPT13_MULTIPART_REQUEST](sw, (UINT1 *)&stats_req_info);
 
@@ -610,9 +705,14 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
     {
         UINT1 dpid[8];
         ulli64_to_uc8(sw->dpid, dpid);
-        LOG_PROC("INFO", "New Openflow13 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d]", dpid[0],
-                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port));
-        // event add a switch
+		
+		//LOG_PROC("INFO","|------------------------------------------------------------------------|");
+        //LOG_PROC("INFO", "New Openflow13 switch ,manufacturer : %s ;port quantity : %d",sw->sw_desc.mfr_desc,sw->n_ports);
+        /*LOG_PROC("INFO", "New Openflow13 switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] connected: ip[%s:%d], dpid:%llu", dpid[0],
+                dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7], inet_htoa(ntohl(sw->sw_ip)), ntohs(sw->sw_port), sw->dpid);*/
+		//LOG_PROC("INFO","|------------------------------------------------------------------------|");
+
+		// event add a switch
         event_add_switch_on(sw);
         // event end
     }
@@ -625,35 +725,38 @@ static INT4 of13_msg_features_reply(gn_switch_t *sw, UINT1 *of_msg)
 
         sw->msg_driver.msg_handler[OFPT13_ROLE_REQUEST](sw, (UINT1 *)&role_req_info);
     }
-
+	LOG_PROC("OF13", "of13_msg_features_reply -- STOP");
+	sw->qos_type = init_sw_qos_type(sw);
     return GN_OK;
 }
-
+//by:yhy 请求交换机发送配置信息
 static INT4 of13_msg_get_config_request(gn_switch_t *sw, UINT1 *get_conf_req)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_GET_CONFIG_REQUEST, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "%s-- START",FN);
+	Msg_Buf(struct ofp_header);
+	UINT2 nLen = sizeof(struct ofp_header);
+	init_header(pMsg,OFP13_VERSION,OFPT13_GET_CONFIG_REQUEST,nLen,0);
+	return send_packet(sw, msgbuf, nLen);
 }
-
+//by:yhy 
 static INT4 of13_msg_get_config_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "of13_msg_get_config_reply -- START");
     sw->msg_driver.msg_handler[OFPT13_BARRIER_REQUEST](sw, of_msg);
+	LOG_PROC("OF13", "of13_msg_get_config_reply -- STOP");
     return GN_OK;
 }
-
+//by:yhy ip分片不做特殊处理,交换机通过pipeline发送至控制器的最大packet包长为1500
 static INT4 of13_msg_set_config(gn_switch_t *sw, UINT1 *config)
 {
-    UINT2 total_len = sizeof(struct ofp13_switch_config);
-    UINT1 * data = init_sendbuff(sw, OFP13_VERSION, OFPT13_SET_CONFIG, total_len, 0);
-
-    struct ofp13_switch_config *of_config = (struct ofp13_switch_config *)data;
-//    of_config->flags = htons(OFPC_FRAG_MASK);
-    of_config->flags = htons(OFPC_FRAG_NORMAL);
-    of_config->miss_send_len = htons(1500);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "of13_msg_set_config -- START");
+	
+	Msg_Buf(struct ofp13_switch_config);
+    UINT2 nLen = sizeof(struct ofp13_switch_config);
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_SET_CONFIG,nLen,0);
+	pMsg->flags = htons(OFPC_FRAG_NORMAL);
+    pMsg->miss_send_len = htons(1500);
+    return send_packet(sw, msgbuf, nLen);
 }
 
 UINT4 of13_get_pkt_inport(struct ofp13_packet_in *of_pkt_in)
@@ -664,11 +767,15 @@ UINT4 of13_get_pkt_inport(struct ofp13_packet_in *of_pkt_in)
 
     if (ntohs(of_pkt_in->match.type) != OFPMT_OXM || len < sizeof(struct ofpx_match))
     {
+		//by:yhy add 201701051031
+		LOG_PROC("ERROR", "of13_get_pkt_inport -- ntohs(of_pkt_in->match.type) != OFPMT_OXM || len < sizeof(struct ofpx_match)");
         return GN_ERR;
     }
 
     if (ntohs(oxm_ptr->oxm_class) != OFPXMC_OPENFLOW_BASIC)
     {
+		//by:yhy add 201701051031
+		LOG_PROC("ERROR", "of13_get_pkt_inport -- ntohs(oxm_ptr->oxm_class) != OFPXMC_OPENFLOW_BASIC");
         return GN_ERR;
     }
 
@@ -693,9 +800,10 @@ UINT1 *of13_get_pkt_data(struct ofp13_packet_in *of_pkt_in)
 
     return data;
 }
-
+//by:yhy
 static INT4 of13_msg_packet_in(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "%s -- START",FN);
     packet_in_info_t packet_in_info;
     struct ofp13_packet_in *of_pkt = (struct ofp13_packet_in *)of_msg;
     struct ofp_oxm_header *oxm_ptr = (void *)(of_pkt->match.oxm_fields);
@@ -703,19 +811,14 @@ static INT4 of13_msg_packet_in(gn_switch_t *sw, UINT1 *of_msg)
     packet_in_info.xid = ntohl(of_pkt->header.xid);
     packet_in_info.buffer_id = ntohl(of_pkt->buffer_id);
     packet_in_info.inport = ntohl(*(UINT4 *)(oxm_ptr->data));
-    packet_in_info.data_len = ntohs(of_pkt->header.length) - sizeof(struct ofp13_packet_in)
-                    - ALIGN_8(htons(of_pkt->match.length)) + sizeof(struct ofpx_match) - 2;
-
+    packet_in_info.data_len = ntohs(of_pkt->header.length) - sizeof(struct ofp13_packet_in)- ALIGN_8(htons(of_pkt->match.length)) + sizeof(struct ofpx_match) - 2;
     packet_in_info.data = of13_get_pkt_data(of_pkt);
 
-//    ether_t *ether_header = (ether_t *)packet_in_info.data;
-//    if(ether_header->proto != htons(ETHER_LLDP)){
-//    	printf("Table id: %d,Protocal : 0x%x \n",of_pkt->table_id,htonl(ether_header->proto));
-//    }
+	//LOG_PROC("OF13", "%s -- STOP",FN);
     return packet_in_process(sw, &packet_in_info);
 }
 
-static void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match)
+void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match)
 {
     UINT2 oxm_tot_len = ntohs(of_match->length);
     UINT2 oxm_len = 4;
@@ -731,89 +834,92 @@ static void of13_parse_match(struct ofpx_match *of_match, gn_match_t *gn_match)
     }
 }
 
+static void of13_parse_match_nat(struct ofpx_match *of_match, gn_match_t *gn_match)
+{
+    UINT2 oxm_tot_len = ntohs(of_match->length);
+    UINT2 oxm_len = 4;
+    UINT1 field_len = 0;
+    UINT1 *oxm = of_match->oxm_fields;
+
+    memset(gn_match, 0, sizeof(gn_match_t));
+
+    while(oxm_len < ALIGN_8(oxm_tot_len))
+    {
+        field_len = of13_oxm_convertter((UINT1 *)oxm, &(gn_match->oxm_fields));
+        oxm += sizeof(struct ofp_oxm_header) + field_len;
+        oxm_len += sizeof(struct ofp_oxm_header) + field_len;
+    }
+}
+//by:yhy 没有被调人工用 (索引OFPT13_FLOW_REMOVED)
 static INT4 of13_msg_flow_removed(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "%s,%d -- START",FN,sw->index);
     struct ofp13_flow_removed *ofp_fr = (struct ofp13_flow_removed *)of_msg;
+    UINT4 flow_priority = ntohs(ofp_fr->priority);
+    UINT2 flow_port = 0;
 
     gn_flow_t flow;
     flow.priority = ntohl(ofp_fr->priority);
     flow.table_id = ofp_fr->table_id;
 
     memset(&flow, 0, sizeof(gn_flow_t));
-    of13_parse_match(&(ofp_fr->match), &(flow.match));
 
+    if (FABRIC_PRIORITY_LOADBALANCE_FLOW == flow_priority) 
+	{
+    	// LOG_PROC("INFO", "Load balance flow timeout!!");
+    	of13_parse_match_nat(&(ofp_fr->match), &(flow.match));
+    	if ((get_fabric_state()) && (0 != g_openstack_on)) 
+		{
+			if (IPPROTO_TCP == flow.match.oxm_fields.ip_proto) 
+			{
+				flow_port = flow.match.oxm_fields.tcp_src;
+			}
+			if (0 != flow_port) 
+			{
+				// printf("remove %d, %d\n", ntohl(flow.match.oxm_fields.ipv4_src), flow_port);
+				remove_openstack_lbaas_connect_by_ext_ip_portno(ntohl(flow.match.oxm_fields.ipv4_src), flow_port);
+			}
+    	}
+    }
+    if (FABRIC_PRIORITY_NAT_FLOW != flow_priority) 
+	{
+    	of13_parse_match(&(ofp_fr->match), &(flow.match));
+    }
+    else 
+	{
+    	// LOG_PROC("INFO", "NAT: flow timeout is %d!", flow_priority);
+    	of13_parse_match_nat(&(ofp_fr->match), &(flow.match));
+    	// if open stack on
+		if ((get_fabric_state()) && (0 != g_openstack_on)) 
+		{
+			if (IPPROTO_TCP == flow.match.oxm_fields.ip_proto) 
+			{
+				flow_port = flow.match.oxm_fields.tcp_src;
+
+			}
+			else if (IPPROTO_UDP == flow.match.oxm_fields.ip_proto) 
+			{
+				flow_port = flow.match.oxm_fields.udp_src;
+			}
+			else 
+			{
+				// do nothing
+			}
+
+			if (0 != flow_port) 
+			{
+				destroy_nat_connect_by_mac_and_port(sw, ntohl(flow.match.oxm_fields.ipv4_dst), flow.match.oxm_fields.eth_src, ntohs(flow_port), flow.match.oxm_fields.ip_proto);
+			}
+		}
+    }
+	LOG_PROC("OF13", "%s -- STOP",FN);
     return flow_entry_timeout(sw, &flow);
 }
-
+//by:yhy 没有被人工调用(索引OFPT13_PORT_STATUS)
 static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 {
-//    INT4 port;
-//    gn_port_t new_sw_ports;
-//    // event delete line between 2 ports
-//    gn_switch_t* n_sw = NULL;
-//    UINT4 n_port = 0;
-//    UINT4 n_port_index = 0;
-//    // event end
-//
-//    struct ofp13_port_status *ops = (struct ofp13_port_status *)of_msg;
-//
-//    if (ops->reason == OFPPR_ADD)
-//    {
-//        LOG_PROC("INFO", "New port found: %s", ops->desc.name);
-//        of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
-//
-//        //默锟斤拷锟斤拷锟斤拷锟斤拷锟�1000Mbps
-//        new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
-//        sw->ports[sw->n_ports] = new_sw_ports;
-//        sw->n_ports++;
-//
-//        return GN_OK;
-//    }
-//    else if (ops->reason == OFPPR_DELETE)
-//    {
-//        LOG_PROC("INFO", "Port deleted: %s", ops->desc.name);
-//    }
-//    else if (ops->reason == OFPPR_MODIFY)
-//    {
-//        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
-//    }
-//
-//    //删锟斤拷目锟斤拷转锟斤拷锟斤拷down锟斤拷锟斤拷锟斤拷锟斤拷
-////    l2_del_flowentry_by_portno(sw, ntohl(ops->desc.port_no));
-//
-//    //锟斤拷锟斤拷锟斤拷锟斤拷
-//    for (port = 0; port < sw->n_ports; port++)
-//    {
-//        if (sw->ports[port].port_no == ntohl(ops->desc.port_no))
-//        {
-//        	// event delete line between 2 ports
-//        	if(sw->neighbor[port] != NULL){
-//				n_sw = sw->neighbor[port]->sw;
-//				if(n_sw->state == 0){
-//					event_delete_switch_port_on(sw,port);
-//				}else{
-//					n_port = sw->neighbor[port]->port->port_no;
-//					for(n_port_index=0; n_port_index < n_sw->n_ports; n_port_index++){
-//						if(n_sw->ports[n_port_index].port_no == n_port){
-//							break;
-//						}
-//					}
-//					if(n_port_index < n_sw->n_ports && n_sw->neighbor[n_port_index] == NULL){
-//						event_delete_switch_port_on(sw,port);
-//						event_delete_switch_port_on(n_sw,n_port);
-//					}
-//				}
-//        	}
-//        	// event end
-//
-//            sw->ports[port].state = ntohl(ops->desc.state);
-//            free(sw->neighbor[port]);
-//            sw->neighbor[port] = NULL;
-//            break;
-//        }
-//    }
-//
-//    return GN_OK;
+
+	LOG_PROC("OF13", "%s -- START",FN);
     INT4 port_index,port_state,port_no;
     gn_port_t new_sw_ports;
 
@@ -824,39 +930,45 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 
     if (ops->reason == OFPPR_ADD)
     {
-        LOG_PROC("INFO", "New port found: %s", ops->desc.name);
+        //LOG_PROC("INFO", "New port found: %s", ops->desc.name);
         of13_port_convertter((UINT1 *)&ops->desc, &new_sw_ports);
-
-        set_openstack_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
-
+        set_fabric_host_port_portno(new_sw_ports.hw_addr, new_sw_ports.port_no);
         //1000Mbps
         new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
         for (port_index = 0; port_index < sw->n_ports; port_index++)
         {
-            if (sw->ports[port_index].port_no == port_no){
+            if (sw->ports[port_index].port_no == port_no)
+			{
             	sw->ports[port_index] = new_sw_ports;
             	return GN_OK;
             }
         }
+		if((sw->n_ports)>(MAX_PORTS-1))
+		{
+			sw->n_ports=(MAX_PORTS-1);
+		}
         sw->ports[sw->n_ports] = new_sw_ports;
         sw->n_ports++;
+        // remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
+		LOG_PROC("OF13", "%s -- STOP",FN);
         return GN_OK;
     }
     else if (ops->reason == OFPPR_DELETE)
     {
-        LOG_PROC("INFO", "Port deleted: %s", ops->desc.name);
-
+        //LOG_PROC("INFO", "Port deleted: %s", ops->desc.name);
         for (port_index = 0; port_index < sw->n_ports; port_index++)
         {
             if (sw->ports[port_index].port_no == port_no)
             {
             	sw->ports[port_index].state = port_state;
+            	remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
             	of13_delete_line(sw,port_index);
                 break;
             }
         }
     }
-    else if (ops->reason == OFPPR_MODIFY){
+    else if (ops->reason == OFPPR_MODIFY)
+	{
 //        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
 //        if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED){
 //			for (port_index = 0; port_index < sw->n_ports; port_index++)
@@ -871,16 +983,19 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 //        }else if( port_state == OFPPS13_LIVE){
 //        	// send lldp
 //        }
-        LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
-
+        //LOG_PROC("INFO", "Port state change: %s[new state: %d]", ops->desc.name, ntohl(ops->desc.state));
 		for (port_index = 0; port_index < sw->n_ports; port_index++)
 		{
 			if (sw->ports[port_index].port_no == port_no)
 			{
 				sw->ports[port_index].state = port_state;
-				if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED){
+				if(port_state == OFPPS13_LINK_DOWN || port_state == OFPPS13_BLOCKED)
+				{
+					// remove_flows_by_sw_port(sw->dpid, sw->ports[port_index].port_no);
 					of13_delete_line(sw,port_index);
-				}else if( port_state == OFPPS13_LIVE){
+				}
+				else if( port_state == OFPPS13_LIVE)
+				{
 					// send lldp
 					//lldp_tx(sw,port_no,sw->ports[port_index].hw_addr);
 				}
@@ -888,39 +1003,45 @@ static INT4 of13_msg_port_status(gn_switch_t *sw, UINT1 *of_msg)
 			}
 		}
     }
-
+	LOG_PROC("OF13", "%s -- STOP",FN);
     return GN_OK;
 }
-
+//by:yhy 
 static INT4 of13_msg_packet_out(gn_switch_t *sw, UINT1 *pktout_req)
 {
-    packout_req_info_t *packout_req_info = (packout_req_info_t *)pktout_req;
-    UINT2 total_len = sizeof(struct ofp13_packet_out) + sizeof(struct ofp13_action_output);
-    if (packout_req_info->buffer_id == OFP_NO_BUFFER)
+	LOG_PROC("OF13", "%s-- START",FN);
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return GN_OK;
+	}
+	
+	packout_req_info_t *packout_req_info = (packout_req_info_t *)pktout_req;
+	Msg_Buf(struct ofp13_packet_out);
+    UINT2 nLen = sizeof(struct ofp13_packet_out) + sizeof(struct ofp13_action_output);
+	if (packout_req_info->buffer_id == OFP_NO_BUFFER)
     {
-        total_len += packout_req_info->data_len;
+        nLen += packout_req_info->data_len;
     }
-
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_PACKET_OUT, total_len, packout_req_info->xid);
-
-    struct ofp13_packet_out *of13_out = (struct ofp13_packet_out*)data;
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_PACKET_OUT,nLen,packout_req_info->xid);
+	
+	struct ofp13_packet_out *of13_out = (struct ofp13_packet_out*)pMsg;
     of13_out->buffer_id = htonl(packout_req_info->buffer_id);
     of13_out->in_port = htonl(packout_req_info->inport);
     of13_out->actions_len = htons(sizeof(struct ofp13_action_output));
-
-    struct ofp13_action_output *ofp13_act = (struct ofp13_action_output *)of13_out->actions;
+	
+	struct ofp13_action_output *ofp13_act = (struct ofp13_action_output *)of13_out->actions;
     ofp13_act->type = htons(OFPAT13_OUTPUT);
     ofp13_act->len = htons(sizeof(struct ofp13_action_output));
     ofp13_act->port = htonl(packout_req_info->outport);    //锟接革拷锟斤拷锟剿口凤拷锟斤拷去
     ofp13_act->max_len = htons(packout_req_info->max_len);
     memset(ofp13_act->pad, 0x0, 6);
-
-    if (packout_req_info->buffer_id == OFP_NO_BUFFER)
+	
+	if (packout_req_info->buffer_id == OFP_NO_BUFFER)
     {
         memcpy(ofp13_act->pad+6, packout_req_info->data, packout_req_info->data_len);
     }
-
-    return send_of_msg(sw, total_len);
+	
+    return send_packet(sw, msgbuf, nLen);
 }
 
 static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
@@ -1029,7 +1150,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
         oxm->oxm_field_hm = OFPXMT_OFB_VLAN_PCP << 1;
         oxm->length = OFPXMT_OFB_VLAN_PCP_SZ;
-        *(UINT1 *)(oxm->data) = htons(oxm_fields->vlan_pcp);
+        *(UINT1 *)(oxm->data) = (oxm_fields->vlan_pcp);
 
         oxm_field_sz += sizeof(*oxm) + oxm->length;
         oxm = (struct ofp_oxm_header *)(buf + oxm_field_sz);
@@ -1081,6 +1202,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_SRC << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
             *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_src);
+			/*
             switch(oxm_fields->ipv4_src_prefix)
             {
                 case 8:
@@ -1100,7 +1222,8 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
                 }
                 default:break;
             }
-
+		*/
+			netmask = ntohl(cidr_to_subnet_mask(oxm_fields->ipv4_src_prefix));
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
@@ -1126,6 +1249,7 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
             oxm->oxm_field_hm = (OFPXMT_OFB_IPV4_DST << 1) + 1 ;
             oxm->length = OFPXMT_OFB_IPV4_SZ * 2;
             *(UINT4 *)(oxm->data) = htonl(oxm_fields->ipv4_dst);
+			/*
             switch(oxm_fields->ipv4_dst_prefix)
             {
                 case 8:
@@ -1143,9 +1267,15 @@ static UINT2 of13_add_oxm_field(UINT1 *buf, gn_oxm_t *oxm_fields)
                     netmask = 0xffffff00;
                     break;
                 }
+				case 27:
+				{
+					netmask = 0xffffff00;
+                    break;
+				}
                 default:break;
             }
-
+		*/
+			netmask = ntohl(cidr_to_subnet_mask(oxm_fields->ipv4_dst_prefix));
             *(UINT4 *)(oxm->data + 4) = htonl(netmask);
             oxm_len += OFPXMT_OFB_IPV4_SZ;
         }
@@ -1814,7 +1944,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
         oxm->oxm_class = htons(OFPXMC_OPENFLOW_BASIC);
         oxm->oxm_field_hm = OFPXMT_OFB_VLAN_PCP << 1;
         oxm->length = OFPXMT_OFB_VLAN_PCP_SZ;
-        *(UINT1 *)(oxm->data) = htons(oxm_fields->vlan_pcp);
+        *(UINT1 *)(oxm->data) = (oxm_fields->vlan_pcp);
 
         oxm_field_sz = ALIGN_8(sizeof(struct ofp_action_set_field) - 4 + sizeof(struct ofp_oxm_header) + oxm->length);
         set_field_len += oxm_field_sz;
@@ -2298,7 +2428,7 @@ static UINT2 of13_add_set_field(UINT1 *buf, gn_oxm_t *oxm_fields)
 
             memcpy((UINT1 *)(oxm->data + OFPXMT_OFB_IPV6_SZ), netmaskv6, OFPXMT_OFB_IPV6_SZ);
         }
-        else   //鏃犳帺锟�?
+        else   //鏃犳帺锟??
         {
             oxm->oxm_field_hm = OFPXMT_OFB_IPV6_SRC << 1;
             oxm->length = OFPXMT_OFB_IPV6_SZ;
@@ -2634,6 +2764,13 @@ UINT2 of13_add_action(UINT1 *buf, gn_action_t *action)
             }
             case OFPAT13_SET_QUEUE:
             {
+				gn_action_set_queue_t *p_action_queue = (gn_action_set_queue_t*)p_action;
+				struct ofp_action_set_queue *ofp_queue = (struct ofp_action_set_queue*)act;
+				ofp_queue->type = htons(OFPAT13_SET_QUEUE);
+				ofp_queue->len = htons(sizeof(struct ofp_action_set_queue));
+				ofp_queue->queue_id = htonl(p_action_queue->queue_id);
+				act += 8;
+				action_len += 8;
                 break;
             }
             case OFPAT13_GROUP:
@@ -2774,66 +2911,84 @@ UINT2 of13_add_instruction(UINT1 *buf, gn_flow_t *flow)
 
     return instruction_len;
 }
-
+//by:yhy (索引OFPT13_FLOW_MOD)
 static INT4 of13_msg_flow_mod(gn_switch_t *sw, UINT1 *flowmod_req)
 {
+	LOG_PROC("OF13", "%s -- START",FN);
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+		LOG_PROC("OF13", "%s -- STOP",FN);
+        return GN_OK;
+    }
+
     UINT2 match_len = 0;
     UINT2 instruction_len = 0;
-    UINT2 tot_len = sizeof(struct ofp13_flow_mod);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_FLOW_MOD, tot_len, 0);
-    flow_mod_req_info_t *mod_info = (flow_mod_req_info_t *)flowmod_req;
+	
+	Msg_Buf(struct ofp13_flow_mod);
+    UINT2 nLen = sizeof(struct ofp13_flow_mod);
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_FLOW_MOD,nLen,0);
+	flow_mod_req_info_t *mod_info = (flow_mod_req_info_t *)flowmod_req;
+	
+	pMsg->cookie = gn_htonll(0x0);
+    pMsg->cookie_mask = gn_htonll(0x0);
+    pMsg->table_id = mod_info->flow->table_id;
+    pMsg->command = mod_info->command;
+    pMsg->idle_timeout = htons(mod_info->flow->idle_timeout);
+    pMsg->hard_timeout = htons(mod_info->flow->hard_timeout);
+    pMsg->priority = htons(mod_info->flow->priority);
+    pMsg->buffer_id = htonl(mod_info->buffer_id);                //Default 0xffffffff
+    pMsg->out_port = htonl(mod_info->out_port);                  //Default 0xffffffff
+    pMsg->out_group = htonl(mod_info->out_group);                //Default 0xffffffff
+    pMsg->flags = htons(mod_info->flags);                        //Default OFPFF13_SEND_FLOW_REM
+    pMsg->pad[0] = 0x0;
+    pMsg->pad[1] = 0x0;
+	
+	pMsg->match.type = htons(mod_info->flow->match.type);        //Default OFPMT_OXM
+    match_len = of13_add_match(&pMsg->match, &(mod_info->flow->match));
+    pMsg->match.length = htons(match_len);
+    nLen = nLen - sizeof(struct ofpx_match) + ALIGN_8(match_len);
 
-    struct ofp13_flow_mod *ofm = (struct ofp13_flow_mod *)data;
-    ofm->cookie = gn_htonll(0x0);
-    ofm->cookie_mask = gn_htonll(0x0);
-    ofm->table_id = mod_info->flow->table_id;
-    ofm->command = mod_info->command;
-    ofm->idle_timeout = htons(mod_info->flow->idle_timeout);
-    ofm->hard_timeout = htons(mod_info->flow->hard_timeout);
-    ofm->priority = htons(mod_info->flow->priority);
-    ofm->buffer_id = htonl(mod_info->buffer_id);                //Default 0xffffffff
-    ofm->out_port = htonl(mod_info->out_port);                  //Default 0xffffffff
-    ofm->out_group = htonl(mod_info->out_group);                //Default 0xffffffff
-    ofm->flags = htons(mod_info->flags);                        //Default OFPFF13_SEND_FLOW_REM
-    ofm->pad[0] = 0x0;
-    ofm->pad[1] = 0x0;
-
-    ofm->match.type = htons(mod_info->flow->match.type);        //Default OFPMT_OXM
-    match_len = of13_add_match(&ofm->match, &(mod_info->flow->match));
-    ofm->match.length = ntohs(match_len);
-    tot_len = tot_len - sizeof(struct ofpx_match) + ALIGN_8(match_len);
-
-//    if(DEBUG)
-//    {
-//        printf("match_len: %d   %d\n", match_len, ALIGN_8(match_len));
-//        printf("toto_len: %d\n", tot_len);
-//    }
-
-    instruction_len = of13_add_instruction(data + tot_len, mod_info->flow);
-    tot_len += ALIGN_8(instruction_len);
-    ofm->header.length = htons(tot_len);
-
-    return send_of_msg(sw, tot_len);
+    instruction_len = of13_add_instruction(((UINT1 *)pMsg )+ nLen, mod_info->flow);
+    nLen += ALIGN_8(instruction_len);
+    pMsg->header.length = htons(nLen);
+	
+	if(mod_info->command == OFPFC_ADD)
+    {
+        add_flow_entry(sw,mod_info->flow);
+    }
+    else if(mod_info->command == OFPFC_DELETE)
+    {
+        clean_flow_entry(sw,mod_info->flow);
+    }
+	
+    return send_packet(sw, msgbuf, nLen);
 }
-
+//by:yhy 有用(索引OFPT13_GROUP_MOD)
 static INT4 of13_msg_group_mod(gn_switch_t *sw, UINT1 *groupmod_req)
 {
-    group_mod_req_info_t *group_mod_req_info = (group_mod_req_info_t *)groupmod_req;
-    UINT2 total_len = sizeof(struct ofp_group_mod);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_GROUP_MOD, total_len, 0);
-
-    struct ofp_group_mod *ofp13_group = (struct ofp_group_mod *) data;
-    ofp13_group->command = htons(group_mod_req_info->command);
-    ofp13_group->type = group_mod_req_info->group->type;
-    ofp13_group->group_id = htonl(group_mod_req_info->group->group_id);
-
-    UINT2 bucket_len = 0;
+	LOG_PROC("OF13", "%s -- START",FN);
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+		LOG_PROC("OF13", "%s -- STOP",FN);
+        return GN_OK;
+    }
+	
+	Msg_Buf(struct ofp_group_mod);
+	group_mod_req_info_t *group_mod_req_info = (group_mod_req_info_t *)groupmod_req;
+    UINT2 nLen = sizeof(struct ofp_group_mod);
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_GROUP_MOD,nLen,0);
+	
+	pMsg->command = htons(group_mod_req_info->command);
+    pMsg->type = group_mod_req_info->group->type;
+    pMsg->group_id = htonl(group_mod_req_info->group->group_id);
+	
+	UINT2 bucket_len = 0;
     UINT2 action_len = 0;
     struct ofp_bucket *ofp13_bucket = NULL;
     group_bucket_t *p_bucket = group_mod_req_info->group->buckets;
     while(p_bucket)
     {
-        ofp13_bucket = (struct ofp_bucket *)((UINT1 *)ofp13_group->buckets + bucket_len);
+        ofp13_bucket = (struct ofp_bucket *)((UINT1 *)pMsg->buckets + bucket_len);
         ofp13_bucket->weight = htons(p_bucket->weight);
         ofp13_bucket->watch_port = htonl(p_bucket->watch_port);
         ofp13_bucket->watch_group = htonl(p_bucket->watch_group);
@@ -2842,42 +2997,59 @@ static INT4 of13_msg_group_mod(gn_switch_t *sw, UINT1 *groupmod_req)
         bucket_len = bucket_len + sizeof(struct ofp_bucket) + action_len;
         p_bucket = p_bucket->next;
     }
-
-    total_len += bucket_len;
-    ofp13_group->header.length = htons(total_len);
-    return send_of_msg(sw, total_len);
+	nLen += bucket_len;
+    pMsg->header.length = htons(nLen);
+    return send_packet(sw, msgbuf, nLen);
 }
-
+//by:yhy 未调用(索引OFPT13_PORT_MOD)
 static INT4 of13_msg_port_mod(gn_switch_t *sw, UINT1 *port)
 {
-    UINT2 total_len = sizeof(struct ofp13_port_mod);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_PORT_MOD, total_len, 0);
-    struct ofp13_port_mod *opm_in = (struct ofp13_port_mod *)port;
-    struct ofp13_port_mod *opm = (struct ofp13_port_mod *)data;
-    opm->port_no = htonl(opm_in->port_no);
-    memset(opm->pad, 0x0, 4);
-    memcpy(opm->hw_addr, opm_in->hw_addr, OFP_ETH_ALEN);
-    memset(opm->pad2, 0x0, 2);
-    opm->config = htonl(0x0);
-    opm->mask = htonl(0x0);
-    opm->advertise = htonl(0x0);
-    memset(opm->pad3, 0x0, 4);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "%s -- START",FN);
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+		LOG_PROC("OF13", "%s -- STOP",FN);
+        return GN_OK;
+    }
+	
+	Msg_Buf(struct ofp13_port_mod);
+    UINT2 nLen = sizeof(struct ofp13_port_mod);
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_PORT_MOD,nLen,0);
+	struct ofp13_port_mod *opm_in = (struct ofp13_port_mod *)port;
+	pMsg->port_no = htonl(opm_in->port_no);
+    memset(pMsg->pad, 0x0, 4);
+    memcpy(pMsg->hw_addr, opm_in->hw_addr, OFP_ETH_ALEN);
+    memset(pMsg->pad2, 0x0, 2);
+    pMsg->config = htonl(0x0);
+    pMsg->mask = htonl(0x0);
+    pMsg->advertise = htonl(0x0);
+    memset(pMsg->pad3, 0x0, 4);
+    return send_packet(sw, msgbuf, nLen);
 }
-
+//by:yhy 未使用(索引OFPT13_TABLE_MOD)
 static INT4 of13_msg_table_mod(gn_switch_t *sw, UINT1 *of_msg)
 {
-    //todo
+	LOG_PROC("OF13", "%s -- START",FN);
+    if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+    {
+		LOG_PROC("OF13", "%s -- STOP",FN);
+        return GN_OK;
+    }
+
+    LOG_PROC("OF13", "%s -- STOP",FN);
     return GN_OK;
 }
-
+//by:yhy "复合消息" (索引OFPT13_MULTIPART_REQUEST) 用于请求取得交换机内部流表,端口状态
 static INT4 of13_msg_multipart_request(gn_switch_t *sw, UINT1 *mtp_req)
 {
+	LOG_PROC("OF13", "%s -- START",FN);
     stats_req_info_t *stats_req_info = (stats_req_info_t *)mtp_req;
     UINT2 total_len = sizeof(struct ofp_multipart_request);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_MULTIPART_REQUEST, total_len, 0);
-    struct ofp_multipart_request *ofp_mr = (struct ofp_multipart_request *)data;
+    //UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_MULTIPART_REQUEST, total_len, stats_req_info->xid);
+    
+	Msg_Buf(struct ofp_multipart_request);
+	init_header(&(pMsg->header),OFP13_VERSION,OFPT13_MULTIPART_REQUEST,total_len,stats_req_info->xid);
+	
+	struct ofp_multipart_request *ofp_mr = (struct ofp_multipart_request *)pMsg;
     ofp_mr->type = htons(stats_req_info->type);
     ofp_mr->flags = htons(stats_req_info->flags);
 
@@ -2885,6 +3057,7 @@ static INT4 of13_msg_multipart_request(gn_switch_t *sw, UINT1 *mtp_req)
     {
         case OFPMP_FLOW:
         {
+			LOG_PROC("OF13", "%s -- OFPMP_FLOW",FN);
             flow_stats_req_data_t *flow_stats_req_data = (flow_stats_req_data_t *)(stats_req_info->data);
             struct ofp13_flow_stats_request *ofp_fsr = (struct ofp13_flow_stats_request *) (ofp_mr->body);
             ofp_fsr->table_id = flow_stats_req_data->table_id;
@@ -2902,6 +3075,7 @@ static INT4 of13_msg_multipart_request(gn_switch_t *sw, UINT1 *mtp_req)
         }
         case OFPMP_PORT_STATS:
         {
+			LOG_PROC("OF13", "%s -- OFPMP_PORT_STATS",FN);
             port_stats_req_data_t *port_stats_req_data = (port_stats_req_data_t *)(stats_req_info->data);
             struct ofp13_port_stats_request *ofp_psr = (struct ofp13_port_stats_request *)(ofp_mr->body);
             ofp_psr->port_no = htonl(port_stats_req_data->port_no);
@@ -2912,35 +3086,48 @@ static INT4 of13_msg_multipart_request(gn_switch_t *sw, UINT1 *mtp_req)
         }
         default:
         {
+			LOG_PROC("OF13", "%s -- default",FN);
              break;
         }
     }
 
     ofp_mr->header.length = htons(total_len);
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "%s -- STOP",FN);
+    return  send_packet(sw, msgbuf, total_len);
 }
-
+//by:yhy "复合消息" (索引OFPT13_MULTIPART_REPLY) 用于响应取得交换机内部流表,端口状态
 static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "%s -- START",FN);
     gn_port_t new_sw_ports;
     struct ofp_multipart_reply *ofp_mr = (struct ofp_multipart_reply *)of_msg;
     UINT2 body_len = ntohs(ofp_mr->header.length) - sizeof(struct ofp_multipart_reply);
     int loops;
 
     if (ntohs(ofp_mr->header.length) < sizeof(*ofp_mr))
-        return GN_ERR;
-
+	{
+		//by:yhy add 201701051031
+		LOG_PROC("ERROR", "of13_msg_multipart_reply -- ntohs(ofp_mr->header.length) < sizeof(*ofp_mr)");
+		return GN_ERR;
+	}
+	
+	//by:yhy 20170116
+    
     switch (htons(ofp_mr->type))
     {
         case OFPMP_DESC:
-        {
+        {//by:yhy 交换机设备描述
+			LOG_PROC("OF13", "%s -- OFPMP_DESC",FN);
             struct ofp_desc_stats *ods = (struct ofp_desc_stats *)(ofp_mr->body);
-            memcpy(&sw->sw_desc, ods, sizeof(struct ofp_desc_stats));
+            memcpy(&sw->sw_desc, ods, sizeof(struct ofp_desc_stats));	
+//			LOG_PROC("INFO","|---------of13_msg_multipart_reply  -> OFPMP_DESC  Received!-------------|");
+//			LOG_PROC("INFO", "New Openflow13 switch dpid : %llu ,manufacturer : %s ;",sw->dpid,sw->sw_desc.mfr_desc);
+//			LOG_PROC("INFO","|------------------------------------------------------------------------|"); 
             break;
         }
-
         case OFPMP_PORT_DESC:
-        {
+        {//by:yhy 交换机端口描述
+			LOG_PROC("OF13", "%s -- OFPMP_PORT_DESC",FN);
             struct ofp13_port *port = (struct ofp13_port *)(ofp_mr->body);
             loops = MAX_PORTS;
             UINT4 n_ports = 0;
@@ -2949,9 +3136,9 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
             {
                 memset(&new_sw_ports, 0x0, sizeof(new_sw_ports));
 
-                //默锟斤拷锟斤拷锟斤拷锟斤拷锟�1000Mbps
+                //默锟斤拷锟斤拷锟斤拷锟斤拷锟?1000Mbps
                 (sw->msg_driver.convertter->port_convertter)((UINT1 *)port, &new_sw_ports);
-                new_sw_ports.stats.max_speed = 1000000;  //1073741824 = 1024^3, 1048576 = 1024^2
+                new_sw_ports.stats.max_speed = 10737418;  //1073741824 = 1024^3, 1048576 = 1024^2 10737418=1024^3/100
 
                 body_len -= sizeof(struct ofp13_port);
                 port = port + 1;
@@ -2961,183 +3148,215 @@ static INT4 of13_msg_multipart_reply(gn_switch_t *sw, UINT1 *of_msg)
                     sw->lo_port = new_sw_ports;
                     continue;
                 }
-
+				if(n_ports > MAX_PORTS-1)
+				{
+					n_ports = MAX_PORTS-1;
+				}
                 sw->ports[n_ports] = new_sw_ports;
                 n_ports++;
+				
             }
 
             sw->n_ports = n_ports;  //lo锟斤拷锟斤拷
+//			LOG_PROC("INFO","|--------of13_msg_multipart_reply  -> OFPMP_PORT_DESC  Received!---------|");
+//			LOG_PROC("INFO", "New Openflow13 switch dpid : %llu ,port quantity : %d ;",sw->dpid,sw->n_ports );
+//			LOG_PROC("INFO","|------------------------------------------------------------------------|");
             break;
         }
 
         case OFPMP_TABLE_FEATURES:
-        {
+        {//by:yhy DoNothing
+			LOG_PROC("OF13", "%s -- OFPMP_TABLE_FEATURES DoNothing",FN);
 //            printf("table features reply\n");
             break;
         }
 
         case OFPMP_TABLE:
-        {
+        {//by:yhy DoNothing
+			LOG_PROC("OF13", "%s -- OFPMP_TABLE DoNothing",FN);
 //            printf("table stats reply\n");
             break;
         }
 
         case OFPMP_GROUP_FEATURES:
-        {
+        {//by:yhy DoNothing
+			LOG_PROC("OF13", "%s -- OFPMP_GROUP_FEATURES DoNothing",FN);
 //            printf("group features reply\n");
             break;
         }
 
         case OFPMP_METER_FEATURES:
-        {
+        {//by:yhy DoNothing
+			LOG_PROC("OF13", "%s -- OFPMP_METER_FEATURES DoNothing",FN);
 //            printf("meter features reply\n");
             break;
         }
 
         case OFPMP_FLOW:
-        {
+        {//by:yhy 流表
+			LOG_PROC("OF13", "%s -- OFPMP_FLOW",FN);
             of13_proc_flow_stats(sw, ofp_mr->body, body_len);
+            update_fabric_flow_entries(sw, ofp_mr->body, body_len, ofp_mr->flags, ofp_mr->header.xid);
             break;
         }
 
         case OFPMP_PORT_STATS:
-        {
+        {//by:yhy 端口状态
+			LOG_PROC("OF13", "%s -- OFPMP_PORT_STATS",FN);
             of13_proc_port_stats(sw, ofp_mr->body, body_len/sizeof(struct ofp13_port_stats));
             break;
         }
 
         default:
-        {
+        {//by:yhy DoNothing
+			LOG_PROC("OF13", "%s -- default DoNothing",FN);
 //            printf("%s: mpart not handled\n", FN);
             break;
         }
     }
-
+	LOG_PROC("OF13", "%s -- STOP",FN);
     return GN_OK;
 }
-
+//by:yhy "屏障消息"(索引OFPT13_BARRIER_REQUEST)
 static INT4 of13_msg_barrier_request(gn_switch_t *sw, UINT1 *bri_req)
 {
-    UINT2 total_len = sizeof(struct ofp_header);
-    init_sendbuff(sw, OFP13_VERSION, OFPT13_BARRIER_REQUEST, total_len, 0);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "%s-- START",FN);
+	Msg_Buf(struct ofp_header);
+	UINT2 nLen = sizeof(struct ofp_header);
+	init_header(pMsg,OFP13_VERSION,OFPT13_BARRIER_REQUEST,nLen,0);
+	return send_packet(sw, msgbuf, nLen);
 }
-
+//by:yhy "屏障消息"(索引OFPT13_BARRIER_REPLY)
 static INT4 of13_msg_barrier_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
+	LOG_PROC("OF13", "%s -- START",FN);
     stats_req_info_t stats_req_info;
     port_stats_req_data_t port_stats_req_data;
 
     if(OFPCR_ROLE_SLAVE == g_controller_role)
     {
+		LOG_PROC("OF13", "%s -- STOP",FN);
         return GN_OK;
     }
-
     //sw->msg_driver.msg_handler[OFPT13_PORT_MOD](sw, (UINT1 *)&omr);
-
     stats_req_info.flags = 0;
+    stats_req_info.xid = 0;
     stats_req_info.type = OFPMP_PORT_STATS;
     stats_req_info.data = (UINT1 *)&port_stats_req_data;
     port_stats_req_data.port_no = OFPP13_ANY;
     sw->msg_driver.msg_handler[OFPT13_MULTIPART_REQUEST](sw, (UINT1 *)&stats_req_info);
 
     //only for test
-    of13_remove_all_flow(sw, of_msg);
+    //of13_remove_all_flow(sw, of_msg);
+	
+	flow_param_t* flow_param = init_flow_param();
 
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_INPUT_TABLE, OFPFC_DELETE, flow_param);
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_PUSHTAG_TABLE, OFPFC_DELETE, flow_param);
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_SWAPTAG_TABLE, OFPFC_DELETE, flow_param);
+
+	clear_flow_param(flow_param);
+
+	
+
+    clear_group_entries(sw);
+
+	clear_meter_entries(sw);
     of13_table_miss(sw, of_msg);
+	LOG_PROC("OF13", "%s -- STOP",FN);
     return GN_OK;
 }
-
+//by:yhy 未使用
 static INT4 of13_msg_queue_get_config_request(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy 未使用
 static INT4 of13_msg_queue_get_config_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy "控制器角色改变消息"(索引OFPT13_ROLE_REQUEST)向交换机发送本控制器是主是从的身份信息
 static INT4 of13_msg_role_request(gn_switch_t *sw, UINT1 *role_req)
 {
-    UINT2 total_len = sizeof(struct ofp13_role_request);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_ROLE_REQUEST, total_len, 0);
-    role_req_info_t *new_role = (role_req_info_t *)role_req;
-    struct ofp13_role_request *ofp13_role = (struct ofp13_role_request *)data;
-
-    ofp13_role->role = htonl(new_role->role);
-    ofp13_role->generation_id = gn_htonll(new_role->generation_id);
-
-    return send_of_msg(sw, total_len);
+	LOG_PROC("OF13", "%s -- START",FN);
+	
+	Msg_Buf(struct ofp13_role_request);
+    UINT2 nLen = sizeof(struct ofp13_role_request);
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_ROLE_REQUEST,nLen,0);
+	role_req_info_t *new_role = (role_req_info_t *)role_req;
+	pMsg->role = htonl(new_role->role);
+    pMsg->generation_id = gn_htonll(new_role->generation_id);
+    return send_packet(sw, msgbuf, nLen);
 }
-
+//by:yhy 未使用
 static INT4 of13_msg_role_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy 未使用
 static INT4 of13_msg_get_async_request(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy 未使用
 static INT4 of13_msg_get_async_reply(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy 未使用
 static INT4 of13_msg_set_async(gn_switch_t *sw, UINT1 *of_msg)
 {
     //todo
     return GN_OK;
 }
-
+//by:yhy "计量器和速率限制器的配置消息"(索引OFPT13_METER_MOD)
 static INT4 of13_msg_meter_mod(gn_switch_t *sw, UINT1 *metermod_req)
 {
-    meter_mod_req_info_t *meter_mod_req_info = (meter_mod_req_info_t *)metermod_req;
-    UINT2 total_len = sizeof(struct ofp_meter_mod);
-    UINT1 *data = init_sendbuff(sw, OFP13_VERSION, OFPT13_METER_MOD, total_len, meter_mod_req_info->xid);
-
-    struct ofp_meter_mod *ofp13_meter = (struct ofp_meter_mod *)data;
-    ofp13_meter->command = htons(meter_mod_req_info->command);
-    ofp13_meter->flags = htons(meter_mod_req_info->meter->flags);
-    ofp13_meter->meter_id = htonl(meter_mod_req_info->meter->meter_id);
-
-    if(meter_mod_req_info->meter->type == OFPMBT_DROP)
+	LOG_PROC("OF13", "%s -- START",FN);
+	
+	Msg_Buf(struct ofp_meter_mod);
+	meter_mod_req_info_t *meter_mod_req_info = (meter_mod_req_info_t *)metermod_req;
+    UINT2 nLen = sizeof(struct ofp_meter_mod);
+    init_header(&(pMsg->header),OFP13_VERSION,OFPT13_METER_MOD,nLen,meter_mod_req_info->xid);
+	pMsg->command = htons(meter_mod_req_info->command);
+    pMsg->flags = htons(meter_mod_req_info->meter->flags);
+    pMsg->meter_id = htonl(meter_mod_req_info->meter->meter_id);
+	
+	if(meter_mod_req_info->meter->type == OFPMBT_DROP)
     {
-        struct ofp_meter_band_drop *ofp13_meter_band = (struct ofp_meter_band_drop *)(ofp13_meter->bands);
+        struct ofp_meter_band_drop *ofp13_meter_band = (struct ofp_meter_band_drop *)(pMsg->bands);
         ofp13_meter_band->type = htons(meter_mod_req_info->meter->type);
         ofp13_meter_band->len = htons(sizeof(struct ofp_meter_band_drop));
         ofp13_meter_band->rate = htonl(meter_mod_req_info->meter->rate);
         ofp13_meter_band->burst_size = htonl(meter_mod_req_info->meter->burst_size);
 
-        total_len += sizeof(struct ofp_meter_band_drop);
+        nLen += sizeof(struct ofp_meter_band_drop);
     }
     else if(meter_mod_req_info->meter->type == OFPMBT_DSCP_REMARK)
     {
-        struct ofp_meter_band_dscp_remark *ofp13_meter_band = (struct ofp_meter_band_dscp_remark *)(ofp13_meter->bands);
+        struct ofp_meter_band_dscp_remark *ofp13_meter_band = (struct ofp_meter_band_dscp_remark *)(pMsg->bands);
         ofp13_meter_band->type = htons(OFPMBT_DSCP_REMARK);
         ofp13_meter_band->len = htons(sizeof(struct ofp_meter_band_dscp_remark));
         ofp13_meter_band->rate = htonl(meter_mod_req_info->meter->rate);
         ofp13_meter_band->burst_size = htonl(meter_mod_req_info->meter->burst_size);
         ofp13_meter_band->prec_level = meter_mod_req_info->meter->prec_level;
 
-        total_len += sizeof(struct ofp_meter_band_dscp_remark);
+        nLen += sizeof(struct ofp_meter_band_dscp_remark);
     }
     else
     {
+		LOG_PROC("ERROR", "of13_msg_meter_mod -- meter_mod_req_info->meter->type  Finall return GN_ERR");
         return GN_ERR;
     }
-
-    ofp13_meter->header.length = htons(total_len);
-    send_of_msg(sw, total_len);
-    return GN_OK;
+	pMsg->header.length = htons(nLen);
+	
+	return send_packet(sw, msgbuf, nLen);
 }
 
 msg_handler_t of13_message_handler[OFP13_MAX_MSG] =
@@ -3146,7 +3365,7 @@ msg_handler_t of13_message_handler[OFP13_MAX_MSG] =
     of13_msg_error,
     of13_msg_echo_request,
     of13_msg_echo_reply,
-    of13_msg_experimenter,
+    of13_msg_experimenter,			
     of13_msg_features_request,
     of13_msg_features_reply,
     of13_msg_get_config_request,

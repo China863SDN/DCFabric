@@ -45,6 +45,11 @@ gn_flow_t * find_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 //新增下发一条流表
 INT4 add_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
+INT4 clean_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
+
+
+INT4 clean_flow_entries(gn_switch_t *sw);
+
 //修改一条流表
 INT4 modify_flow_entry(gn_switch_t *sw, gn_flow_t *flow);
 
@@ -70,4 +75,7 @@ INT4 flow_entry_timeout(gn_switch_t *sw, gn_flow_t *flow);
 void gn_flow_free(gn_flow_t *flow);
 
 INT4 init_flow_mgr();
+
+//compare the match
+BOOL match_compare_strict(const gn_match_t *src_match, const gn_match_t *target_match);
 #endif /* FLOW_MGR_H_ */

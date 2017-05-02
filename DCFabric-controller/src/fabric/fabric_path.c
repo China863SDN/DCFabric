@@ -1,44 +1,17 @@
-/*
- * DCFabric GPL Source Code
- * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
- *
- * This file is part of the DCFabric SDN Controller. DCFabric SDN
- * Controller is a free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, , see <http://www.gnu.org/licenses/>.
- */
-
-/*
- * fabric_path.c
- *
- *  Created on: Mar 20, 2015
- *  Author: BNC administrator
- *  E-mail: DCFabric-admin@bnc.org.cn
- *
- *  Modified on: May 19, 2015
- */
 #include "fabric_path.h"
 #include "mem_pool.h"
 #include <stdlib.h>
-void *g_fabric_impl_flow_node_mem_id = NULL;
-void *g_fabric_impl_flow_list_mem_id = NULL;
-void *g_fabric_impl_flow_set_mem_id = NULL;
-void *g_fabric_path_node_mem_id = NULL;
-void *g_fabric_path_mem_id = NULL;
-void *g_fabric_path_list_mem_id = NULL;
-void *g_fabric_sw_node_mem_id = NULL;
-void *g_fabric_sw_node_list_mem_id = NULL;
-UINT1 g_mem_state = 0;
-void init_fabric_path_mem(){
+//void *g_fabric_impl_flow_node_mem_id = NULL;
+//void *g_fabric_impl_flow_list_mem_id = NULL;
+//void *g_fabric_impl_flow_set_mem_id = NULL;
+//void *g_fabric_path_node_mem_id = NULL;
+//void *g_fabric_path_mem_id = NULL;
+//void *g_fabric_path_list_mem_id = NULL;
+//void *g_fabric_sw_node_mem_id = NULL;
+//void *g_fabric_sw_node_list_mem_id = NULL;
+//UINT1 g_mem_state = 0;
+void init_fabric_path_mem()
+{
 //	if(g_mem_state == 0){
 //		g_fabric_impl_flow_node_mem_id = mem_create(sizeof(t_fabric_impl_flow_node), FABRIC_IMPL_FLOW_NODE_MAX_NUM);
 //		g_fabric_impl_flow_list_mem_id = mem_create(sizeof(t_fabric_impl_flow_list), FABRIC_IMPL_FLOW_LIST_MAX_NUM);
@@ -52,7 +25,8 @@ void init_fabric_path_mem(){
 //	}
 	return;
 };
-void destory_fabric_path_men(){
+void destory_fabric_path_men()
+{
 //	if(g_mem_state == 1){
 //		mem_destroy(g_fabric_impl_flow_node_mem_id);
 //		mem_destroy(g_fabric_impl_flow_list_mem_id);
@@ -330,17 +304,14 @@ void delete_fabric_impl_flow_list_set(p_fabric_impl_flow_list_set set){
 /*
  * create a path node
  */
-p_fabric_path_node create_fabric_path_node(gn_switch_t* sw,gn_port_t* port){
-	// initialize the variables
+//by:yhy 创建一个包含switch和port的路径节点
+p_fabric_path_node create_fabric_path_node(gn_switch_t* sw,gn_port_t* port)
+{
 	p_fabric_path_node ret = NULL;
 
-	// check parameters
-	if(NULL != sw){
-		// alloc space for a node
+	if(NULL != sw)
+	{
 		ret = (p_fabric_path_node)malloc(sizeof(t_fabric_path_node));
-		//ret = (p_fabric_path_node)mem_get(g_fabric_path_node_mem_id);
-
-		// set the data by parameters
 		ret->sw = sw;
 		ret->port = port;
 		ret->next = NULL;
@@ -366,29 +337,16 @@ p_fabric_path_node delete_fabric_path_node(p_fabric_path_node node){
 /*
  * deep copy node and its next nodes (list)
  */
-p_fabric_path_node copy_fabric_path_node(p_fabric_path_node node){
-	// initialize the variables
+//by:yhy 拷贝路径中经过的节点链
+p_fabric_path_node copy_fabric_path_node(p_fabric_path_node node)
+{
 	t_fabric_path_node sentinel;
 	p_fabric_path_node p_sentinel = &sentinel;
 
-	// old codes
-	/*
-	if(node == NULL){
-		return temp;
-	}
-	t.next = init_fabric_path_node(node->sw,node->port);
-	temp = t.next;
-	while(NULL != node->next)
-	{
-		node = node->next;
-		temp->next = init_fabric_path_node(node->sw,node->port);
-		temp = temp->next;
-	}*/
-	// initialize sentinel node
 	p_sentinel->next = NULL;
 
-	// deep copy data
-	while(node != NULL){
+	while(node != NULL)
+	{
 		p_sentinel->next = create_fabric_path_node(node->sw,node->port);
 		p_sentinel = p_sentinel->next;
 		node = node->next;
@@ -396,33 +354,24 @@ p_fabric_path_node copy_fabric_path_node(p_fabric_path_node node){
 	return sentinel.next;
 };
 ////////////////////////////////////////////////////////////////////////
+
+//by:yhy 创建:源sw,经过端口port,目的sw,的一个路径
 /*
- * create a path
+ *创建一个只有起始点(交换机:sw,端口:port)的一条路径
  */
-p_fabric_path create_fabric_path(gn_switch_t* sw,gn_port_t* port){
-	// initialize the variables`
+p_fabric_path create_fabric_path(gn_switch_t* sw,gn_port_t* port)
+{
 	p_fabric_path ret = NULL;
 	p_fabric_path_node p_node = NULL;
 
-	// create a path
-	if(sw != NULL){
-		// create a node
+	if(sw != NULL)
+	{
 		p_node = create_fabric_path_node(sw,port);
-		// alloc space for the path
 		ret = (p_fabric_path)malloc(sizeof(t_fabric_path));
-		//ret = (p_fabric_path)mem_get(g_fabric_path_mem_id);
-
-		// set the head node
 		ret->node_list = p_node;
-
-		// source node and destination node is the same
 		ret->dst = sw;
 		ret->src = sw;
-
-		// next is NULL
 		ret->next = NULL;
-
-		// path length is zero
 		ret->len = 0;
 	}
 	return ret;
@@ -457,9 +406,13 @@ void add_fabric_node_to_path(p_fabric_path path,p_fabric_path_node node){
 /*
  * insert a node into a path at the head
  */
-void insert_fabric_node_to_path(p_fabric_path path,p_fabric_path_node node){
-	// check parameters
-	if(NULL == path || NULL == node){
+/*by:yhy
+ *将路径经过点node插入路径path
+ */
+void insert_fabric_node_to_path(p_fabric_path path,p_fabric_path_node node)
+{
+	if(NULL == path || NULL == node)
+	{
 		return;
 	}
 	// insert the head node
@@ -531,12 +484,13 @@ p_fabric_path delete_fabric_path(p_fabric_path path){
 /*
  * deep copy a path
  */
-p_fabric_path copy_fabric_path(p_fabric_path path){
-	// initialize the variables
+//by:yhy 拷贝一条path返回指针
+p_fabric_path copy_fabric_path(p_fabric_path path)
+{
 	p_fabric_path ret = NULL;
 
-	// check parameters
-	if( NULL != path){
+	if( NULL != path)
+	{
 		ret = (p_fabric_path)malloc(sizeof(t_fabric_path));
 		ret->src = path->src;
 		ret->dst = path->dst;
@@ -567,8 +521,9 @@ p_fabric_path_list create_fabric_path_list(gn_switch_t* sw){
 /*
  * create a null list
  */
-p_fabric_path_list create_fabric_path_list_NULL(gn_switch_t* sw){
-	// initialize the variables
+//by:yhy 新建一个switch的空的path list
+p_fabric_path_list create_fabric_path_list_NULL(gn_switch_t* sw)
+{
 	p_fabric_path_list ret = NULL;
 
 	ret = (p_fabric_path_list)malloc(sizeof(t_fabric_path_list));
@@ -584,35 +539,38 @@ p_fabric_path_list create_fabric_path_list_NULL(gn_switch_t* sw){
 /*
  * add a path to list
  */
-void add_fabric_path_to_list(p_fabric_path_list list, p_fabric_path path){
-	// initialize the variables
+//by:yhy 将路径path加入路径链list的尾部
+void add_fabric_path_to_list(p_fabric_path_list list, p_fabric_path path)
+{
 	t_fabric_path sentinel;
 	p_fabric_path p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != path){
+	if(NULL != list && NULL != path)
+	{
 		p_sentinel->next = list->path_list;
-		while(p_sentinel->next != NULL){
+		while(p_sentinel->next != NULL)
+		{
 			p_sentinel = p_sentinel->next;
 		}
 		p_sentinel->next = path;
-		// reset the list
 		list->path_list = sentinel.next;
 		list->num++;
 	}
 	return;
 };
-/*
- *  insert a path to list
+
+/*by:yhy 
+ *将路径path加入路径链list的头部
  */
-void insert_fabric_list_path_to_list(p_fabric_path_list list, p_fabric_path path){
-	// initialize the variables
+void insert_fabric_list_path_to_list(p_fabric_path_list list, p_fabric_path path)
+{
 	t_fabric_path sentinel;
 	p_fabric_path p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != path){
+	if(NULL != list && NULL != path)
+	{
 		p_sentinel->next = list->path_list;
 		path->next = p_sentinel->next;
-		// reset the list
 		list->path_list = path;
 		list->num++;
 	}
@@ -666,18 +624,24 @@ p_fabric_path get_fabric_path_from_list_by_sw(p_fabric_path_list list,gn_switch_
 	}
 	return ret;
 };
-p_fabric_path get_fabric_path_from_list_by_sw_dpid(p_fabric_path_list list,UINT8 src_dpid,UINT8 dst_dpid){
-	// initialize the variables
+//by:yhy 遍历查找list中与src_dpid和dst_dpid对应的p_fabric_path
+p_fabric_path get_fabric_path_from_list_by_sw_dpid(p_fabric_path_list list,UINT8 src_dpid,UINT8 dst_dpid)
+{
 	t_fabric_path sentinel;
 	p_fabric_path ret=NULL,p_sentinel = &sentinel;
 
-	if(NULL != list && 0 != src_dpid && 0 != dst_dpid){
+	if(NULL != list && 0 != src_dpid && 0 != dst_dpid)
+	{
 		p_sentinel->next = list->path_list;
-		while(p_sentinel->next != NULL){
-			if(p_sentinel->next->src->dpid == src_dpid && p_sentinel->next->dst->dpid == dst_dpid){
+		while(p_sentinel->next != NULL)//by:yhy 遍历查找list中与src_dpid和dst_dpid对应的p_fabric_path
+		{
+			if(p_sentinel->next->src->dpid == src_dpid && p_sentinel->next->dst->dpid == dst_dpid)
+			{
 				ret = p_sentinel->next;
 				return ret;
-			}else{
+			}
+			else
+			{
 				p_sentinel = p_sentinel->next;
 			}
 		}
@@ -732,10 +696,12 @@ p_fabric_path get_fabric_path_from_list(p_fabric_path_list list, p_fabric_path p
 	}
 	return ret;
 };
-/*
- * get the first path from list
+
+/*by:yhy
+ *从路径链list中移除头部路径,返回路径指针
  */
-p_fabric_path remove_first_fabric_path_from_list(p_fabric_path_list list){
+p_fabric_path remove_first_fabric_path_from_list(p_fabric_path_list list)
+{
 
 	p_fabric_path ret = NULL;
 	ret = list->path_list;
@@ -747,12 +713,12 @@ p_fabric_path remove_first_fabric_path_from_list(p_fabric_path_list list){
 /*
  * remove all fabric path from list
  */
-p_fabric_path clear_fabric_path_list(p_fabric_path_list list){
-	// initialize the variables
+p_fabric_path clear_fabric_path_list(p_fabric_path_list list)
+{
 	p_fabric_path ret=NULL;
-	if(list != NULL){
+	if(list != NULL)
+	{
 		ret = list->path_list;
-
 		list->sw = NULL;
 		list->path_list = NULL;
 		list->num = 0;
@@ -777,38 +743,30 @@ void delete_fabric_path_list(p_fabric_path_list list){
 	return;
 };
 ////////////////////////////////////////////////////////////////////////
-/*
- * create a fabric sw node
- */
-p_fabric_sw_node create_fabric_sw_node(gn_switch_t* sw,UINT4 tag){
-	// initialize the variables
+
+//by:yhy 新建一个fabric_sw节点,并分配空间
+p_fabric_sw_node create_fabric_sw_node(gn_switch_t* sw,UINT4 tag)
+{
 	p_fabric_sw_node ret = NULL;
-
-	// check parameters
-	if(sw != NULL){
-		// alloc space for a node
+	if(sw != NULL)
+	{
 		ret = (p_fabric_sw_node)malloc(sizeof(t_fabric_sw_node));
-		//ret = (p_fabric_sw_node)mem_get(g_fabric_sw_node_mem_id);
-
-		// set the data by parameters
 		ret->sw = sw;
 		ret->tag = tag;
 		ret->next = NULL;
 	}
 	return ret;
 };
-/*
- * delete a fabric sw node and return next node
- */
-p_fabric_sw_node delete_fabric_sw_node(p_fabric_sw_node node){
-	// initialize the variables
+
+//by:yhy 释放一个sw的内存空间
+p_fabric_sw_node delete_fabric_sw_node(p_fabric_sw_node node)
+{
 	p_fabric_sw_node ret = NULL;
 
-	// free the space and get next node
-	if(node != NULL){
+	if(node != NULL)
+	{
 		ret = node->next;
 		free(node);
-		//mem_free(g_fabric_sw_node_mem_id,node);
 	}
 	return ret;
 };
@@ -837,8 +795,9 @@ p_fabric_sw_node copy_fabric_sw_node(p_fabric_sw_node node){
 /*
  * create a fabric sw list
  */
-p_fabric_sw_list create_fabric_sw_list(){
-	// initialize the variables
+//by:yhy 新建一个p_fabric_sw_list的头结点并初始化
+p_fabric_sw_list create_fabric_sw_list()
+{
 	p_fabric_sw_list ret = NULL;
 
 	ret = (p_fabric_sw_list)malloc(sizeof(t_fabric_sw_list));
@@ -847,40 +806,24 @@ p_fabric_sw_list create_fabric_sw_list(){
 	ret->node_list = NULL;
 	return ret;
 };
+
 /*
  * insert a fabric sw node in the head
  */
-void insert_fabric_sw_list_by_sw(p_fabric_sw_list list,gn_switch_t* sw,UINT4 tag){
-	// initialize the variables
+//by:yhy 将一个switch节点插入switch list中
+void insert_fabric_sw_list_by_sw(p_fabric_sw_list list,gn_switch_t* sw,UINT4 tag)
+{
 	t_fabric_sw_node sentinel;
 	p_fabric_sw_node node = NULL,p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != sw){
+	if(NULL != list && NULL != sw)
+	{
 		node = create_fabric_sw_node(sw,tag);
 		p_sentinel->next = list->node_list;
 		node->next = p_sentinel->next;
-		// reset the list
 		list->node_list = node;
 		list->num++;
 	}
-	return;
-
-	/*	// initialize the variables
-	p_fabric_sw_node temp = NULL;
-
-	if(NULL != list && NULL != sw){
-		temp = create_fabric_sw_node(sw,tag);
-		if(list->list == NULL){
-			list->list = temp;
-			list->num = 1;
-		}else{
-			temp->next = list->list;
-			list->list = temp;
-			list->num++;
-		}
-	}
-	*/
-
 	return;
 };
 /*
@@ -923,26 +866,29 @@ void add_fabric_sw_list_by_sw(p_fabric_sw_list list,gn_switch_t* sw,UINT4 tag){
 	}*/
 	return;
 };
-/*
- * remove a fabric sw node from the list
- */
-p_fabric_sw_node remove_fabric_sw_list_by_sw(p_fabric_sw_list list,gn_switch_t* sw){
-	// initialize the variables
+
+//by:yhy 从list中删除sw,并将这个sw返回
+p_fabric_sw_node remove_fabric_sw_list_by_sw(p_fabric_sw_list list,gn_switch_t* sw)
+{
 	t_fabric_sw_node sentinel;
 	p_fabric_sw_node ret=NULL,p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != sw){
+	if(NULL != list && NULL != sw)
+	{
 		p_sentinel->next = list->node_list;
-		while(p_sentinel->next != NULL){
-			if(p_sentinel->next->sw == sw){
+		while(p_sentinel->next != NULL)
+		{
+			if(p_sentinel->next->sw == sw)
+			{
 				ret = p_sentinel->next;
 				p_sentinel->next = ret->next;
 				ret->next = NULL;
-				// reset the list
 				list->node_list = sentinel.next;
 				list->num--;
 				return ret;
-			}else{
+			}
+			else
+			{
 				p_sentinel = p_sentinel->next;
 			}
 		}
@@ -994,12 +940,15 @@ p_fabric_sw_node get_fabric_sw_list_by_tag(p_fabric_sw_list list,UINT4 tag){
 /*
  * insert a new node
  */
-void insert_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node){
-	// initialize the variables
+//by:yhy 将sw插入list
+//by:yhy 将node插入list->node_list链表里
+void insert_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node)
+{
 	t_fabric_sw_node sentinel;
 	p_fabric_sw_node p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != node){
+	if(NULL != list && NULL != node)
+	{
 		p_sentinel->next = list->node_list;
 		node->next = p_sentinel->next;
 		// reset the list
@@ -1008,17 +957,20 @@ void insert_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node){
 	}
 	return;
 };
-/*
- * add a new node
+
+/*by:yhy
+ *未使用
  */
-void add_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node){
-	// initialize the variables
+void add_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node)
+{
 	t_fabric_sw_node sentinel;
 	p_fabric_sw_node p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != node){
+	if(NULL != list && NULL != node)
+	{
 		p_sentinel->next = list->node_list;
-		while(p_sentinel->next != NULL){
+		while(p_sentinel->next != NULL)
+		{
 			p_sentinel = p_sentinel->next;
 		}
 		p_sentinel->next = node;
@@ -1028,18 +980,21 @@ void add_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node){
 	}
 	return;
 };
-/*
- * remove a fabric sw node
+/*by:yhy
+ *未使用
  */
-p_fabric_sw_node remove_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node){
-	// initialize the variables
+p_fabric_sw_node remove_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node node)
+{
 	t_fabric_sw_node sentinel;
 	p_fabric_sw_node ret=NULL,p_sentinel = &sentinel;
 
-	if(NULL != list && NULL != node){
+	if(NULL != list && NULL != node)
+	{
 		p_sentinel->next = list->node_list;
-		while(p_sentinel->next != NULL){
-			if(p_sentinel->next->sw == node->sw){
+		while(p_sentinel->next != NULL)
+		{
+			if(p_sentinel->next->sw == node->sw)
+			{
 				ret = p_sentinel->next;
 				p_sentinel->next = ret->next;
 				ret->next = NULL;
@@ -1047,20 +1002,23 @@ p_fabric_sw_node remove_fabric_sw_list(p_fabric_sw_list list,p_fabric_sw_node no
 				list->num--;
 				list->node_list = sentinel.next;
 				return ret;
-			}else{
+			}
+			else
+			{
 				p_sentinel = p_sentinel->next;
 			}
 		}
 	}
 	return ret;
 };
-/*
- * clear fabric sw list
+/*by:yhy
+ *清空list
  */
-p_fabric_sw_node clear_fabric_sw_list(p_fabric_sw_list list){
-	// initialize the variables
+p_fabric_sw_node clear_fabric_sw_list(p_fabric_sw_list list)
+{
 	p_fabric_sw_node ret=NULL;
-	if(list != NULL){
+	if(list != NULL)
+	{
 		ret = list->node_list;
 		list->node_list = NULL;
 		list->num = 0;
@@ -1083,12 +1041,13 @@ void delete_fabric_sw_list(p_fabric_sw_list list){
 	}
 	return;
 };
-/*
- * copy a list
- */
-p_fabric_sw_list copy_fabric_sw_list(p_fabric_sw_list list){
+
+//by:yhy 拷贝一个交换机list
+p_fabric_sw_list copy_fabric_sw_list(p_fabric_sw_list list)
+{
 	p_fabric_sw_list ret = NULL;
-	if(list != NULL){
+	if(list != NULL)
+	{
 		ret = (p_fabric_sw_list)malloc(sizeof(t_fabric_sw_list));
 		ret->num = list->num;
 		ret->node_list = copy_fabric_sw_node(list->node_list);
@@ -1098,9 +1057,12 @@ p_fabric_sw_list copy_fabric_sw_list(p_fabric_sw_list list){
 /*
  * pop the head p_fabric_sw_node
  */
-p_fabric_sw_node pop_fabric_sw_list(p_fabric_sw_list list){
+//by:yhy 从list中取出一个sw节点
+p_fabric_sw_node pop_fabric_sw_list(p_fabric_sw_list list)
+{
 	p_fabric_sw_node ret = NULL;
-	if(NULL != list && list->num > 0){
+	if(NULL != list && list->num > 0)
+	{
 		ret = list->node_list;
 		list->node_list = ret->next;
 		ret->next = 0;

@@ -82,26 +82,46 @@ p_fabric_impl_flow_list clear_fabric_impl_flow_list_set(p_fabric_impl_flow_list_
 void delete_fabric_impl_flow_list_set(p_fabric_impl_flow_list_set set);
 
 ////////////////////////////////////////////////////////////////////////
+//by:yhy 路径中的某个点
 typedef struct fabric_path_node{
-	gn_switch_t* sw;
-	gn_port_t* port;
+	gn_switch_t* sw;				//by:yhy 路径点交换机
+	gn_port_t* port;				//by:yhy 路径点交换机端口
 	struct fabric_path_node* next;
 }t_fabric_path_node,* p_fabric_path_node;
 
+//by:yhy 路径
 typedef struct fabric_path{
-	gn_switch_t* src;
-	gn_switch_t* dst;
-	p_fabric_path_node node_list;
-	struct fabric_path* next;
-	UINT4 len;
+	gn_switch_t* src;				//by:yhy 路径起点
+	gn_switch_t* dst;				//by:yhy 路径终点
+	p_fabric_path_node node_list;	//by:yhy 路径经过点的list
+	struct fabric_path* next;		//by:yhy
+	UINT4 len;						//by:yhy 路径长度
 }t_fabric_path,* p_fabric_path;
 
+//by:yhy sw的路径链
 typedef struct fabric_path_list{
-	gn_switch_t* sw;
-	UINT4 num;
-	p_fabric_path path_list;
+	gn_switch_t* sw;				//by:yhy 路径链的所属交换机
+	UINT4 num;						//by:yhy 路径数量
+	p_fabric_path path_list;		//by:yhy 路径list
 	struct fabric_path_list* next;
 }t_fabric_path_list,* p_fabric_path_list;
+
+
+
+typedef struct fabric_path_by_list
+{
+	gn_switch_t* sw;					//by:yhy 交换机
+	p_fabric_path path_by_list;			//by:yhy 索引交换机链
+	struct fabric_path_by_list* next;
+}t_fabric_path_by_list,* p_fabric_path_by_list;
+
+typedef struct fabric_path_by
+{
+	gn_switch_t* sw;					//by:yhy 索引交换机
+	struct fabric_path_by* next;		
+}t_fabric_path_by,* p_fabric_path_by;
+
+
 
 ////////////////////////////////////////////////////////////////////////
 
@@ -140,6 +160,7 @@ typedef struct fabric_sw_node{
 	struct fabric_sw_node* next;
 }t_fabric_sw_node,* p_fabric_sw_node;
 
+//by:yhy 交换机list
 typedef struct fabric_sw_list{
 	UINT4 num;
 	p_fabric_sw_node node_list;

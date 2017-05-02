@@ -30,6 +30,7 @@
 #include "msg_handler.h"
 #include "app_impl.h"
 #include "openflow-common.h"
+#include "../qos-mgr/qos-mgr.h"
 
 msg_handler_t of_message_handler[1];
 msg_handler_t of13_message_handler[OFP13_MAX_MSG];
@@ -93,6 +94,7 @@ static void mod_proccalls(gn_switch_t *sw)
     } while (p_proc < &__stop_appproc_sec);
 }
 
+//by:yhy 初始化默认消息处理函数列表
 INT4 of_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
 {
     struct ofp_header *header = (struct ofp_header*)of_msg;
@@ -115,24 +117,28 @@ INT4 of_msg_hello(gn_switch_t *sw, UINT1 *of_msg)
         LOG_PROC("ERROR", "OpenFlow version unsupported, --version %u", header->version);
         return GN_ERR;
     }
-
+	sw->conn_state = CONNECTED ;
+	//by:yhy why? 有问题
     mod_proccalls(sw);
     return sw->msg_driver.msg_handler[0](sw, of_msg);
 }
 
-//初始化默认消息处理
+//by:yhy 初始化默认消息处理函数列表
 msg_handler_t of_message_handler[1] =
 {
     of_msg_hello,       /* OFPT_HELLO */
 };
 
 
-
+//by:yhy openflow消息处理
 void message_process(gn_switch_t *sw, UINT1 *ofmsg)
 {
     struct ofp_header *header = (void *)ofmsg;
-//    if(1)
-//        printf("@@@@ Recv msg type[%d]\n", header->type);
-
+	if((of_message_handler ==  sw->msg_driver.msg_handler)&&(header->type > 0))
+	{
+		LOG_PROC("ERROR", "OpenFlow version unsupported message type %d, --version %u",header->type, header->version);
+		return;
+	}
     sw->msg_driver.msg_handler[header->type](sw, ofmsg);
+	//by:yhy start_openflow_server->new_switch->if_message_handle->of_msg_hello->初始化sw->msg_driver.msg_handler
 }

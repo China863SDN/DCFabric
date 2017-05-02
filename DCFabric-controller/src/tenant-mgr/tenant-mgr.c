@@ -162,7 +162,7 @@ static void tenant_delete_flow_mod(UINT1* member_mac)
 
     for(;idx < g_server.max_switch; idx++)
     {
-        if(g_server.switches[idx].state)
+        if(CONNECTED == g_server.switches[idx].conn_state)
         {
             //正向
             memcpy(tenant_flow.match.oxm_fields.eth_src, member_mac, 6);
@@ -256,14 +256,16 @@ void modify_user_tenant(UINT1* mac, INT4 tenant_id)
     for(; idx_sw < g_server.max_switch; idx_sw++)
     {
         sw = &g_server.switches[idx_sw];
-        if(sw && (sw->state))
+        if(sw && (INITSTATE != sw->conn_state))
         {
+			/*Need to be deleted
             mac_user_t *p_macuser = search_mac_user(mac);
             if (p_macuser)
             {
                 p_macuser->tenant_id = tenant_id;
                 return;
             }
+			*/
         }
     }
 }
@@ -378,6 +380,13 @@ INT4 add_tenant_member(UINT4 tenant_id, UINT1* mac)
     idx = mac_hash(mac, g_tenant_member_container.table_size);
 
     new_member = (tenant_member_t *)mem_get(g_tenant_member_container.table_mem_id);
+	
+	//addedby:yhy
+	if(NULL == new_member)
+	{
+		LOG_PROC("ERROR", "%s -- mem_get(g_tenant_member_container.table_mem_id) Fail",FN);
+	}
+	
     memset(new_member, 0, sizeof(tenant_member_t));
     new_member->tenant_id = tenant_id;
     memcpy(new_member->mac, mac, 6);

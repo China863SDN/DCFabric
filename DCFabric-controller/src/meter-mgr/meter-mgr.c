@@ -33,7 +33,7 @@
 #include "openflow-10.h"
 #include "openflow-13.h"
 
-static gn_meter_t *find_meter_by_id(gn_switch_t *sw, UINT4 meter_id)
+gn_meter_t *find_meter_by_id(gn_switch_t *sw, UINT4 meter_id)
 {
     gn_meter_t *p_meter = sw->meter_entries;
 
@@ -54,7 +54,7 @@ INT4 add_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 {
     INT4 ret = 0;
     meter_mod_req_info_t meter_mod_req_info;
-    if(0 == sw->state)
+    if(INITSTATE == sw->conn_state)
     {
         return EC_SW_STATE_ERR;
     }
@@ -85,7 +85,7 @@ INT4 modify_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
     INT4 ret = 0;
     gn_meter_t *p_meter = NULL;
     meter_mod_req_info_t meter_mod_req_info;
-    if(0 == sw->state)
+    if(INITSTATE == sw->conn_state)
     {
         return EC_SW_STATE_ERR;
     }
@@ -131,7 +131,7 @@ INT4 delete_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 {
     INT4 ret = 0;
     meter_mod_req_info_t meter_mod_req_info;
-    if(0 == sw->state)
+    if(INITSTATE == sw->conn_state)
     {
         return EC_SW_STATE_ERR;
     }
@@ -193,6 +193,7 @@ void clear_meter_entries(gn_switch_t *sw)
 
     meter_mod_req_info.meter = &meter;
     meter.meter_id = OFPM_ALL;
+	meter.type = OFPMBT_DROP;
     meter_mod_req_info.command = OFPMC_DELETE;
     sw->msg_driver.msg_handler[OFPT13_METER_MOD](sw, (UINT1 *)&meter_mod_req_info);
 }

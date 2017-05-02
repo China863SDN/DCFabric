@@ -28,7 +28,6 @@
  */
 #include "gnflush-types.h"
 #include "fabric_arp.h"
-#include "fabric_host.h"
 #include "fabric_impl.h"
 #include "fabric_flows.h"
 #include "gn_inet.h"
@@ -38,17 +37,10 @@
 /*****************************
  * local function
  *****************************/
-void fabric_arp_request_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
-void fabric_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
+//void fabric_arp_request_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
+//void fabric_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
 
-void fabric_push_arp_flood_queue(UINT4 targetIP,packet_in_info_t *packet_in);
 void fabric_push_ip_flood_queue(UINT4 ip,ip_t* arp_info,packet_in_info_t *packet_in);
-void fabric_push_flow_queue(p_fabric_host_node src,UINT4 src_IP,p_fabric_host_node dst,UINT4 dst_IP);
-
-void fabric_create_arp_reply(p_fabric_host_node src,p_fabric_host_node dst,packet_in_info_t *packet_in_info);
-
-void fabric_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport);
-
 void fabric_ip_packet_flood(packet_in_info_t *packet_in_info);
 
 //void fabric_push_host_queue(gn_switch_t* sw,UINT4 port,UINT1* mac,UINT4 ip);
@@ -62,17 +54,18 @@ extern sem_t fabric_arp_flood_sem;
 extern sem_t fabric_flow_sem;
 extern sem_t fabric_ip_flood_sem;
 
-void fabric_arp_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
-	arp_t *arp = (arp_t *)(packet_in->data);
-	if(arp->opcode == htons(1)){
-		fabric_arp_request_handle(sw,packet_in);
-	}else{
-		fabric_arp_reply_handle(sw,packet_in);
-	}
-	return;
-};
+//void fabric_arp_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
+//	arp_t *arp = (arp_t *)(packet_in->data);
+//	if(arp->opcode == htons(1)){
+//		fabric_arp_request_handle(sw,packet_in);
+//	}else{
+//		fabric_arp_reply_handle(sw,packet_in);
+//	}
+//	return;
+//};
 //added by xuyanwei at 2015-08-13
-void fabric_vlan_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
+void fabric_vlan_handle(gn_switch_t *sw, packet_in_info_t *packet_in)
+{
 	printf("%s need to be evaluated in the future !!!!\n",FN);
 	return ;
 }
@@ -83,7 +76,7 @@ void fabric_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	src = get_fabric_host_from_list_by_ip(ip->src);
 	if(src == NULL){
 //		printf("%s : src=null, add ip:%s\n",FN,inet_htoa(ntohl(ip->src)));
-		src = create_fabric_host_list_node(sw,packet_in->inport,ip->eth_head.src,ip->src);
+		src = create_fabric_host_list_node(sw,packet_in->inport,ip->eth_head.src,ip->src,NULL);
 		insert_fabric_host_into_list(src);
 		// install output flow table 3
 
@@ -124,130 +117,297 @@ void fabric_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	//	printf("%s end \n",FN);
 	return;
 };
+
+
+p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 inport){
+	p_fabric_host_node p_node =  get_fabric_host_from_list_by_mac(sendmac);
+	if(p_node!=NULL){
+		if(!check_IP_in_fabric_host(p_node,sendip))
+		{
+			add_fabric_host_ip(p_node,sendip);
+		}
+	}else{
+		p_node = create_fabric_host_list_node(sw,inport,sendmac,sendip,NULL);
+		if (NULL == p_node) {
+		    return NULL;	
+		}
+		insert_fabric_host_into_list(p_node);
+        install_fabric_output_flow(sw,sendmac,inport);
+		
+//		UINT1 LocalHostdpid[8];
+//      ulli64_to_uc8(sendmac, LocalHostdpid);
+//		UINT1  HostIP[15] = "";
+//		UINT1  SwitchIP[15] = "";
+//		strcpy(HostIP,inet_htoa(ntohl(sendip)));
+//		strcpy(SwitchIP,inet_htoa(ntohl(sw->sw_ip)));
+		
+//		LOG_PROC("INFO","|---------of13_msg_packet_in  -> ETHER_ARP  Received!--------------------|");
+//		LOG_PROC("INFO", "New HOST, IP:%s,MAC:[%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x],Switch_IP:%s,Switch_Port:  %d;",
+//		HostIP,
+//		LocalHostdpid[0],LocalHostdpid[1], LocalHostdpid[2], LocalHostdpid[3], LocalHostdpid[4], LocalHostdpid[5], LocalHostdpid[6], LocalHostdpid[7],
+//		SwitchIP,
+//		ntohs(sw->sw_port)
+//		);
+//		LOG_PROC("INFO","|------------------------------------------------------------------------|");
+	}
+    
+	if ((NULL != p_node->sw) && (0 != p_node->port))
+    {   
+	    return p_node;
+    }
+        
+	p_node->port = inport;
+	p_node->sw=sw;
+    if (sendip)
+    {
+        p_node->ip_list[0] = sendip;
+    }
+	install_fabric_output_flow(sw,sendmac,inport);
+	return p_node;
+}
+
+p_fabric_host_node fabric_find_dst_port(p_fabric_host_node src_node,UINT4 targetip){
+	p_fabric_host_node p_node = get_fabric_host_from_list_by_ip(targetip);
+	return p_node;
+}
+
+p_fabric_host_node fabric_find_dst_port_ip(p_fabric_host_node src_node,UINT4 targetip)
+{
+	p_fabric_host_node p_node = get_fabric_host_from_list_by_ip(targetip);
+	return p_node;
+}
+
+INT4 fabric_arp_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in)
+{
+	fabric_add_into_arp_request(src_port, sendip, targetip);
+	
+	// flood to outter ports
+	fabric_push_arp_flood_queue(targetip,packet_in);
+	return GN_OK;
+}
+INT4 fabric_ip_p_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,UINT1* srcmac,packet_in_info_t *packet_in){
+	ip_t *p_ip = (ip_t *)(packet_in->data);
+	if(p_ip->proto == 1){
+		//printf("ip->proto == 1 %s\n",FN);
+		fabric_ip_packet_flood(packet_in);
+		//fabric_push_ip_flood_queue(ip->dest,ip,packet_in);
+	}
+	return GN_OK;
+}
+INT4 fabric_ip_p_install_flow(param_set_p param, INT4 forward_type)
+{
+	if (NULL != param)  {
+		if ((NULL != param->src_port) && (NULL != param->dst_port)) {
+			// install_fabric_output_flow(param->src_port->sw, param->src_port->mac, param->src_port->port);
+			fabric_push_flow_queue(param->src_port, param->src_port->ip_list[0], param->dst_port, param->dst_port->ip_list[0]);
+		}
+
+//		if (NULL != param->dst_port)
+//			install_fabric_output_flow(param->dst_port->sw, param->dst_port->mac, param->dst_port->port);
+	}
+	return GN_OK;
+}
+INT4 fabric_arp_remove_ip_from_flood_list(UINT4 sendip){
+	p_fabric_arp_request_node temp_node = remove_fabric_arp_request_from_list_by_dstip(sendip);
+	if(temp_node!=NULL){
+		temp_node = delete_fabric_arp_request_list_node(temp_node);
+	}
+	return GN_OK;
+}
+
+INT4 fabric_arp_reply(p_fabric_host_node src_port,p_fabric_host_node dst_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in){
+	// download flows
+	fabric_push_flow_queue(src_port,sendip,dst_port,targetip);
+	// create reply
+	fabric_create_arp_reply(src_port,dst_port,packet_in);
+	return GN_OK;
+}
+INT4 fabric_ip_packet_output(p_fabric_host_node src_port,p_fabric_host_node dst_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in){
+	// download flows
+	fabric_push_flow_queue(src_port,sendip,dst_port,targetip);
+
+	// pecket out
+	fabric_packet_output(dst_port->sw,packet_in,dst_port->port);
+	return GN_OK;
+}
+INT4 fabric_ip_packet_check_access(p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set){
+	return GN_OK;
+}
+//by:yhy 根据给定的参数,判断下一步操作的类型
+INT4 fabric_compute_src_dst_forward(p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param)
+{
+	if (NULL != dst_port)
+	{
+		// packet out
+		return Internal_port_flow;
+	}
+	else 
+	{
+		return IP_FLOOD;
+	}
+
+    return GN_OK;
+}
+INT4 fabric_arp_reply_output(p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in){
+	arp_t *arp = (arp_t *)(packet_in->data);
+	fabric_push_flow_queue(src,arp->sendip, dst, targetIP);
+	memcpy(arp->eth_head.dest,dst->mac, 6);
+	arp->targetip = targetIP;
+	memcpy(arp->targetmac,dst->mac, 6);
+	
+//	UINT1  SenderIP[15] = "";
+//	UINT1  TargetIP[15] = "";
+//	strcpy(SenderIP,inet_htoa(ntohl(arp->sendip )));
+//	strcpy(TargetIP,inet_htoa(ntohl(arp->targetip)));
+//	LOG_PROC("INFO","|-------------of13_msg_packet_out  -> ETHER_ARP  Send!-------------------|");
+//	LOG_PROC("INFO","ARP_Request Eth_head Src MAC        [%02x:%02x:%02x:%02x:%02x:%02x]",arp->eth_head.src[0],arp->eth_head.src[1],arp->eth_head.src[2],arp->eth_head.src[3],arp->eth_head.src[4],arp->eth_head.src[5]);
+//	LOG_PROC("INFO","ARP_Request Eth_head Dest MAC       [%02x:%02x:%02x:%02x:%02x:%02x]",arp->eth_head.dest[0],arp->eth_head.dest[1],arp->eth_head.dest[2],arp->eth_head.dest[3],arp->eth_head.dest[4],arp->eth_head.dest[5]);
+//	LOG_PROC("INFO","ARP_Request Eth_head Protocol       [0x%04x]",arp->eth_head.proto);
+//	LOG_PROC("INFO","ARP_Request Hardwaretype            [0x%04x]",arp->hardwaretype);
+//	LOG_PROC("INFO","ARP_Request Prototype               [0x%04x]",arp->prototype);
+//	LOG_PROC("INFO","ARP_Request Hardwaresize            [%d]",arp->hardwaresize);
+//	LOG_PROC("INFO","ARP_Request Protocolsize            [%d]",arp->protocolsize);
+//	LOG_PROC("INFO","ARP_Request Opcode                  [0x%04x]",arp->opcode);
+//	LOG_PROC("INFO","ARP_Request Sender MAC              [%02x:%02x:%02x:%02x:%02x:%02x]",arp->sendmac[0],arp->sendmac[1],arp->sendmac[2],arp->sendmac[3],arp->sendmac[4],arp->sendmac[5]);
+//	LOG_PROC("INFO","ARP_Request Sender IP               [%s]",SenderIP);
+//	LOG_PROC("INFO","ARP_Request Target MAC              [%02x:%02x:%02x:%02x:%02x:%02x]",arp->targetmac[0],arp->targetmac[1],arp->targetmac[2],arp->targetmac[3],arp->targetmac[4],arp->targetmac[5]);
+//	LOG_PROC("INFO","ARP_Request Target IP               [%s]",TargetIP);
+//	LOG_PROC("INFO","|------------------------------------------------------------------------|");	
+	
+	
+	fabric_packet_output(dst->sw,packet_in,dst->port);
+	return GN_OK;
+}
+
 /*****************************
  * intern function : handle packet
  *****************************/
-void fabric_arp_request_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
-	//	printf("%s start \n",FN);
-	p_fabric_host_node src = NULL,dst=NULL;
-	p_fabric_arp_request_node arp_node= NULL;
-	//packout_req_info_t packout_req = NULL;
-	arp_t *arp = (arp_t *)(packet_in->data);
-	//src = get_fabric_host_from_list_by_ip(arp->sendip);
-	src = get_fabric_host_from_list_by_mac(arp->sendmac);
-	if(src == NULL){
-//		printf("%s : src=null,add ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
-		src = create_fabric_host_list_node(sw,packet_in->inport,arp->sendmac,arp->sendip);
-		insert_fabric_host_into_list(src);
-		// install output flow table 3
-		install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
-	}else
-		{
-			//printf("%s : src!=null sender ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
-			if(!check_IP_in_fabric_host(src,arp->sendip))
-			{
-				add_fabric_host_ip(src,arp->sendip);
-			//	printf("%s : new ip:%s \n",FN ,inet_htoa(ntohl(arp->sendip)));
-			}
-			 if(src->port != packet_in->inport)
-			 {
-				 src->port = packet_in->inport;
-				 src->sw=sw;
-				 // install output flow table 3
-				 install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
-			 }
-		}
-	dst = get_fabric_host_from_list_by_ip(arp->targetip);
-	if(dst == NULL){
-		//printf("%s : dst=null target ip:%s\n",FN,inet_htoa(ntohl(arp->targetip)));
+//void fabric_arp_request_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
+//	//	printf("%s start \n",FN);
+//	p_fabric_host_node src = NULL,dst=NULL;
+//	p_fabric_arp_request_node arp_node= NULL;
+//	//packout_req_info_t packout_req = NULL;
+//	arp_t *arp = (arp_t *)(packet_in->data);
+//	//src = get_fabric_host_from_list_by_ip(arp->sendip);
+//	src = get_fabric_host_from_list_by_mac(arp->sendmac);
+//	if(src == NULL){
+////		printf("%s : src=null,add ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
+//		src = create_fabric_host_list_node(sw,packet_in->inport,arp->sendmac,arp->sendip);
+//		insert_fabric_host_into_list(src);
+//		// install output flow table 3
+//		install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
+//	}else
+//		{
+//			//printf("%s : src!=null sender ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
+//			if(!check_IP_in_fabric_host(src,arp->sendip))
+//			{
+//				add_fabric_host_ip(src,arp->sendip);
+//			//	printf("%s : new ip:%s \n",FN ,inet_htoa(ntohl(arp->sendip)));
+//			}
+//			 if(src->port != packet_in->inport)
+//			 {
+//				 src->port = packet_in->inport;
+//				 src->sw=sw;
+//				 // install output flow table 3
+//				 install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
+//			 }
+//		}
+//	dst = get_fabric_host_from_list_by_ip(arp->targetip);
+//	if(dst == NULL){
+//		//printf("%s : dst=null target ip:%s\n",FN,inet_htoa(ntohl(arp->targetip)));
+//
+//		// add to arp queue
+//		arp_node = create_fabric_arp_request_list_node(src,arp->sendip,arp->targetip);
+//		insert_fabric_arp_request_into_list(arp_node);
+//		///printf("%s : arp_node.targetip:%s\n",FN,inet_htoa(ntohl(arp_node->dst_IP)));
+//
+//		// flood to outter ports
+//		fabric_push_arp_flood_queue(arp->targetip,packet_in);
+//	}else
+//	{
+//		//printf("%s : dst!=null target ip:%s\n",FN,inet_htoa(ntohl(arp->targetip)));
+//		// download flows
+//		fabric_push_flow_queue(src,arp->sendip,dst,arp->targetip);
+//		// create reply
+//		fabric_create_arp_reply(src,dst,packet_in);
+//	}
+//	//printf("%s end \n",FN);
+//	return;
+//};
 
-		// add to arp queue
-		arp_node = create_fabric_arp_request_list_node(src,arp->sendip,arp->targetip);
-		insert_fabric_arp_request_into_list(arp_node);
-		///printf("%s : arp_node.targetip:%s\n",FN,inet_htoa(ntohl(arp_node->dst_IP)));
-
-		// flood to outter ports
-		fabric_push_arp_flood_queue(arp->targetip,packet_in);
-	}else
-	{
-		//printf("%s : dst!=null target ip:%s\n",FN,inet_htoa(ntohl(arp->targetip)));
-		// download flows
-		fabric_push_flow_queue(src,arp->sendip,dst,arp->targetip);
-		// create reply
-		fabric_create_arp_reply(src,dst,packet_in);
-	}
-	//printf("%s end \n",FN);
-	return;
-};
-
-void fabric_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
-	//printf("%s start \n",FN);
-	p_fabric_host_node src = NULL,dst=NULL;
-	p_fabric_arp_request_node temp_node = NULL;
-
-	arp_t *arp = (arp_t *)(packet_in->data);
-	//src = get_fabric_host_from_list_by_ip(arp->sendip);
-	src = get_fabric_host_from_list_by_mac(arp->sendmac);
-	if(src == NULL){
-//		printf("%s :  src=null add sender ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
-		src = create_fabric_host_list_node(sw,packet_in->inport,arp->sendmac,arp->sendip);
-		insert_fabric_host_into_list(src);
-		// install output flow table 3
-		install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
-
-	}
-
-	else
-	{
-		//printf("%s : src!=null sender ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
-		if(src->port != packet_in->inport)
-		{
-			// update host inport
-			src->port = packet_in->inport;
-			src->sw=sw;
-			// install output flow table 3
-			install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
-		}
-		if(!check_IP_in_fabric_host(src,arp->sendip))
-		{
-			add_fabric_host_ip(src,arp->sendip);
-			//printf("%s :  new ip:%s \n",FN,inet_htoa(ntohl(arp->sendip)));
-		}
-	}
-	//  temp_node = remove_fabric_arp_request_from_list_by_dstip(src->ip);
-	  temp_node = remove_fabric_arp_request_from_list_by_dstip(arp->sendip);
-      while(temp_node != NULL)
-	  {
-			//printf("%s : arp requested ip: %s\n",FN,inet_htoa(ntohl(temp_node->src_IP)));
-			//printf("%s : arpreply.targetip:%s\n",FN,inet_htoa(ntohl( arp->targetip)));
-		dst = temp_node->src_req;
-		// add fabric flow
-		fabric_push_flow_queue(src,arp->sendip, dst, temp_node->src_IP);
-		// create fabric arp reply
-		memcpy(arp->eth_head.dest,dst->mac, 6);
-		// arp->targetip =src->ip;
-	    arp->targetip = temp_node->src_IP;
-		memcpy(arp->targetmac,dst->mac, 6);
-		fabric_packet_output(dst->sw,packet_in,dst->port);
-
-		// delete arp request node
-		temp_node = delete_fabric_arp_request_list_node(temp_node);
-	}
-  	//printf("%s end \n",FN);
-	return;
-};
+//void fabric_arp_reply_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
+//	//printf("%s start \n",FN);
+//	p_fabric_host_node src = NULL,dst=NULL;
+//	p_fabric_arp_request_node temp_node = NULL;
+//
+//	arp_t *arp = (arp_t *)(packet_in->data);
+//	//src = get_fabric_host_from_list_by_ip(arp->sendip);
+//	src = get_fabric_host_from_list_by_mac(arp->sendmac);
+//	if(src == NULL){
+////		printf("%s :  src=null add sender ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
+//		src = create_fabric_host_list_node(sw,packet_in->inport,arp->sendmac,arp->sendip);
+//		insert_fabric_host_into_list(src);
+//		// install output flow table 3
+//		install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
+//
+//	}
+//
+//	else
+//	{
+//		//printf("%s : src!=null sender ip:%s\n",FN,inet_htoa(ntohl(arp->sendip)));
+//		if(src->port != packet_in->inport)
+//		{
+//			// update host inport
+//			src->port = packet_in->inport;
+//			src->sw=sw;
+//			// install output flow table 3
+//			install_fabric_output_flow(sw,arp->eth_head.src,packet_in->inport);
+//		}
+//		if(!check_IP_in_fabric_host(src,arp->sendip))
+//		{
+//			add_fabric_host_ip(src,arp->sendip);
+//			//printf("%s :  new ip:%s \n",FN,inet_htoa(ntohl(arp->sendip)));
+//		}
+//	}
+//	//  temp_node = remove_fabric_arp_request_from_list_by_dstip(src->ip);
+//	  temp_node = remove_fabric_arp_request_from_list_by_dstip(arp->sendip);
+//      while(temp_node != NULL)
+//	  {
+//			//printf("%s : arp requested ip: %s\n",FN,inet_htoa(ntohl(temp_node->src_IP)));
+//			//printf("%s : arpreply.targetip:%s\n",FN,inet_htoa(ntohl( arp->targetip)));
+//		dst = temp_node->src_req;
+//		// add fabric flow
+//		fabric_push_flow_queue(src,arp->sendip, dst, temp_node->src_IP);
+//		// create fabric arp reply
+//		memcpy(arp->eth_head.dest,dst->mac, 6);
+//		// arp->targetip =src->ip;
+//	    arp->targetip = temp_node->src_IP;
+//		memcpy(arp->targetmac,dst->mac, 6);
+//		fabric_packet_output(dst->sw,packet_in,dst->port);
+//
+//		// delete arp request node
+//		temp_node = delete_fabric_arp_request_list_node(temp_node);
+//	}
+//  	//printf("%s end \n",FN);
+//	return;
+//};
 /*****************************
  * intern function
  *****************************/
-/*
+/* markby:yhy
+ * 查找对应targetIP的p_fabric_arp_flood_node在g_arp_flood_queue是否存在
+ * 若不存在,则往g_arp_flood_queue中添加一个p_fabric_arp_flood_node节点,并发送信号量
  * push arp flood queue
  */
-void fabric_push_arp_flood_queue(UINT4 targetIP,packet_in_info_t *packet_in_info){
+void fabric_push_arp_flood_queue(UINT4 targetIP,packet_in_info_t *packet_in_info)
+{
 	p_fabric_arp_flood_node node = NULL;
 	node = get_fabric_arp_flood_from_queue_by_ip(targetIP);
-	if(node == NULL){
+	if(node == NULL)
+	{//by:yhy 防止重复对同一个目标IP进行洪泛
 		node = create_fabric_arp_flood_node(packet_in_info,targetIP);
 		push_fabric_arp_flood_into_queue(node);
+		//by:yhy 增加信号量
 		sem_post(&fabric_arp_flood_sem);
 	}
 	return;
@@ -256,6 +416,7 @@ void fabric_push_arp_flood_queue(UINT4 targetIP,packet_in_info_t *packet_in_info
 /*
  * push ip flood queue
  */
+//by:yhy 未使用
 void fabric_push_ip_flood_queue(UINT4 ip,ip_t* ip_info,packet_in_info_t *packet_in){
 	p_fabric_ip_flood_node node = NULL;
 	node = get_fabric_ip_flood_from_queue_by_ip(ip);
@@ -275,11 +436,13 @@ void fabric_push_flow_queue(p_fabric_host_node src,UINT4 src_IP,p_fabric_host_no
 
 	 node = get_fabric_flow_from_queue(src,src_IP,dst,dst_IP);
 	if(node == NULL){
-		src_tag = of131_fabric_impl_get_tag_sw(src->sw);
-		dst_tag = of131_fabric_impl_get_tag_sw(dst->sw);
-		node = create_fabric_flow_node(src,src_IP, src_tag,dst,dst_IP, dst_tag);
-		push_fabric_flow_into_queue(node);
-		sem_post(&fabric_flow_sem);
+		if ((NULL != src->sw) && (NULL != dst->sw)){
+			src_tag = of131_fabric_impl_get_tag_sw(src->sw);
+			dst_tag = of131_fabric_impl_get_tag_sw(dst->sw);
+			node = create_fabric_flow_node(src,src_IP, src_tag,dst,dst_IP, dst_tag);
+			push_fabric_flow_into_queue(node);
+			sem_post(&fabric_flow_sem);
+		}
 	}
 	return;
 };
@@ -312,12 +475,14 @@ void fabric_create_arp_reply(p_fabric_host_node src,p_fabric_host_node dst,packe
     memcpy(new_arp_pkt.sendmac, dst->mac, 6);
     memcpy(new_arp_pkt.targetmac, src->mac, 6);
 
-    src->sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](src->sw, (UINT1 *)&packout_req_info);
+	if(CONNECTED == src->sw->conn_state)
+    	src->sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](src->sw, (UINT1 *)&packout_req_info);
 };
-/*
+/* markby:yhy 
  * out put the packet
  */
-void fabric_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport){
+void fabric_packet_output(gn_switch_t *sw, packet_in_info_t *packet_in_info,UINT4 outport)
+{
 //    printf("%s\n", FN);
 	packout_req_info_t pakout_req;
 	pakout_req.buffer_id = packet_in_info->buffer_id;
@@ -353,12 +518,14 @@ void fabric_ip_packet_flood( packet_in_info_t *packet_in_info)
 	// find all switch
 	for(i = 0; i < g_server.max_switch; i++)
 	{
-		if (g_server.switches[i].state){
+		if (CONNECTED == g_server.switches[i].conn_state){
 			sw = &g_server.switches[i];
 			// find switch's outter ports
 			for(j=0; j<sw->n_ports; j++){
 				// check port state is ok and also not connect other switch(neighbor)
-				if(sw->ports[j].state == 0 && sw->neighbor[j] == NULL){
+				//if(sw->ports[j].state == 0 && sw->neighbor[j] == NULL){
+				if(sw->ports[j].state == 0 && sw->neighbor[j]->bValid == FALSE)
+				{
 					pakout_req.outport = sw->ports[j].port_no;
 					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
 				}
@@ -368,62 +535,88 @@ void fabric_ip_packet_flood( packet_in_info_t *packet_in_info)
 	}
 	return;
 }
+//by:yhy 根据给定参数装载deny_flow     
+INT4 fabric_ip_install_deny_flow(gn_switch_t *sw, ip_t* p_ip)
+{
+	UINT4 src_ip = 0;
+	UINT4 dst_ip = 0;
+	UINT1 src_mac[6] = {0};
+	UINT1 dst_mac[6] = {0};
+	UINT1 proto = 0;
+	icmp_t* p_icmp = NULL;
+	tcp_t* p_tcp = NULL;
+	udp_t* p_udp = NULL;
+	UINT1 icmp_type = 0;
+	UINT1 icmp_code = 0;
+	UINT2 sport = 0;
+	UINT2 dport = 0;
+	
+	if (NULL == p_ip)
+	{
+		//by:yhy add 201701051102
+		LOG_PROC("ERROR", "fabric_ip_install_deny_flow -- NULL == p_ip  Finall return GN_ERR");
+        
+		return GN_ERR;
+	}	
 
-/////////////////////////////////////////////////////////////////////////////////
-///*
-// * flood the packet to each port without switch intern ports
-// */
-//void fabric_paket_flood( packet_in_info_t *packet_in_info){
-//	packout_req_info_t pakout_req;
-//	gn_switch_t *sw = NULL;
-//	UINT2 i = 0,j=0;
-////	arp_t new_arp_pkt;
-//
-//	pakout_req.buffer_id = packet_in_info->buffer_id;
-//	//pakout_req.buffer_id = 0xffffffff;
-//	pakout_req.inport = OFPP13_CONTROLLER;
-//	pakout_req.max_len = 0xff;
-//	pakout_req.xid = packet_in_info->xid;
-//	pakout_req.data_len = packet_in_info->data_len;
-//	pakout_req.data = packet_in_info->data;
-//
-//	// find all switch
-//	for(i = 0; i < g_server.max_switch; i++){
-//		if (g_server.switches[i].state){
-//			sw = &g_server.switches[i];
-//			// find switch's outter ports
-//			for(j=0; j<sw->n_ports; j++){
-//				// check port state is ok and also not connect other switch(neighbor)
-////				if(sw->ports[j].neighbour == NULL){
-//				if( 0 == check_is_neighbor_port(sw,sw->ports[j].port_no)){
-////					printf("Port no:%d\n",sw->ports[j].port_no);
-////					temp_fabric_paket_output(sw,packet_in_info,sw->ports[j].port_no);
-//					pakout_req.outport = sw->ports[j].port_no;
-//					//pakout_req.buffer_id++;
-//					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
-//				}
-//			}
-//		}
-//	}
-//
-//	return;
-//};
-//UINT1 check_is_neighbor_port(gn_switch_t* sw,UINT4 port){
-//	UINT2 i = 0,j=0;
-//	gn_switch_t* neighbor = NULL;
-//	for(i=0;i < sw->n_ports;i++){
-//		// get neighbor switch
-//		if(sw->neighbor[i] != NULL && sw->neighbor[i]->sw != NULL){
-//			neighbor = sw->neighbor[i]->sw;
-//			for(j=0;j<neighbor->n_ports;j++){
-//				if(neighbor->neighbor[j] != NULL && neighbor->neighbor[j]->sw == sw){
-//					if(neighbor->neighbor[j]->port->port_no == port){
-//						return 1;
-//					}
-//				}
-//			}
-//		}
-//	}
-//	return 0;
-//}
-//
+	src_ip = p_ip->src;
+	dst_ip = p_ip->dest;
+	memcpy(src_mac, p_ip->eth_head.src, 6);
+	memcpy(dst_mac, p_ip->eth_head.dest, 6);
+	proto = p_ip->proto;
+
+	switch(proto)
+	{
+	case IPPROTO_ICMP:
+		{
+			p_icmp = (icmp_t*)p_ip->data;
+			if (p_icmp) {
+				icmp_type = p_icmp->type;
+				icmp_code = p_icmp->code;
+			}
+		}
+		break;
+	case IPPROTO_TCP:
+		{
+			p_tcp = (tcp_t*)p_ip->data;
+			if (p_tcp) {
+				sport = p_tcp->sport;
+				dport = p_tcp->dport;
+			}
+		}
+		break;
+	case IPPROTO_UDP:
+		{
+			p_udp = (udp_t*)p_ip->data;
+			if (p_udp) {
+				sport = p_udp->sport;
+				dport = p_udp->dport;
+			}
+		}
+		break;
+	default:
+		break;
+	}
+	
+	install_deny_flow(sw, src_ip, dst_ip, src_mac, dst_mac, proto, icmp_type, icmp_code, sport, dport);
+
+	return GN_OK;
+
+}
+//by:yhy 根据源MAC,删除deny_flow
+INT4 fabric_ip_remove_deny_flow(UINT1* src_mac,UINT4 ip)
+{
+	p_fabric_host_node host = get_fabric_host_from_list_by_mac(src_mac);
+	if (host) 
+	{
+		gn_switch_t* sw = host->sw;
+		if (sw)
+		{
+			remove_deny_flow_by_srcMAC(sw, src_mac,ip);
+		}
+	}
+	
+	return GN_OK;
+}
+
+

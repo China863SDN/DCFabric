@@ -84,43 +84,47 @@ enum lldp_port_id_subtype {
 };
 
 #pragma pack(1)
+//by:yhy Ethernet帧 
 typedef struct st_ether
 {
-    UINT1 dest[6];
-    UINT1 src[6];
-    UINT2 proto;
+    UINT1 dest[6];		//源MAC
+    UINT1 src[6];		//目标MAC
+    UINT2 proto;		//协议
     UINT1 data[0];
 }ether_t;
-
+/*------------------------------------
+ARP包帧格式
+------------------------------------*/
 typedef struct st_arp
 {
     ether_t eth_head;
-    UINT2 hardwaretype;
-    UINT2 prototype;
-    UINT1 hardwaresize;
-    UINT1 protocolsize;
-    UINT2 opcode;
-    UINT1 sendmac[6];
-    UINT4 sendip;
-    UINT1 targetmac[6];
-    UINT4 targetip;
+    UINT2 hardwaretype;			/*硬件类型		*/
+    UINT2 prototype;			/*协议类型		*/
+    UINT1 hardwaresize;			/*硬件地址长度	*/
+    UINT1 protocolsize;			/*协议类型长度	*/
+    UINT2 opcode;				/*操作类型		*/
+    UINT1 sendmac[6];			/*发送方MAC地址	*/
+    UINT4 sendip;				/*发送方IP地址	*/
+    UINT1 targetmac[6];			/*目标方MAC地址	*/
+    UINT4 targetip;				/*目标方IP地址	*/
     UINT1 data[0];
 }arp_t;
 
+//by:yhy IP包
 typedef struct st_ip
 {
-    ether_t eth_head;
-    UINT1 hlen;
-    UINT1 tos;
-    UINT2 len;
-    UINT2 ipid;
-    UINT2 fragoff;
-    UINT1 ttl;
-    UINT1 proto;
-    UINT2 cksum;
-    UINT4 src;
-    UINT4 dest;
-    UINT1 data[0];
+    ether_t eth_head;		/**/
+    UINT1 hlen;				/*4位版本4位首部长度*/
+    UINT1 tos;				/*服务类型*/
+    UINT2 len;				/*总长度(字节数)*/
+    UINT2 ipid;				/*16位标识*/
+    UINT2 fragoff;			/*3位标志13位片偏移*/
+    UINT1 ttl;				/*生存时间*/
+    UINT1 proto;			/*协议*/
+    UINT2 cksum;			/*首部校验和*/
+    UINT4 src;				/*源地址IP*/
+    UINT4 dest;				/*目的地址IP*/
+    UINT1 data[0];			/*数据部分*/
 }ip_t;
 
 typedef struct st_tcp
@@ -253,23 +257,37 @@ typedef struct st_ethpkt_info
     t802_1q_t *q8021q;
 }ethpkt_info_t;
 
+//by:yhy LLDP包格式
+/*--------------------
+详细参见"Huawei LLDP技术白皮书"
+LLDP包中 Chassis ID, Port ID, Time to Live 三个TLV包是必选的. 
+
+TLV TYPE:
+|-TLV Type-|- TLV Name -|
+|-    1   -|-Chassis ID-|
+|-    2   -|-Port Desc -|
+
+每个TLV:
+|-TLV Type-|-TLV Info String Length-|-Chassis ID Subtype-|- Chassis ID -|
+|- 7 bits -|-        9 bits        -|-    1 octet       -|-1~255 octets-|
+--------------------*/
 typedef struct st_lldp
 {
     ether_t eth_head;
 
     //9 Byte
-    UINT2 chassis_tlv_type_and_len;   //0x0207
-    UINT1 chassis_tlv_subtype;       //MAC             4
-    UINT8 chassis_tlv_id;            //dpid
+    UINT2 chassis_tlv_type_and_len;   	//0x0209
+    UINT1 chassis_tlv_subtype;       	//MAC             4
+    UINT8 chassis_tlv_id;            	//dpid
 
     //5 Byte
-    UINT2 port_tlv_type_and_len;      //0x0403
-    UINT1 port_tlv_subtype;          //local assigned    7
-    UINT2 port_tlv_id;                //send port
+    UINT2 port_tlv_type_and_len;      	//0x0403
+    UINT1 port_tlv_subtype;          	//local assigned    7
+    UINT2 port_tlv_id;                	//send port
 
     //4 Byte
-    UINT2 ttl_tlv_type_and_len;      //0x0602
-    UINT2 ttl_tlv_ttl;               //ttl 120
+    UINT2 ttl_tlv_type_and_len;      	//0x0602
+    UINT2 ttl_tlv_ttl;               	//ttl 120
 
     //2
     UINT2 endof_lldpdu_tlv_type_and_len;

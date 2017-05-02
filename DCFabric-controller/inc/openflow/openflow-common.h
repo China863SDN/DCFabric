@@ -338,6 +338,14 @@ struct ofp_action_group {
 };
 OFP_ASSERT(sizeof(struct ofp_action_group) == 8);
 
+struct ofp_action_set_queue{
+	uint16_t type; /* OFPAT_SET_QUEUE. */
+	uint16_t len; /* Len is 8. */
+	uint32_t queue_id; /* Queue id for the packets. */
+
+};
+OFP_ASSERT(sizeof(struct ofp_action_set_queue) == 8);
+
 /* Action structure for OFPAT_SET_MPLS_TTL-OF1.3.1+ */
 struct ofp_action_mpls_ttl {
     uint16_t type; /* OFPAT_SET_MPLS_TTL. */

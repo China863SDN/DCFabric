@@ -35,9 +35,14 @@
 INT4 add_group_entry(gn_switch_t *sw, gn_group_t *group);
 INT4 modify_group_entry(gn_switch_t *sw, gn_group_t *group);
 INT4 delete_group_entry(gn_switch_t *sw, gn_group_t *group);
+gn_group_t *find_group_by_id(gn_switch_t *sw, UINT4 group_id);
 
 void clear_group_entries(gn_switch_t *sw);
 void gn_group_free(gn_group_t *group);
+
+group_bucket_t* create_lbaas_group_bucket(UINT4 between_portno, UINT1* host_mac, UINT4 host_ip, UINT2 host_tcp_dst,
+            UINT2 host_vlan_id, UINT2 weight);
+
 
 INT4 init_group_mgr();
 void fini_group_mgr();

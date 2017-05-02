@@ -31,24 +31,26 @@
 #define TOPO_MGR_H_
 
 #include "gnflush-types.h"
-#include "../forward-mgr/forward-mgr.h"
+#include "forward-mgr.h"
 
 #define NO_PATH -1
 
-//邻接矩阵表示的图
+//by:yhy 邻接矩阵表示的图
 typedef struct adac_matrix
 {
     UINT1 *V;              //顶点存储空间
-    UINT4 **src_port;      //哪个端口与下一个节点相连
+    UINT4 **src_port;      //哪个端口与下一个节点相连//by:yhy ;Time:201612131128;Context:交换机的那个端口与下一交换机相连接.和邻接矩阵相似
     UINT4 **A;             //邻接矩阵
-    gn_switch_t ***sw;
+    gn_switch_t ***sw;	   //by:yhy 此处为指向交换机指针的二维数组的头指针
 }adac_matrix_t;
 
 extern adac_matrix_t g_adac_matrix;
 extern UINT4 **g_short_path;     //v到各顶点的最短路径向量
 extern UINT4 **g_short_weight;   //v到各顶点最短路径长度向量
 
+int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid, UINT4 tx_port);
 INT4 lldp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info);
 INT4 init_topo_mgr();
-
+void lldp_tx(gn_switch_t *sw, UINT4 port_no, UINT1 *src_addr);
+void lldp_tx_timer();
 #endif /* TOPO_MGR_H_ */

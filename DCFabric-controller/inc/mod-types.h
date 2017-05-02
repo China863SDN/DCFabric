@@ -287,6 +287,55 @@ typedef struct gn_meter
     UINT1 prec_level;
 }gn_meter_t;
 
+typedef struct gn_qos
+{
+    struct gn_qos *pre;
+    struct gn_qos *next;
+
+	UINT4 port_no;
+
+	// status
+	INT4 status;			// 0: not installed; 1: installed
+
+	// uuid
+	INT1 qos_uuid[48];
+	INT1 interface_uuid[48];
+	INT1 port_uuid[48];
+
+	INT1 type[24];			// linux-htb, linux-hfsc
+	UINT4 max_rate;			// Maximum rate shared by all queued traffic, in bit/s.
+}gn_qos_t;
+
+typedef struct gn_queue
+{
+    struct gn_queue *pre;
+    struct gn_queue *next;
+
+	gn_qos_t* qos;
+	UINT4 port_no;
+
+	UINT4 queue_id;			// linux-htb: 0 ~ 61440; 
+	
+    UINT1 dscp;				// 0 to 63
+
+	// for linux-htb and linux-hfsc
+	UINT8 min_rate;
+	UINT8 max_rate;
+
+	// for linux-htb only
+	UINT8 burst;
+	UINT4 priority;			// 0 to 4,294,967,295
+
+	// uuid
+	INT1 queue_uuid[48];
+	
+	// checkstatus
+	UINT4 qos_flag;
+	UINT4 port_flag;
+
+}gn_queue_t;
+
+
 typedef struct group_bucket
 {
     struct group_bucket *next;

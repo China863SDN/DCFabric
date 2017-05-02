@@ -32,6 +32,8 @@
 
 #include "gnflush-types.h"
 
+extern UINT4 DEFAULT_TRANSACTION_XID;
+
 extern convertter_t of10_convertter;
 extern convertter_t of13_convertter;
 extern msg_handler_t of_message_handler[];
@@ -39,4 +41,9 @@ extern msg_handler_t of10_message_handler[];
 extern msg_handler_t of13_message_handler[];
 
 void message_process(gn_switch_t *sw, UINT1 *ofmsg);
+INT4 of13_msg_hello(gn_switch_t *sw, UINT1 *of_msg);
+INT4 of13_msg_echo_request(gn_switch_t *sw, UINT1 *of_msg);
+INT4 of10_msg_echo_request(gn_switch_t *sw, UINT1 *of_msg);
+
+
 #endif /* MSG_HANDLER_H_ */

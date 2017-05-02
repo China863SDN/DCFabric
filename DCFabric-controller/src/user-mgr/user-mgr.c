@@ -41,11 +41,11 @@ INT1 init_mac_user()
     UINT4 idx = 0;
 
     value = get_value(g_controller_configure, "[controller]", "macuser_hsize");
-    g_macuser_table.macuser_hsize = (value == NULL ? 1024 : atoi(value));
+    g_macuser_table.macuser_hsize = (value == NULL ? 1024 : atoll(value));
     g_macuser_table.macuser_hsize_tot = g_macuser_table.macuser_hsize * g_server.max_switch;
 
     value = get_value(g_controller_configure, "[controller]", "macuser_lifetime");
-    g_macuser_table.macuser_lifetime = (value == NULL ? 10 : atoi(value));
+    g_macuser_table.macuser_lifetime = (value == NULL ? 10 : atoll(value));
 
     pthread_mutex_init(&g_macuser_table.macuser_mutex, NULL);
 
@@ -61,7 +61,7 @@ INT1 init_mac_user()
     }
 
     //创建定时器
-    g_macuser_table.macuser_timer = timer_init(g_macuser_table.macuser_hsize_tot);
+    //g_macuser_table.macuser_timer = timer_init(g_macuser_table.macuser_hsize_tot); //modify by ycy
     g_macuser_table.macuser_cnt = 0;
 
     //初始化预设交换机
@@ -200,15 +200,17 @@ void timeout_mac_user(void *para, void *tid)
     UINT4 hash_index;
     mac_user_table_t *p_macuser_table = NULL;
     mac_user_t *p_macuser = (mac_user_t *) para;
-
+	LOG_PROC("TIMER", "timeout_mac_user - START");
     if (!p_macuser)
     {
+		LOG_PROC("TIMER", "timeout_mac_user - !p_macuser");
         return;
     }
 
     p_macuser_table = p_macuser->macuser_table;
     if (!p_macuser_table)
     {
+		LOG_PROC("TIMER", "timeout_mac_user - !p_macuser_table");
         return;
     }
 
@@ -219,6 +221,7 @@ void timeout_mac_user(void *para, void *tid)
     if (g_cur_sys_time.tv_sec - p_macuser->tv_last_sec <= p_macuser_table->macuser_lifetime)
     {
         pthread_mutex_unlock(&p_macuser_table->macuser_mutex);
+		LOG_PROC("TIMER", "timeout_mac_user - g_cur_sys_time.tv_sec");
         return;
     }
 
@@ -262,6 +265,7 @@ void timeout_mac_user(void *para, void *tid)
     timer_kill(p_macuser_table->macuser_timer, &(p_macuser->timer));
     mem_free(p_macuser_table->macuser_memid, (void *) p_macuser);
     p_macuser = NULL;
+	LOG_PROC("TIMER", "timeout_mac_user - STOP");
 }
 
 static mac_user_t * add_mac_user(mac_user_t * macuser)    //将该MAC地址添加到表中
@@ -341,8 +345,8 @@ static mac_user_t * add_mac_user(mac_user_t * macuser)    //将该MAC地址添�
     return macuser;
 }
 
-//
-mac_user_t *create_mac_user(gn_switch_t *sw, UINT1 *mac, UINT4 inport, UINT4 host_ip, UINT4 *host_ipv6)           //新建该MAC地址用户
+//新建该MAC地址用户
+mac_user_t *create_mac_user(gn_switch_t *sw, UINT1 *mac, UINT4 inport, UINT4 host_ip, UINT4 *host_ipv6)           
 {
     mac_user_t *p_macuser = NULL;
     p_macuser = (mac_user_t *)mem_get(g_macuser_table.macuser_memid);

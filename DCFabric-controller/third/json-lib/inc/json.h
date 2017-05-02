@@ -24,7 +24,7 @@
 \note error handling is only in a very rudimentary form.
 \author Rui Maciel	rui_maciel@users.sourceforge.net
 \author Sven Herzberg
-\version v1.5
+\version v1.6
 */
 
 #include <stdint.h>
@@ -44,13 +44,13 @@ extern "C"
 The descriptions of the json_value node type
 **/
 	enum json_value_type
-	{ JSON_STRING = 0,
-	JSON_NUMBER,
-	JSON_OBJECT,
-	JSON_ARRAY,
-	JSON_TRUE,
-	JSON_FALSE,
-	JSON_NULL
+	{ JSON_STRING = 0, 
+	JSON_NUMBER, 
+	JSON_OBJECT, 
+	JSON_ARRAY, 
+	JSON_TRUE, 
+	JSON_FALSE, 
+	JSON_NULL 
 	};
 
 /**
@@ -88,19 +88,15 @@ The JSON document tree node, which is a basic JSON type
 **/
 	typedef struct json_value
 	{
-		enum json_value_type type;	/*!< the type of node */  //类型
+		enum json_value_type type;	/*!< the type of node */
 		char *text;	/*!< The text stored by the node. It stores UTF-8 strings and is used exclusively by the JSON_STRING and JSON_NUMBER node types */
 
-		/* FIFO queue data */   //同一级
-		//下一个key
-		struct json_value *next;	 /*!<the next element in the FIFO sibling list */
-        //上一个key
-		struct json_value *previous; /*!<the previous element in the FIFO sibling list */
-
-		//value
-		struct json_value *parent;	 /*!<the parent node in the document tree */
-		struct json_value *child;	 /*!<the first child node in the document tree */
-		struct json_value *child_end;/*!<the last child node in the document tree */
+		/* FIFO queue data */
+		struct json_value *next;	/*!< The pointer pointing to the next element in the FIFO sibling list */
+		struct json_value *previous;	/*!< The pointer pointing to the previous element in the FIFO sibling list */
+		struct json_value *parent;	/*!< The pointer pointing to the parent node in the document tree */
+		struct json_value *child;	/*!< The pointer pointing to the first child node in the document tree */
+		struct json_value *child_end;	/*!< The pointer pointing to the last child node in the document tree */
 	} json_t;
 
 
@@ -114,7 +110,7 @@ The structure holding all information needed to resume parsing
 		rcstring *lex_text;
 		const char *p;
 		int string_length_limit_reached;	/*!< flag informing if the string limit length defined by JSON_MAX_STRING_LENGTH was reached */
-		size_t line;	// current document line
+		size_t line;	/* current document line */
 		json_t *cursor;	/*!< pointers to nodes belonging to the document tree which aid the document parsing */
 	};
 
@@ -149,7 +145,7 @@ The structure holding the information needed for json_saxy_parse to resume parsi
 	};
 
 
-/**
+/** 
 Buils a json_t document by parsing an open file stream
 @param file a pointer to an object controlling a stream, returned by fopen()
 @param document a reference to a json_t pointer, set to NULL, which will store the parsed document
@@ -253,7 +249,7 @@ Produces a JSON markup text document from a document tree
 
 
 /**
-Produces a JSON markup text document from a json_t document tree to a text stream
+Produces a JSON markup text document from a json_t document tree to a text stream 
 @param file a opened file stream
 @param root The document's root node
 @return  a json_error code describing how the operation went
@@ -263,7 +259,7 @@ Produces a JSON markup text document from a json_t document tree to a text strea
 
 /**
 Strips all JSON white spaces from the text string
-@param text a char string holding a JSON document or document snippet
+@param text a char string holding a JSON document or document snippet 
 **/
 	void json_strip_white_spaces (char *text);
 
@@ -294,7 +290,7 @@ Outputs a new UTF8 c-string which replaces all characters that must be escaped w
 
 
 /**
-This function takes care of the tedious task of initializing any instance of
+This function takes care of the tedious task of initializing any instance of 
 struct json_parsing_info
 @param jpi a pointer to a struct json_parsing_info instance
 **/

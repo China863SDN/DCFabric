@@ -35,6 +35,8 @@
 #include "gn_inet.h"
 #include <pthread.h>
 #include <semaphore.h>
+#include <sys/prctl.h>   
+
 /*****************************
  * intern functions
  *****************************/
@@ -63,28 +65,30 @@ void* fabric_host_thread();
  *****************************/
 static UINT1 g_fabric_arp_flood_flag;
 pthread_t p_fabric_arp_flood_thread_id;
-sem_t fabric_arp_flood_sem;
+sem_t fabric_arp_flood_sem;						//by:yhy ARP洪泛信号量
 
 static UINT1 g_fabric_ip_flood_flag;
 pthread_t p_fabric_ip_flood_thread_id;
 sem_t fabric_ip_flood_sem;
-
+//by:yhy 流表处理 标志
 static UINT1 g_fabric_flow_flag;
 pthread_t p_fabric_flow_thread_id;
 sem_t fabric_flow_sem;
 
-static UINT1 g_fabric_host_flag;
+// static UINT1 g_fabric_host_flag;
 pthread_t p_fabric_host_thread_id;
 sem_t fabric_host_sem;
 
 /*****************************
  * interface functions
  *****************************/
-void start_fabric_thread(){
+//by:yhy 启动arp包处理线程,flow处理线程
+void start_fabric_thread()
+{
 
 	init_fabric_arp_request_list();
 	init_fabric_host_list();
-	// start arp flood thread
+	//markby:yhy start arp flood thread
 	g_fabric_arp_flood_flag = 1;
 	sem_init(&fabric_arp_flood_sem,0,0);
 	pthread_create(&p_fabric_arp_flood_thread_id,NULL,fabric_arp_flood_thread,NULL);
@@ -140,30 +144,39 @@ void stop_fabric_thread(){
 /*****************************
  * intern functions: thread functions
  *****************************/
-/*
+/* markby:yhy 处理arp包(各交换机各端口洪泛)
  * fabric arp flood thread
  */
-void* fabric_arp_flood_thread(){
+void* fabric_arp_flood_thread()
+{
 	p_fabric_arp_flood_node flood_node = NULL;
 	packet_in_info_t *packet_in = NULL;
 
+	prctl(PR_SET_NAME, (unsigned long) "FabricArpFlood" ) ;  
+	
 	// initialize the flood queue
 	init_fabric_arp_flood_queue();
 
 	LOG_PROC("INFO","fabric_flood_thread init!");
-	while(g_fabric_arp_flood_flag){
+	while(g_fabric_arp_flood_flag)
+	{
+		//by:yhy 等待接收线程中增加信号量
 		sem_wait(&fabric_arp_flood_sem);
-		while(is_fabric_arp_flood_queue_empty()){
+		while(is_fabric_arp_flood_queue_empty())
+		{
 			flood_node = get_head_fabric_arp_flood_from_queue();
-			if(flood_node != NULL){
+			if(flood_node != NULL)
+			{
+				//by:yhy 提取"packet in"包并处理
 				packet_in = &flood_node->packet_in_info;
 				fabric_packet_flood(packet_in);
 			}
+			//by:yhy 清理已经经过处理的arp包
 			flood_node = pop_fabric_arp_flood_from_queue();
 			delete_fabric_arp_flood_node(flood_node);
 		}
 	}
-	// Destroy the flood queue
+	//by:yhy 清理已经经过处理的arp包队列
 	destory_fabric_arp_flood_queue();
 	LOG_PROC("INFO","fabric_flood_thread end!");
 	return NULL;
@@ -197,29 +210,46 @@ void* fabric_ip_flood_thread(){
 	LOG_PROC("INFO","fabric_ip_flood_thread end!");
 	return NULL;
 };
-/*
+/* markby:yhy why? 具体细节没看懂
  * fabric flows thread
  */
-void* fabric_flow_thread(){
+void* fabric_flow_thread()
+{
 	p_fabric_flow_node flow_node = NULL;
 
+	
+	prctl(PR_SET_NAME, (unsigned long) "FabFlowThread" ) ;  
+	
 	// initialize the flood queue
 	init_fabric_flow_queue();
 
 	LOG_PROC("INFO","fabric_flow_thread init!");
-	while(g_fabric_flow_flag){
+	while(g_fabric_flow_flag)
+	{
+		//by:yhy 等待异步信号量
 		sem_wait(&fabric_flow_sem);
-		while(is_fabric_flow_queue_empty()){
+		//by:yhy 判空
+		while(is_fabric_flow_queue_empty())
+		{//by:yhy g_fabric_flow_queue不空
+			//by:yhy 获取头结点
 			flow_node = get_head_fabric_flow_from_queue();
-			if(flow_node != NULL){
-				if(flow_node->dst_host->sw == flow_node->src_host->sw){
+			if(flow_node != NULL)
+			{
+				//by:yhy 源主机和目标主机挂在同一个交换机下,须在该交换机中添加两条流表项
+				if(flow_node->dst_host->sw == flow_node->src_host->sw)
+				{
+					//by:yhy why?具体函数细节没懂
 					install_fabric_same_switch_flow(flow_node->dst_host->sw,flow_node->dst_host->mac,flow_node->dst_host->port);
 					install_fabric_same_switch_flow(flow_node->src_host->sw,flow_node->src_host->mac,flow_node->src_host->port);
-				}else{
+				}
+				else
+				{
+					//by:yhy why?具体函数细节没懂
 					install_fabric_push_tag_flow(flow_node->src_host->sw,flow_node->dst_host->mac,flow_node->dst_tag);
 					install_fabric_push_tag_flow(flow_node->dst_host->sw,flow_node->src_host->mac,flow_node->src_tag);
 				}
 			}
+			//by:yhy 销毁已处理的节点
 			flow_node = pop_fabric_flow_from_queue();
 			delete_fabric_flow_node(flow_node);
 		}
@@ -278,10 +308,11 @@ void* fabric_flow_thread(){
 /*****************************
  * intern functions
  *****************************/
-/*
+/* markby:yhy 从所有交换机的所有端口洪泛
  * flood the packet to each port without switch intern ports
  */
-void fabric_packet_flood( packet_in_info_t *packet_in_info){
+void fabric_packet_flood( packet_in_info_t *packet_in_info)
+{
 	packout_req_info_t pakout_req;
 	gn_switch_t *sw = NULL;
 	UINT2 i = 0,j=0;
@@ -293,20 +324,25 @@ void fabric_packet_flood( packet_in_info_t *packet_in_info){
 	pakout_req.data_len = packet_in_info->data_len;
 	pakout_req.data = packet_in_info->data;
 
-	// find all switch
-	for(i = 0; i < g_server.max_switch; i++){
-		if (g_server.switches[i].state){
+	//by:yhy 遍历所有交换机
+	for(i = 0; i < g_server.max_switch; i++)
+	{
+		if (CONNECTED == g_server.switches[i].conn_state)
+		{
 			sw = &g_server.switches[i];
-			// find switch's outter ports
-			for(j=0; j<sw->n_ports; j++){
+			//by:yhy 遍历该交换机的所有端口
+			for(j=0; j<sw->n_ports; j++)
+			{
 				// check port state is ok and also not connect other switch(neighbor)
-				if(sw->ports[j].state == 0 && sw->neighbor[j] == NULL){
+				//if(sw->ports[j].state == 0 && sw->neighbor[j] == NULL)
+				if(sw->ports[j].state == 0 && (FALSE==sw->neighbor[j]->bValid))
+				{
 					pakout_req.outport = sw->ports[j].port_no;
-					sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
+					if(CONNECTED == sw->conn_state)
+						sw->msg_driver.msg_handler[OFPT13_PACKET_OUT](sw, (UINT1 *)&pakout_req);
 				}
 			}
 		}
 	}
-
 	return;
 };

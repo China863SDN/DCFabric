@@ -95,17 +95,29 @@ void close_ini(ini_file_t **ini_file);
  *   Return      :
  *   History     :
  */
+
+int remove_selection(ini_file_t *ini_file, const char *selection);
+char *get_selection_by_selection(ini_file_t *ini_file, const char *name);
+char *get_selection_by_name_value(const ini_file_t *ini_file, const char *name, const char *value);
 char *get_value(const ini_file_t *ini_file, const char *selection, const char *item);
 
+int set_value(const ini_file_t *ini_file, const char *selection, const char *item, char* save_value);
+
+int set_value_int(const ini_file_t *ini_file, const char *selection, const char *item, unsigned long long int save_value);
+
+int set_value_ip(const ini_file_t *ini_file, const char *selection, const char *item, unsigned long int save_value);
+
+int set_value_mac(const ini_file_t *ini_file, const char *selection, const char *item, unsigned char* save_value);
 /*
  *   Author      : dengchao
  *   Create Date : 2014-12-12
  *   Input Args  : ini_file - the ".ini" file pointer
  *                 path - the absolute path and filename of the ".ini" configure file
  *   Output Args :
- *   Return      : 0: succeed; !0: failed
+ *   Return      : return the fd of the ".ini" configure file
  *   History     :
+ *   Attention   : the input param ini_file will be invaild, please use the return value as the ini_file object pointer.
  */
-int save_ini(const ini_file_t *ini_file, const char *path);
+ini_file_t* save_ini(ini_file_t *ini_file, const char *path);
 
 #endif /* INI_H_ */

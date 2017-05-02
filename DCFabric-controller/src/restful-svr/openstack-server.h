@@ -29,13 +29,25 @@
 
 
 
+#ifndef INC_OPENSTACK_SERVER_H_
+#define INC_OPENSTACK_SERVER_H_
 
 
-
-
+enum EOpenStack_GetType
+{
+  EOPENSTACK_GET_NORMAL,
+  EOPENSTACK_GET_PORTFORWARD,
+};
  
-void getNewTokenId(char *ip,char *tenantName,char *username,char *password);
-void getOpenstackInfo(char *ip,char *url,int port,char *string);
+int getNewTokenId(char *ip,char *tenantName,char *username,char *password);
+void getNewTokenId2(char *ip,char *tenantName,char *username,char *password);
+void getOpenstackInfo(char *ip,char *url,int port,char *string, void* param, enum EOpenStack_GetType getType);
 void initOpenstackFabric();
+void updateOpenstackFloating();
+void reload_security_group_info();
+void reoad_lbaas_info();
+void reload_net_info();
+void reload_routers();
+void reload_port_forward();
 
-
+#endif

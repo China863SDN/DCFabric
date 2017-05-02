@@ -1,8 +1,8 @@
 /*
- * GNFlush SDN Controller GPL Source Code
- * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
+ * BNC SDN Controller GPL Source Code
+ * Copyright (C) 2015, BNC <ywxu@bnc.org.cn>
  *
- * This file is part of the GNFlush SDN Controller. GNFlush SDN
+ * This file is part of the BNC SDN Controller. BNC SDN
  * Controller is a free software; you can redistribute it and/or
  * modify it under the terms of the GNU General Public License
  * as published by the Free Software Foundation; either version 2
@@ -20,7 +20,7 @@
 /******************************************************************************
 *                                                                             *
 *   File Name   : common.h           *
-*   Author      : greenet Administrator           *
+*   Author      : BNC Administrator           *
 *   Create Date : 2015-2-12           *
 *   Version     : 1.0           *
 *   Function    : .           *
@@ -96,6 +96,10 @@
 #include <sched.h>
 //#include <libnet.h>
 
+
+#include <sys/epoll.h>
+
+
 typedef signed   char     BOOL;
 typedef char              INT1;
 typedef short             INT2;
@@ -113,10 +117,14 @@ typedef long long int     INT8;
 typedef unsigned long long int UINT8;
 #endif
 
+#include "gn_inet.h"
+
 #define TRUE 1
 #define FALSE 0
 
 #define FN __FUNCTION__
+#define LN __LINE__
+
 
 #ifndef NULL
 #define NULL 0
@@ -162,15 +170,152 @@ typedef unsigned long long int UINT8;
     }                                                   \
 }
 
-
-// 1
+/*
 #define LOG_PROC(log_level, format, arguments...) \
     printf("[%s] ", log_level);    \
     printf(format, ##arguments);    \
     printf("\n");
+*/
+
+#define PRINT_INFO 			TRUE
+#define PRINT_ERROR 		TRUE
+#define PRINT_WARNING 		TRUE
+#define PRINT_DEBUG 		TRUE
+#define PRINT_TIMER 		FALSE
+#define PRINT_TIME	 		TRUE
+#define PRINT_PACKET_IN 	FALSE
+#define PRINT_IP_PACKET 	FALSE	//TRUE
+#define PRINT_ARP_PACKET 	FALSE	//TRUE
+#define PRINT_HANDLER 		FALSE
+#define PRINT_OF13	 		FALSE
+#define PRINT_OF10	 		FALSE
+#define PRINT_OTHER	 		FALSE
+#define PRINT_HBASE			FALSE
+
+extern UINT1 g_log_debug;
+
+#define Print_Time(LocalYear,LocalMonth,LocalTime) 			\
+	printf("%d/%d/%d-%d:%d:%d", LocalYear,LocalMonth,LocalTime->tm_mday,	LocalTime->tm_hour,	LocalTime->tm_min, LocalTime->tm_sec);	
+
+#define LOG_PROC(log_level, format, arguments...)\
+{													\
+	struct timeval cur_sys_time;		\
+	struct tm *  LocalTime =NULL;		\
+	INT4 LocalYear =0;					\
+	INT4 LocalMonth =0;					\
+	gettimeofday(&cur_sys_time, NULL);	\
+	LocalTime = localtime((time_t*)(&cur_sys_time));	\
+	LocalYear  = LocalTime->tm_year+1900;		\
+	LocalMonth = LocalTime->tm_mon+1;				\
+	if((0==strcmp(log_level,"INFO"))&&(PRINT_INFO||g_log_debug))					\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)		\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"ERROR"))&&(PRINT_ERROR||g_log_debug))			\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)		\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"WARNING"))&&(PRINT_WARNING||g_log_debug))		\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)								\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"DEBUG"))&&(PRINT_DEBUG||g_log_debug))			\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)								\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"TIMER"))&&(PRINT_TIMER||g_log_debug))			\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)								\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+   else if((0==strcmp(log_level,"TIME"))&&(PRINT_TIME||g_log_debug))				\
+   {												\
+   	   Print_Time(LocalYear,LocalMonth,LocalTime)								\
+	   printf("[%s] ", log_level);    				\
+	   printf(format, ##arguments);    			\
+	   printf("\n");								\
+   }												\
+	else if((0==strcmp(log_level,"PACKET_IN"))&&(PRINT_PACKET_IN||g_log_debug))	\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)								\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"HANDLER"))&&(PRINT_HANDLER||g_log_debug))		\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)								\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"OF13"))&&(PRINT_OF13||g_log_debug))				\
+	{												\
+	   Print_Time(LocalYear,LocalMonth,LocalTime)								\
+	   printf("[%s] ", log_level);    				\
+	   printf(format, ##arguments);    				\
+	   printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"OF10"))&&(PRINT_OF10||g_log_debug))				\
+	{												\
+	   Print_Time(LocalYear,LocalMonth,LocalTime)								\
+	   printf("[%s] ", log_level);    				\
+	   printf(format, ##arguments);    				\
+	   printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"IP_PACKET"))&&(PRINT_IP_PACKET||g_log_debug))	\
+	{												\
+	   Print_Time(LocalYear,LocalMonth,LocalTime)								\
+	   printf("[%s] ", log_level);    				\
+	   printf(format, ##arguments);    				\
+	   printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"ARP_PACKET"))&&(PRINT_ARP_PACKET||g_log_debug))	\
+	{												\
+	   Print_Time(LocalYear,LocalMonth,LocalTime)								\
+	   printf("[%s] ", log_level);    				\
+	   printf(format, ##arguments);    				\
+	   printf("\n");								\
+	}												\
+	else if((0==strcmp(log_level,"HBASE"))&&(PRINT_HBASE||g_log_debug))	\
+	{												\
+		Print_Time(LocalYear,LocalMonth,LocalTime)		\
+		printf("[%s] ", log_level);    				\
+		printf(format, ##arguments);    			\
+		printf("\n");								\
+	}												\
+	else											\
+	{												\
+	}												\
+}	
+
+
+#define MSG_MAX_LEN  10240
+
+#define Msg_Buf(msgtype) \
+    char msgbuf[MSG_MAX_LEN];\
+    memset(msgbuf, 0, sizeof(msgbuf));\
+    msgtype* pMsg = NULL;\
+    pMsg = (msgtype*)msgbuf;
+
+
 /*
 // 2
-UINT1 g_log_level;   //������־��ʾ����
+UINT1 g_log_level;   //设置日志显示级别
 #define GN_LOG(log_level, format, arguments...) \
 {                                       \
     if(log_level >= g_log_level)        \
@@ -240,7 +385,7 @@ typedef struct key_value
 
 typedef struct net_mask
 {
-    UINT4 ip;       //�����ֽ���
+    UINT4 ip;       //网络字节序
     UINT4 prefix;
     UINT4 minip;
     UINT4 maxip;
@@ -248,6 +393,9 @@ typedef struct net_mask
 #pragma pack()
 
 INT1* strcut(INT1 *org, INT1 delim, INT1 **next);
+
+void Debug_PrintTrace(void);
+void MsecSleep(UINT4 uiMillSec);
 
 //malloc and memset
 void* gn_malloc(size_t size);
@@ -290,5 +438,121 @@ INT4 get_total_cpu();
 
 //set the cpu affinity of the current thread
 INT4 set_cpu_affinity(UINT4 cpu_id);
+
+// convert ip to number
+UINT4 ip2number(const INT1* ip);
+
+// convert number to ip
+INT1* number2ip(INT4 ip_num, INT1* ip);
+
+// convert ipv6 to number
+UINT1* ipv6_str_to_number(char* str, UINT1* ipv6);
+
+// show ipv4 log
+void nat_show_ip(UINT4 ip);
+
+// show mac address log
+void nat_show_mac(UINT1* mac);
+
+// show ipv6 log
+void nat_show_ipv6(UINT1* ip);
+
+//convert str dpid to uint8
+INT4 dpidStr2Uint8(const INT1 *dpid, UINT8 *ret);
+BOOL is_digit(const INT1 *str, INT4 base);
+
+/*
+ * 计算校验和
+ */
+UINT2 calc_ip_checksum(UINT2 *buffer, UINT4 size);
+
+UINT2 calc_tcp_checksum(ip_t* p_ip, tcp_t* p_tcp);
+
+INT1* dpidUint8ToStr(UINT8 dpid, INT1* str);
+
+/*
+ * 定义了几个比较函数:
+ * 如果双方均为空,返回1;均不为空且内容一致,返回1;
+ * 其他情况返回0
+ */
+INT4 compare_str(char* str1, char* str2);
+
+INT4 compare_array(void* str1, void* str2, INT4 num);
+
+INT4 compare_pointer(void* ptr1, void* ptr2);
+
+/*
+ * 输入CIDR 字符串 , 转换为IP 和位数的组合
+ * 比如:输入192.168.53.0/24 转换为192.168.53.0 和24
+*/
+
+INT4 cidr_str_to_ip_prefix(char* ori_cidr, UINT4* ip, UINT4* mask);
+/*
+ * 输入不小于32的数字,输出对应的子网掩码
+ * 比如:输入24, 输出 FFFFFFF00
+*/
+UINT4 cidr_to_subnet_mask(UINT4 num);
+
+
+/***********************************************************************/
+//Circle Queue Related start
+#define SW_DEFAULT_RECV_BUFFER_LENGTH   102400
+#define SW_READ_BUFFER_PEEK   	TRUE
+#define SW_READ_BUFFER_UNPEEK   FALSE
+typedef struct loop_buffer
+{
+	char  *buffer;
+	UINT4 total_len;
+	UINT4 cur_len;
+	char  *head;
+	pthread_mutex_t buffer_mutex;
+}loop_buffer_t, * p_loop_buffer;
+
+
+loop_buffer_t *init_loop_buffer(INT4 len);
+void reset_loop_buffer(loop_buffer_t *p_loop_buffer);
+BOOL buffer_write(loop_buffer_t *p_loop_buffer,char* p_recv,UINT4 len);
+BOOL buffer_read(loop_buffer_t *p_loop_buffer,char* p_dest,UINT4 len,BOOL peek);
+//Circle Queue Related stop
+/***********************************************************************/
+
+/***********************************************************************/
+//Queue Related start
+typedef struct Queue_node
+{
+	void * nodeData;
+	struct Queue_node * next;
+}t_Queue_node, * p_Queue_node;
+
+typedef struct MultiPurpose_queue
+{
+	p_Queue_node	QueueHead;
+	p_Queue_node	QueueRear;
+	UINT4	QueueLength;
+	pthread_mutex_t QueueThreadMutex;
+}t_MultiPurpose_queue, * p_MultiPurpose_queue;
+
+void init_queue(p_MultiPurpose_queue para_queue);
+void push_node_into_queue( p_MultiPurpose_queue para_queue,p_Queue_node node);
+p_Queue_node pop_node_from_queue(p_MultiPurpose_queue para_queue);
+p_Queue_node get_head_node_from_queue(p_MultiPurpose_queue para_queue);
+UINT4 is_queue_empty(p_MultiPurpose_queue para_queue);
+void destory_queue(p_MultiPurpose_queue para_queue);
+//Queue Related stop
+/***********************************************************************/
+
+
+
+INT1 GetBit_SW_TIMER_TASK_HEARTBEAT(INT1 *X);
+
+void SetBit_SW_TIMER_TASK_HEARTBEAT(INT1 *X);
+
+void ClrBit_SW_TIMER_TASK_HEARTBEAT(INT1 *X);
+
+INT1 GetBit_SW_TIMER_TASK_LLDP(INT1 *X);
+
+void SetBit_SW_TIMER_TASK_LLDP(INT1* X);
+
+void ClrBit_SW_TIMER_TASK_LLDP(INT1 *X);
 
 #endif /* COMMON_H_ */
