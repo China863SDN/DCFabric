@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>系统状态</title>
+    <title>system configuration</title>
     <link href="../css/application.min.css" rel="stylesheet">
     <link rel="shortcut icon" href="img/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,36 +22,36 @@
 <div class="logo">
     <h2 class="page-title">
          <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
-        DCFabric <small>配置管理</small></h2>
+        DCFabric <small>configuration managment</small></h2>
 </div>
 <nav id="sidebar" class="sidebar nav-collapse collapse">
     <ul id="side-nav" class="side-nav">
         <li class='accordion-group'>
-            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">cluster configuration</span></a>
         </li>
         <li class='accordion-group active'>
-            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">switch information</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">network topo</span></a>
         </li>
-        <!--  <li class='accordion-group'>
-            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+     <!--   <li class='accordion-group'>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">flow configuration</span></a>
         </li>
         <li class="accordion-group">
-            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">firewall management</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">L3 gateway configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter table configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group table configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">tenant managent</span></a>
         </li> -->
          <li class='accordion-group'>
             <a href="../open_manage/openstack_main.html"><i class="icon-desktop"></i> <span class="name">openstack</span></a>
@@ -101,7 +101,7 @@
     <div class="content container-fluid">
         <div class="row-fluid">
             <div class="span12">
-                <h4 class="page-title">交换机信息 <small>查看交换机信息</small></h4>
+                <h4 class="page-title">switch information <small>view switch information</small></h4>
             </div>
         </div>
         <div class="row-fluid">
@@ -110,13 +110,13 @@
                     <header style="padding-bottom: 20px;">
                         <h4 style="display: block;float: left;">
                             <i class="icon-file-alt"></i>
-                            交换机信息查询
+                            switch information inquiry
                         </h4>              
                         <div style="display: block;float: right;">
-                            控制器IP：
+                            controller IP：
                             <!-- <input type='text' style='width:80px;height:15px;margin-top: 10px;margin-right:20px;'> -->
                             <select id="control" style='width:160px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'></select>
-                            <button type="button" class="btn btn-success btn-small" onclick="search()">查&nbsp;询</button>
+                            <button type="button" class="btn btn-success btn-small" onclick="search()">inquiry</button>
                         </div>          
                     </header>
                     <div class="body">
@@ -124,13 +124,13 @@
                             <thead>
                                 <tr>
                                     <th>dpid</th>
-                                    <th>IP地址</th>
-                                    <th>端口</th>
-                                    <th>厂商</th>
-                                    <th>软件版本</th>
-                                    <th>硬件版本</th>
-                                    <th>协议版本</th>
-                                    <th>操作</th>
+                                    <th>IP address</th>
+                                    <th>port</th>
+                                    <th>manufacturer</th>
+                                    <th>software version</th>
+                                    <th>hardware version</th>
+                                    <th>protocol version</th>
+                                    <th>operate</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -142,7 +142,7 @@
         <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog" style="style="background-color: rgba(61, 66, 68, 1);color:#fff"">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" >×</button>
-                <h4 id="myModalLabel2" style="color:#fff">查看网口信息</h4>
+                <h4 id="myModalLabel2" style="color:#fff">view network interface information</h4>
             </div>
             <div class="modal-body">
                 <div id="netport" class="row" style='margin-left:0px;'>
@@ -151,7 +151,7 @@
                 
             </div>
             <div class="modal-footer" style="background-color: rgba(61, 66, 68, 1);">
-                <button class="btn" data-dismiss="modal">关闭</button>
+                <button class="btn" data-dismiss="modal">close</button>
             </div>
         </div>
     </div>
@@ -211,9 +211,9 @@
             else
                 portTenNumber = parseInt(obj[i].portNumber,16).toString(10);
             cont += "<div class='span4' style='margin-left:0px;padding: 5px;width: 250px;border-bottom: 1px solid #cccccc;'>"
-            cont +=     "<p>网口名称:"+obj[i].name+"</p>";
-            cont +=     "<p>网口号:"+portTenNumber+"</p>";
-            cont +=     "<p>MAC地址:"+obj[i].hardwareAddress+"</p>";
+            cont +=     "<p>interface name:"+obj[i].name+"</p>";
+            cont +=     "<p>interface number:"+portTenNumber+"</p>";
+            cont +=     "<p>MAC address:"+obj[i].hardwareAddress+"</p>";
             cont += "</div>";
         }
         $("#netport").html("");
@@ -228,7 +228,7 @@
                 data = data.data;
                 var aaData = [];
                 for(var i in data){
-                    var oper = "<button type='button' class='btn btn-success btn-small' onclick='searchNetPort(" + JSON.stringify(data[i].netport) + ")''>查看网口信息</button>"
+                    var oper = "<button type='button' class='btn btn-success btn-small' onclick='searchNetPort(" + JSON.stringify(data[i].netport) + ")''>view network interface information</button>"
                     var obj = [
                         data[i].dpid,
                         data[i].ip,

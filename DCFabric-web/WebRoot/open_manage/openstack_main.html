@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>系统状态</title>
+    <title>system configuration</title>
     <link href="../css/application.min.css" rel="stylesheet">
     <link rel="shortcut icon" href="img/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,37 +21,37 @@
 <body id="sizediv" class="background-dark">
 <div id="logobar" class="logo">
     <h2 class="page-title">
-        <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
-        DCFabric <small>配置管理</small></h2>
+          <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
+        DCFabric <small>configuration management</small></h2>
 </div>
 <nav id="sidebar" class="sidebar nav-collapse collapse">
     <ul id="side-nav" class="side-nav">
         <li class='accordion-group'>
-            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">cluster configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">switch information</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">network topo</span></a>
         </li>
      <!--   <li class='accordion-group'>
-            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">flow configuration</span></a>
         </li>
         <li class="accordion-group">
-            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">firewall management</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">L3 gateway configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter table configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group table configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">tenant managent</span></a>
         </li>-->
         <li class='accordion-group active'>
             <a href="../open_manage/openstack_main.html"><i class="icon-desktop"></i> <span class="name">openstack</span></a>
@@ -116,18 +116,18 @@
                             <header style="padding-bottom: 20px;">
                                 <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                   添加Openstack Controller
+                                   Add Openstack Controller
                                 </h4>
-                                <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" data-toggle="modal" data-target="#myModal2">添加控制器</button></div>
+                                <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" data-toggle="modal" data-target="#myModal2">Add controller</button></div>
                                 <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog" style="background-color: rgba(61, 66, 68, 1);color:#fff">
                             <div class="modal-header">
                                 <button type="button" class="close" data-dismiss="modal" >×</button>
-                                <h4 id="myModalLabel2" style="color:#fff">添加控制器</h4>
+                                <h4 id="myModalLabel2" style="color:#fff">Add controller</h4>
                             </div>
                             <div class="modal-body">
                                 <form id="user-form" class="form-horizontal label-right">
                                     <div class="control-group">
-                                        <label class="control-label" for="ip">IP地址</label>
+                                        <label class="control-label" for="ip">IP address</label>
                                         <div class="controls controls-row">
                                             <input type="text" id="ip" name="ip" class="span6">
                                         </div>
@@ -136,8 +136,8 @@
                                 
                             </div>
                             <div class="modal-footer" style="background-color: rgba(61, 66, 68, 1);">
-                                <button class="btn" data-dismiss="modal">关闭</button>
-                                <button class="btn btn-primary" onclick='add()'>提交</button>
+                                <button class="btn" data-dismiss="modal">close</button>
+                                <button class="btn btn-primary" onclick='add()'>commit</button>
                             </div>
                         </div>
                             </header>
@@ -147,7 +147,7 @@
                                 <tr>
                                     <th>IP</th>
                                 
-                                    <th>操作</th>
+                                    <th>operate</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -162,10 +162,10 @@
                             <header style="padding-bottom: 20px;">
                                 <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                  基本设置
+                                  Basic setting
                                 </h4>
-                                <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="updateConfig()">保存</button></div>
-                                <div style="display: block;float: right;"><button type="button" class="btn btn-success btn-small" onclick="searchConfig()">查询</button></div>
+                                <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="updateConfig()">save</button></div>
+                                <div style="display: block;float: right;"><button type="button" class="btn btn-success btn-small" onclick="searchConfig()">inquiry</button></div>
                                 <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog" style="background-color: rgba(61, 66, 68, 1);color:#fff">
                             <div class="modal-header">
                                 <button type="button" class="close" data-dismiss="modal" >×</button>
@@ -173,7 +173,7 @@
                             <div class="modal-body">
                                 <form id="user-form" class="form-horizontal label-right">
                                     <div class="control-group">
-                                        <label class="control-label" for="ip">IP地址</label>
+                                        <label class="control-label" for="ip">IP address</label>
                                         <div class="controls controls-row">
                                             <input type="text" id="ip" name="ip" class="span6">
                                         </div>
@@ -187,19 +187,19 @@
                         <table id="datatable-table8" class="table table-striped">
                             <thead>
                                 <tr>
-                                    <th style="width:30%">功能列表</th>
+                                    <th style="width:30%">function list</th>
                                 
-                                    <th>操作</th>
+                                    <th>operate</th>
                                 </tr>
                             </thead>
                             <tbody>
-                             <tr><td>是否允许下发ip匹配流表</td><td><input type=radio id="ipflow1" name="ipflow" value="1"/>是<input type=radio id="ipflow0" name="ipflow" value="0"/>否</td></tr>
-                             <tr><td>是否允许启动初始化sFabric</td><td><input type=radio id="fabricon1" name="fabricon" value="1"/>是<input type=radio id="fabricon0" name="fabricon" value="0"/>否</td></tr>
-                             <tr><td>是否开启对接openstack</td><td><input type=radio id="openstackon1" name="openstackon" value="1"/>是<input type=radio id="openstackon0" name="openstackon" value="0"/>否</td></tr>
-                             <tr><td>是否支持物理openflow交换机</td><td><input type=radio id="physupport1" name="physupport" value="1"/>是<input type=radio id="physupport0" name="physupport" value="0"/>否</td></tr>
-                             <tr><td>最大交换机连接数</td><td><input type=text value="" id="maxswitch"/></td></tr>
-                             <tr><td>每台交换机允许最大数据包池</td><td><input type=text value="" id="maxbuff"/></td></tr>
-                             <tr><td>每个数据包最大长度分割点</td><td><input type=text value="" id="maxlength"/></td></tr>
+                             <tr><td>whether to allow to issued IP matching flow table</td><td><input type=radio id="ipflow1" name="ipflow" value="1"/>Yes<input type=radio id="ipflow0" name="ipflow" value="0"/>No</td></tr>
+                             <tr><td>whether to allow to start initialization sFabric</td><td><input type=radio id="fabricon1" name="fabricon" value="1"/>Yes<input type=radio id="fabricon0" name="fabricon" value="0"/>No</td></tr>
+                             <tr><td>whether to Open docking openstack</td><td><input type=radio id="openstackon1" name="openstackon" value="1"/>Yes<input type=radio id="openstackon0" name="openstackon" value="0"/>No</td></tr>
+                             <tr><td>whether to support physical openflow switches</td><td><input type=radio id="physupport1" name="physupport" value="1"/>Yes<input type=radio id="physupport0" name="physupport" value="0"/>No</td></tr>
+                             <tr><td>maximum number of switch connections</td><td><input type=text value="" id="maxswitch"/></td></tr>
+                             <tr><td>maximum packet pool allowed per switch</td><td><input type=text value="" id="maxbuff"/></td></tr>
+                             <tr><td>Maximum length of each packet</td><td><input type=text value="" id="maxlength"/></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -212,19 +212,19 @@
                             <header style="padding-bottom: 20px;">
                                 <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                    网络列表
+                                    Network list
                                     </h4>
-                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchNetwork()">查询</button></div>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchNetwork()">inquiry</button></div>
                                     </header>
                                      <div class="body">
                                 <table id="datatable-table4" class="table table-striped">
                                     <thead>
                                         <tr>
-                                            <th>名称</th>
+                                            <th>name</th>
                                             <th>id</th>
-                                            <th>是否共享</th>
-                                            <th>类型</th>
-                                            <th>租户id</th>
+                                            <th>whether to share</th>
+                                            <th>type</th>
+                                            <th>tenant id</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -237,9 +237,9 @@
                                     <header style="padding-bottom: 20px;">
                                     <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                 子网列表
+                                 subnet list
                                     </h4>
-                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchSubnets()">查询</button></div>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchSubnets()">inquiry</button></div>
                                     </header>
                                     <header style="padding-bottom: 10px;">
                                     <div style="display: block;float: left;margin-top:-20px">
@@ -249,11 +249,11 @@
                                 <table id="datatable-table5" class="table table-striped">
                                     <thead>
                                         <tr>
-                                            <th>名称</th>
-                                            <th>子网id</th>
-                                            <th>网络id</th>
-                                            <th>网关</th>
-                                            <th>租户id</th>
+                                            <th>name</th>
+                                            <th>subnet id</th>
+                                            <th>network id</th>
+                                            <th>gateway</th>
+                                            <th>tenant id</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -267,19 +267,19 @@
                             <header style="padding-bottom: 20px;">
                                 <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                    port列表
+                                    port list
                                     </h4>
-                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchPorts()">查询</button></div>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="searchPorts()">inquiry</button></div>
                                     </header>
                                      <div class="body">
                                 <table id="datatable-table6" class="table table-striped">
                                     <thead>
                                         <tr>
-                                            <th>网关ip</th>
-                                            <th>mac地址</th>
-                                            <th>子网id</th>
+                                            <th>gateway ip</th>
+                                            <th>mac address</th>
+                                            <th>subnet id</th>
                                             <th>port id</th>
-                                            <th>租户id</th>
+                                            <th>tenant id</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -293,21 +293,21 @@
                             <header style="padding-bottom: 20px;">
                                 <h4 style="display: block;float: left;">
                                     <i class="icon-file-alt"></i>
-                                                                                                                                      外网列表
+                                                                                                                                      ounter network list
                                     </h4>
                                     <div style="display: block;float: right;">
-                                    <button type="button" class="btn btn-success btn-small" onclick="updateExternal()">更新端口信息</button>
-                                    <button type="button" class="btn btn-primary btn-small" onclick="searchExternal()">查询</button></div>
+                                    <button type="button" class="btn btn-success btn-small" onclick="updateExternal()">update port information</button>
+                                    <button type="button" class="btn btn-primary btn-small" onclick="searchExternal()">inquiry</button></div>
                                     </header>
                                      <div class="body">
                                 <table id="datatable-table7" class="table table-striped">
                                     <thead>
                                         <tr>
-                                            <th>外部接口ip</th>
-                                            <th>外部接口mac地址</th>
-                                            <th>外网网关</th>
-                                             <th>外网网关mac</th>
-                                            <th>操作</th>
+                                            <th>outer interface ip</th>
+                                            <th>outer interface mac address</th>
+                                            <th>outer network gateway</th>
+                                             <th>outer network gateway mac</th>
+                                            <th>operate</th>
                                         </tr>
                                     </thead>
                                     <tbody></tbody>
@@ -442,11 +442,11 @@
         $.post("../openstack/add",{ip:ip},function(data){
             if(data.status=="0"||data.status==0){
                 if(data.data){
-                    alert("添加成功！");
+                    alert("add success！");
                     $("#myModal2").hide();
                     searchConfig();
                 }else{
-                    alert("添加失败！");
+                    alert("add failed！");
                 }
             }
         },'json');
@@ -457,7 +457,7 @@
             if(data.status=="0"||data.status==0){
                 data = data.data;
                 for(var i in data){
-                    var oper = "<button type='button' class='btn btn-danger btn-small' onclick='delController(" + JSON.stringify(data[i]) + ")''>删除</button>";
+                    var oper = "<button type='button' class='btn btn-danger btn-small' onclick='delController(" + JSON.stringify(data[i]) + ")''>delete</button>";
                     $("#datatable-table3 tbody").append("<tr><td>"+data[i]+"</td><td>"+oper+"</td></tr>");
                 }
                 $("#datatable-table3").show();
@@ -468,10 +468,10 @@
         $.post("../openstack/delController",{controller:controller},function(data){
         	if(data.status=="0"||data.status==0){
                 if(data.data){
-                    alert("删除成功！");
+                    alert("add success！");
                     searchConfig();
                 }else{
-                    alert("删除失败！");
+                    alert("add failed！");
                 }
             }
         },"json");
@@ -544,7 +544,7 @@
 			                portTenNumber = "-1";
 			            else
 			                portTenNumber = parseInt(firstobj[i].portNumber,16).toString(10);
-	                    var strr = "<option value='"+portTenNumber+"'  "+checked+">网口号："+portTenNumber+"</option>";
+	                    var strr = "<option value='"+portTenNumber+"'  "+checked+">network interface number："+portTenNumber+"</option>";
 	                   $("#selecttwo"+str).append(strr);
 	                }
                 }
@@ -566,7 +566,7 @@
                portTenNumber = "-1";
            else
                portTenNumber = parseInt(obj[i].portNumber,16).toString(10);
-          var strr = "<option value='"+portTenNumber+"'>网口号："+portTenNumber+"</option>";
+          var strr = "<option value='"+portTenNumber+"'>network interface number："+portTenNumber+"</option>";
           $("#selecttwo"+str).append(strr);
        }
     }
@@ -595,12 +595,12 @@
                    "</td><td>"+data[i]["external_out_interface_mac"]+"</td><td>"+
                    data[i]["external_gateway_ip"]+"</td><td>"+
                    data[i]["external_gateway_mac"]+"</td><td>"+
-                   "<button id='btone"+i+"' type='button' class='btn btn-success btn-small' onclick=showNetCommand("+i+",'"+data[i]["external_dpid"]+"','"+data[i]["external_port"]+"')>绑定交换机端口</button>"+
+                   "<button id='btone"+i+"' type='button' class='btn btn-success btn-small' onclick=showNetCommand("+i+",'"+data[i]["external_dpid"]+"','"+data[i]["external_port"]+"')>bound switch port</button>"+
                    "<div id='divone"+i+"' style='display:none'>"+
                    "<select id='selectone"+i+"' onchange='showRoutePort("+i+")'></select>"+
                    "<select id='selecttwo"+i+"'></select>"+
-                   "<button id='bttwo"+i+"'type='button' class='btn btn-primary btn-small' onclick='submitRoutePort("+i+")'>绑定</button>"+
-                   "<button type='button' class='btn btn-success btn-small' onclick='hideNetCommand("+i+")'>取消</button></div>"+
+                   "<button id='bttwo"+i+"'type='button' class='btn btn-primary btn-small' onclick='submitRoutePort("+i+")'>bound</button>"+
+                   "<button type='button' class='btn btn-success btn-small' onclick='hideNetCommand("+i+")'>cancel</button></div>"+
                    "</td></tr>");
                 }
                 $("#datatable-table7").show();

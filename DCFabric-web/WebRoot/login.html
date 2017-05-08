@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>SDN登录</title>
+    <title>SDN login</title>
     <link href="css/application.min.css" rel="stylesheet">
     <link rel="shortcut icon" href="">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -22,7 +22,7 @@
 <div class="single-widget-container">
     <section class="widget login-widget">
         <header class="text-align-center">
-            <h3>用户登录</h3>
+            <h3>user login</h3>
         </header>
         <div class="body">
             <form class="no-margin"
@@ -53,7 +53,7 @@
                 <div class="form-actions">
                     <a href="javascript:login()" class="btn btn-block btn-large btn-danger">
                         <span class="small-circle"><i class="icon-caret-right"></i></span>
-                        <small>登录</small>
+                        <small>login</small>
                     </a>
                     <p></p>
                     <!-- <div class="forgot"><a class="forgot" href="#">Forgot Username or Password?</a></div> -->
@@ -75,9 +75,9 @@
             addCookie("user", username);
             window.location = "cluster_config/cluster_config.html";
         }else if(username==""||password==""){
-            alert("用户名、密码不能为空！")
+            alert ("username and password can't be empty！")
         }else{
-            alert("用户名、密码不匹配！")
+            alert("username and password can't be empty！")
         }
     }
     $(function(){

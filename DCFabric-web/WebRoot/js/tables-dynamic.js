@@ -128,18 +128,18 @@
         oTables = $('#datatable-table').dataTable({
             "sDom": "<'row-fluid table-top-control'<'span6 hidden-phone per-page-selector'l><'span6'f>r>t<'row-fluid table-bottom-control'<'span6'i><'span6'p>>",
             "oLanguage": {
-                "sProcessing": "正在加载中...",
-                "sLengthMenu": "每页显示_MENU_条记录",
-                "sEmptyTable": "表中无数据存在",
-                "sZeroRecords": "对不起，查询不到相关数据！",
-                "sInfo": "当前显示_START_到_END_条，共_MAX_条记录",
-                "sInfoFiltered": "数据表中共为_MAX_条记录",
-                "sSearch": "搜索",
+                "sProcessing": "Loading...",
+                "sLengthMenu": "Each page display _MENU_ records",
+                "sEmptyTable": "No data available in table",
+                "sZeroRecords": "Sorry, there is no data releated！",
+                "sInfo": "Current page display records from _START_ to _END_，total _MAX_ records",
+                "sInfoFiltered": "There are total _MAX_ records in data table",
+                "sSearch": "search",
                 "oPaginate": {
-                    "sFirst": "首页",
-                    "sPrevious": "上一页",
-                    "sNext": "下一页",
-                    "sLast": "末页"
+                    "sFirst": "First",
+                    "sPrevious": "Prev",
+                    "sNext": "Next",
+                    "sLast": "Last"
                 }
             },
             "aoColumns": unsortableColumns,
@@ -164,18 +164,18 @@
         oTables1 = $('#datatable-table1').dataTable({
             "sDom": "<'row-fluid table-top-control'<'span6 hidden-phone per-page-selector'l><'span6'f>r>t<'row-fluid table-bottom-control'<'span6'i><'span6'p>>",
             "oLanguage": {
-                "sProcessing": "正在加载中...",
-                "sLengthMenu": "每页显示_MENU_条记录",
-                "sEmptyTable": "表中无数据存在",
-                "sZeroRecords": "对不起，查询不到相关数据！",
-                "sInfo": "当前显示_START_到_END_条，共"+total+"条记录",
-                "sInfoFiltered": "数据表中共为_MAX_条记录",
-                "sSearch": "搜索",
+                "sProcessing": "Loading...",
+                "sLengthMenu": "Each page display _MENU_ records",
+                "sEmptyTable": "No data available in table",
+                "sZeroRecords": "Sorry, there is no data releated！",
+                "sInfo": "Current page display records from _START_ to _END_, total"+total+"records",
+                "sInfoFiltered": "There are total _MAX_ records in data table",
+                "sSearch": "search",
                 "oPaginate": {
-                    "sFirst": "首页",
-                    "sPrevious": "上一页",
-                    "sNext": "下一页",
-                    "sLast": "末页"
+                    "sFirst": "First",
+                    "sPrevious": "Prev",
+                    "sNext": "Next",
+                    "sLast": "Last"
                 }
             },
             "aoColumns": unsortableColumns1,

@@ -382,7 +382,7 @@ var prefix = "../jtopo/";
         var pyhsicals = data.nodes.filter(isPhysical);
         var pyhsicalNodes = pyhsicals.map(switchToNode);
         pyhsicalNodes.forEach(addToScene);
-        console.log('物理节点个数' + pyhsicalNodes.length);
+        console.log('Number of Nodes' + pyhsicalNodes.length);
 
         // 核心交换机
         var coreSwitchs = data.nodes.filter(isCoreSwitch);
@@ -506,7 +506,7 @@ var prefix = "../jtopo/";
                     }
                 });
             }catch(e){
-                console.log('查询动态节点出错:' + e);
+                console.log('Inquiry dynamic nodes error:' + e);
             }
             //setTimeout(dynamicAddDelete, 3000);
         }
@@ -560,21 +560,21 @@ var prefix = "../jtopo/";
         var pyhsicals = data.nodes.filter(isPhysical);
         var pyhsicalNodes = pyhsicals.map(switchToNode);
         pyhsicalNodes.forEach(addToScene);
-        console.log('圆形-物理数量：' + pyhsicals.length);
+        console.log('Round-number：' + pyhsicals.length);
 
         // 核心交换机
         var coreSwitchs = data.nodes.filter(isCoreSwitch);
         var coreSwitchNodes = coreSwitchs.map(switchToNode);
         coreSwitchNodes.forEach(addToScene);
         //coreSwitchNodes.forEach(function(e){e.text = "核心-" + e.text;});
-        console.log('圆形-核心交换机：' + coreSwitchs.length);
+        console.log('Round-core switch：' + coreSwitchs.length);
 
         //非核心
         var switchs = data.nodes.filter(notCoreSwitch);
         var switchNodes = switchs.map(switchToNode);
         switchNodes.forEach(addToScene);
         //switchNodes.forEach(function(e){e.text = "交换-" + e.text;});
-        console.log('圆形-非核心交换机：' + switchs.length);
+        console.log('Round -- non-core switch ：' + switchs.length);
 
         function layoutAll(){
             // 如果不需要自动布局
@@ -612,7 +612,7 @@ var prefix = "../jtopo/";
             for(var i=0; i<mininetNumber; i++){
                 var name = mininetNames[i];
                 var subNodes = coreSwitchNodes.filter(function(node){ return node.data.mininet == ''+name; });
-                console.log('子网:'+name + ' 节点数量:' + subNodes.length);
+                console.log('Subnet:'+name + 'number of node:' + subNodes.length);
                 var x = swCenters[i].cx;
                 var y = swCenters[i].cy;
                 var layout = getCircleLayout(subNodes, {cx: x, cy: y});
@@ -623,7 +623,7 @@ var prefix = "../jtopo/";
             for(var i=0; i<mininetNumber; i++){
                 var name = mininetNames[i];
                 var subNodes = switchNodes.filter(function(node){ return node.data.mininet == ''+name; });
-                console.log('子网：'+name + '非核心节点数量:' + subNodes.length);
+                console.log('Subnet：'+name + 'number of non-core nodes:' + subNodes.length);
                 var x = swCenters[i].cx;
                 var y = swCenters[i].cy;
                 var layout = getCircleLayout(subNodes, {cx: x, cy: y, minRadius: 150});
@@ -743,7 +743,7 @@ var prefix = "../jtopo/";
                     }
                 });
             }catch(e){
-                console.log('查询动态节点出错:' + e);
+                console.log('Inquiry dynamic node error:' + e);
             }
             setTimeout(dynamicAddDelete, 3000);
         }
@@ -1094,7 +1094,7 @@ var prefix = "../jtopo/";
                 nodes.forEach(function(node){
                     idArray.forEach(function(id){
                         if(node.id == id){
-                            console.log("删除: " + node.text);
+                            console.log("delete: " + node.text);
                             scene.remove(node);
                         }
                     });
@@ -1319,14 +1319,14 @@ var prefix = "../jtopo/";
     function initContextMenu(){
 
         var html = '<ul id="contextmenu" class="modal" style="width:170px;position: absolute;list-style: none;margin: 0;padding: 0;display: none">	'
-            +'<li><a id="tree" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">\u6811\u5f62\u5e03\u5c40\u5c55\u793a</a></li>' //树形布局展示
-            +'<li><a id="grid" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">\u73af\u5f62\u5e03\u5c40\u5c55\u793a</a></li>' //环形布局展示
-            +'<li><a style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;"><label>\u6846\u9009\u6a21\u5f0f&nbsp;<input id="selectModeCheck" type="checkbox"  /></label></a></li>' //是否显示详情
-            +'<li><a style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;"><label>\u663e\u793a\u8be6\u60c5\u7a97\u53e3&nbsp;<input id="detailCheck" type="checkbox"  checked="checked" /></label></a></li>' //是否显示详情
-            +'<li><a style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;"><label>\u663e\u793a\u6700\u4f18\u8def\u5f84&nbsp;<input id="pathCheck" type="checkbox" /></label></a></li>' //是否最优路径
-            +'<li><a id="showVirtualNetBtn" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">\u865a\u62df\u7f51\u663e\u793a</a></li>' //虚拟网显示
-            +'<li><a id="createVirtualNetBtn" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">\u65b0\u5efa\u865a\u62df\u7f51</a></li>' //新建虚拟网
-            +'<li><a id="addToVirtualNet" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">\u6dfb\u52a0\u9009\u5b9a\u8282\u70b9\u5230\u865a\u62df\u7f51</a></li>' //添加选定节点到虚拟网
+            +'<li><a id="tree" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">Tree Layout Show</a></li>' //树形布局展示
+            +'<li><a id="grid" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">Circular layout Display</a></li>' //环形布局展示
+            +'<li><a style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;"><label>Box selection mode&nbsp;<input id="selectModeCheck" type="checkbox"  /></label></a></li>' //是否显示详情
+            +'<li><a style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;"><label>Show Details window&nbsp;<input id="detailCheck" type="checkbox"  checked="checked" /></label></a></li>' //是否显示详情
+            +'<li><a style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;"><label>Show Optimal Path&nbsp;<input id="pathCheck" type="checkbox" /></label></a></li>' //是否最优路径
+            +'<li><a id="showVirtualNetBtn" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">Virtual Network Display</a></li>' //虚拟网显示
+            +'<li><a id="createVirtualNetBtn" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">New Virtual Network</a></li>' //新建虚拟网
+            +'<li><a id="addToVirtualNet" style="display: block;padding: 10px;border-bottom: 1px solid #aaa;cursor: pointer;">Add selected node to virtual network</a></li>' //添加选定节点到虚拟网
             +'</ul>';
         $(document.body).append(html);
 
@@ -1371,23 +1371,23 @@ var prefix = "../jtopo/";
     function initSearchForm(){
         var html = '<div class="dash">'
             +'<ul class="nav nav-tabs">'
-            +' <li class="active"><a id="connection" href="#">\u68c0\u7d22</a></li></ul>'
+            +' <li class="active"><a id="connection" href="#">search</a></li></ul>'
             +' <div class="dashlet row-fluid">'
             +' <form class="navbar-form" role="search">'
             +' <div class="btn-group">'
-            +' <a name="all" class="searchtype btn btn-success">\u6240\u6709</a>'
-            +' <a name="exchange" class="searchtype btn btn-default">\u4ea4\u6362\u673a</a>'
-            +' <a name="host" class="searchtype btn btn-default">\u670d\u52a1\u5668</a>'
+            +' <a name="all" class="searchtype btn btn-success">all</a>'
+            +' <a name="exchange" class="searchtype btn btn-default">switches</a>'
+            +' <a name="host" class="searchtype btn btn-default">servers</a>'
             +' <input type="hidden" id="searchType" value="all"/>'
-            +' </div><a id="searchButton" class="btn btn-primary">\u68c0\u7d22</a>'
+            +' </div><a id="searchButton" class="btn btn-primary">search</a>'
             +' <div class="form-group">'
             +' <input id="searchName" type="text" class="form-control span9" placeholder="nodeId">'
             +'</div> '
             +' <div class="form-group">'
-            +' <input id="searchMac" type="text" class="form-control span9" placeholder="MAC\u5730\u5740">'
+            +' <input id="searchMac" type="text" class="form-control span9" placeholder="MAC address">'
             +' </div>'
             +' <div class="form-group">'
-            +' <input id="searchIp" type="text" class="form-control span9" placeholder="IP\u5730\u5740">'
+            +' <input id="searchIp" type="text" class="form-control span9" placeholder="IP address">'
             +' </div>'
             +' </form>'
             +' </div>'
@@ -1409,24 +1409,24 @@ var prefix = "../jtopo/";
             // +' &nbsp;&nbsp;'
             // +' \u8be6\u60c5\u67e5\u770b&nbsp;<input id="detailCheck" type="checkbox"  checked="checked" />' //详情查看
             +' &nbsp;'
-            +'<a style="padding:1px;font-family:SimHei" id="rateConfig" title="\u76d1\u63a7\u9891\u7387" class="btn btn-primary"><img style="padding-bottom: 3px;" width="16" height="16"  src="'+prefix+'img/setting.png"/>&nbsp;\u8bbe\u7f6e</a>'//监控频率
+            +'<a style="padding:1px;font-family:SimHei" id="rateConfig" title="monitoring frequency" class="btn btn-primary"><img style="padding-bottom: 3px;" width="16" height="16"  src="'+prefix+'img/setting.png"/>&nbsp;setting</a>'//监控频率
             +' &nbsp;'
-            +'<a style="padding:1px;font-family: SimHei" id="topoSaveBtn" title="\u4fdd\u5b58\u62d3\u6251\u8bbe\u7f6e" class="btn btn-primary"><img style="padding-bottom: 3px;"  width="16" height="16"  src="'+prefix+'img/save.png"/>&nbsp;\u4fdd\u5b58</a>'//保存拓扑
+            +'<a style="padding:1px;font-family: SimHei" id="topoSaveBtn" title="save Topology settings" class="btn btn-primary"><img style="padding-bottom: 3px;"  width="16" height="16"  src="'+prefix+'img/save.png"/>&nbsp;save</a>'//保存拓扑
             +'<input type="hidden" id="rateUsedMonitor" value="0"/>'
             +'&nbsp;&nbsp;&nbsp;&nbsp;'
-            +' <a style="padding:1px;width: 50px;font-family: SimHei" id="searchTypeButton" name="all" class="btn btn-primary" >\u6240\u6709</a>' //全部
+            +' <a style="padding:1px;width: 50px;font-family: SimHei" id="searchTypeButton" name="all" class="btn btn-primary" >all</a>' //全部
             +'&nbsp;&nbsp;<input id="searchName" style="width:150px;" placeholder="Id/MAC/ip">'
             //+'<input id="searchMac"  style="width:100px;" placeholder="MAC\u5730\u5740">'
             // +'<input id="searchIp"  style="width:100px;" placeholder="IP\u5730\u5740">'
-            +'&nbsp;<a style="padding:1px;font-family: SimHei" id="searchButton" class="btn btn-primary" title="\u68c0\u7d22"><img style="padding-bottom: 3px;" width="16" height="16"  src="'+prefix+'img/nodesearch.png"/>&nbsp;\u68c0\u7d22</a>'
-            +'&nbsp;&nbsp;<img id="rateUsedRadio" class="btn" src="'+prefix+'img/traffic-light-off.png" title="\u70b9\u51fb\u5f00\u542f\u76d1\u63a7" />'//监控是否开启
+            +'&nbsp;<a style="padding:1px;font-family: SimHei" id="searchButton" class="btn btn-primary" title="search"><img style="padding-bottom: 3px;" width="16" height="16"  src="'+prefix+'img/nodesearch.png"/>&nbsp;search</a>'
+            +'&nbsp;&nbsp;<img id="rateUsedRadio" class="btn" src="'+prefix+'img/traffic-light-off.png" title="Click to open Monitor" />'//监控是否开启
             +'<img id="resizeBtn" class="btn" src="'+prefix+'img/max_size.png" width="16" title="\u5168\u5c4f" height="16" style="padding-top:5px;margin-left:5px;"/>' //全屏
             +'</div>';
 
         var bunGroup =  ' <div id="searchTypeButtonGroup" style="display: none;position: absolute;" class="btn-group">'
-            +' <a name="all" class="searchtype btn btn-success">\u6240\u6709</a>' //全部
-            +' <a name="exchange" class="searchtype btn btn-default">\u4ea4\u6362\u673a</a>' //交换机
-            +' <a name="host" class="searchtype btn btn-default">\u670d\u52a1\u5668</a>' //服务器
+            +' <a name="all" class="searchtype btn btn-success">all</a>' //全部
+            +' <a name="exchange" class="searchtype btn btn-default">switches</a>' //交换机
+            +' <a name="host" class="searchtype btn btn-default">servers</a>' //服务器
             +' <input type="hidden" id="searchType" value="all"/>'
             +' </div>';
         return html+bunGroup;
@@ -1522,9 +1522,9 @@ var prefix = "../jtopo/";
             	//'\u5e26\u5bbd\u76d1\u63a7\u9891\u7387'
             	refreshSettingModal =  '<form id="refreshSettingModal"  class="navbar-form navbar-left" role="search">'
                         +' <div class="form-group">'
-                        +' <input id="'+inputId+'" type="text" class="form-control" placeholder="\u6beb\u79d2" value="'+refresh_Interval+'"> '
-                        +' \u6beb\u79d2'
-                        +' &nbsp;&nbsp;&nbsp;&nbsp; <button type="submit" class="btn btn-default" onclick="window.updateInterval(document.getElementById(\''+inputId+'\').value);return false;">\u4fdd\u5b58\u8bbe\u7f6e</button> '
+                        +' <input id="'+inputId+'" type="text" class="form-control" placeholder="millisecond" value="'+refresh_Interval+'"> '
+                        +' millisecond'
+                        +' &nbsp;&nbsp;&nbsp;&nbsp; <button type="submit" class="btn btn-default" onclick="window.updateInterval(document.getElementById(\''+inputId+'\').value);return false;">save setting</button> '
                         + ' </div></form>';
 //                refreshSettingModal = one.lib.modal.spawn('one.main.config.id', '\u5e26\u5bbd\u76d1\u63a7\u9891\u7387',
 //                        '<form class="navbar-form navbar-left" role="search">'
@@ -1591,7 +1591,7 @@ var prefix = "../jtopo/";
             var selectNodes = Topo.getSelectedNode();
             if(selectNodes.length > 0){
                 if(!$('#MyTopoPopWindows').is(":visible")){
-                    alert('\u672a\u9009\u4e2d\u5bf9\u5e94\u865a\u62df\u7f51\uff0c\u8bf7\u9009\u62e9\u5177\u4f53\u865a\u62df\u7f51\u8fdb\u5165\u8be6\u60c5'); //未选中对应虚拟网，请选择具体虚拟网进入详情
+                    alert('No corresponding virtual network selected, please select specific virtual network entry details'); //未选中对应虚拟网，请选择具体虚拟网进入详情
                     return;
                 }
                 console.log('lastPopShowContent:'+lastPopShowContent+',currentVirtualNetId:'+currentVirtualNetId);
@@ -1628,7 +1628,7 @@ var prefix = "../jtopo/";
                     });
                 }
             }else{
-                alert('\u5f53\u524d\u65e0\u8282\u70b9\u9009\u4e2d,\u8bf7\u5de6\u952e\u70b9\u51fb\u9009\u62e9\u8282\u70b9'); //当前无节点选中,请左键点击选择节点
+                alert('Currently no node selected, left click to select node'); //当前无节点选中,请左键点击选择节点
             }
         });
 
@@ -1641,12 +1641,12 @@ var prefix = "../jtopo/";
         //是否开启实时监控
         $('#rateUsedRadio').click(function(){
             if($('#rateUsedMonitor').val() == 0){//开启监控
-                $('#rateUsedRadio').attr('title','\u70b9\u51fb\u53d6\u6d88\u76d1\u63a7');
+                $('#rateUsedRadio').attr('title','Click to cancel Monitoring');
                 $('#rateUsedRadio').attr('src',prefix+'img/traffic-light.png');
                 $('#rateUsedMonitor').attr('value',1);
                 //$('#rateUsedRadio').attr('class','btn btn-primary');;
             }else{//关闭监控
-                $('#rateUsedRadio').attr('title','\u70b9\u51fb\u5f00\u542f\u76d1\u63a7');
+                $('#rateUsedRadio').attr('title','Click to open Monitor');
                 $('#rateUsedRadio').attr('src',prefix+'img/traffic-light-off.png');
                 $('#rateUsedMonitor').attr('value',0);
                 //$('#rateUsedRadio').attr('class','btn');;
@@ -1660,12 +1660,12 @@ var prefix = "../jtopo/";
     //创建虚拟网
     function createVirtualNet(){
         if(!virtualNetCreateModal){
-            virtualNetCreateModal = one.lib.modal.spawn('one.main.config.id', '\u521b\u5efa\u865a\u62df\u7f51',
+            virtualNetCreateModal = one.lib.modal.spawn('one.main.config.id', 'create virtual netwaork',
                     '<form class="navbar-form navbar-left" role="search">'
-                    +'<div class="form-group">\u540d\u5b57: <input id="input_virtual_net_name" type="text" class="form-control" placeholder="\u552f\u4e00\u540d\u79f0" ></div>  '
-                    +'<div class="form-group">\u663e\u793a: <input id="input_virtual_net_text" type="text" class="form-control" placeholder="\u663e\u793a\u540d" ></div>  '
-                    +'<div class="form-group">\u63cf\u8ff0: <input id="input_virtual_net_desc" type="text" class="form-control" placeholder="\u63cf\u8ff0" ></div>  '
-                    + '<div class="form-group"><br/><button type="submit" class="btn btn-default" onclick="window.saveVirtualNet();return false;">\u4fdd\u5b58</button></div> </form>', 'foot');
+                    +'<div class="form-group">name: <input id="input_virtual_net_name" type="text" class="form-control" placeholder="unique name" ></div>  '
+                    +'<div class="form-group">display: <input id="input_virtual_net_text" type="text" class="form-control" placeholder="display name" ></div>  '
+                    +'<div class="form-group">description: <input id="input_virtual_net_desc" type="text" class="form-control" placeholder="description" ></div>  '
+                    + '<div class="form-group"><br/><button type="submit" class="btn btn-default" onclick="window.saveVirtualNet();return false;">save</button></div> </form>', 'foot');
         }
         $(virtualNetCreateModal).width(300);
         virtualNetCreateModal.modal();
@@ -1700,8 +1700,8 @@ var prefix = "../jtopo/";
             +' <table class="table table-hover"> '
             +' <thead>'
             +' <tr>'
-            +' <th>\u540d\u79f0</th>'
-            +' <th>\u64cd\u4f5c</th>'
+            +' <th>name</th>'
+            +' <th>operate</th>'
             +' </tr>'
             +' </thead>'
             +' <tbody id="virtual_body">'
@@ -1757,7 +1757,7 @@ var prefix = "../jtopo/";
                 var item = items[i];
                 bodyContent = bodyContent+createVirtualItemHtml(dataObj.group,item.nodeId,item.type,item.text,item.ip,item.mac);
             }
-            var bodyAll = '<table class="table table-hover"><thead><tr><th>\u7c7b\u578b</th><th>\u540d\u79f0</th><th>IP</th><th>MAC</th><th>\u64cd\u4f5c</th></tr></thead>'
+            var bodyAll = '<table class="table table-hover"><thead><tr><th>type</th><th>name</th><th>IP</th><th>MAC</th><th>operate</th></tr></thead>'
                 +'<tbody>'
                 +bodyContent
                 +'</tbody></table>';
@@ -1784,7 +1784,7 @@ var prefix = "../jtopo/";
             +'<td>'+text+'</td>'
             +'<td>'+ip+'</td>'
             +'<td>'+mac+'</td>'
-            +'<td><a id="'+id+'" onclick="window.delVirtualNetItem(\''+group+'\',\''+id+'\');" title="\u5220\u9664\u5f53\u524d\u8282\u70b9" class="btn">X</a></td></tr>'; //删除当前节点
+            +'<td><a id="'+id+'" onclick="window.delVirtualNetItem(\''+group+'\',\''+id+'\');" title="delete current node" class="btn">X</a></td></tr>'; //删除当前节点
         return html;
     }
 
@@ -1800,7 +1800,7 @@ var prefix = "../jtopo/";
 
     //显示虚拟网
     function showVirtualNetPanel(){
-        var title = "\u865a\u62df\u7f51\u5217\u8868";
+        var title = "virtualNet list";
         var bodyAll = $('#virtualNetBody').html();
         var htm = createMyTopoPopWin(title,bodyAll);
         $('#MyTopoPopWindows').remove();
@@ -1848,7 +1848,7 @@ var prefix = "../jtopo/";
         }
 
         lastPopShowContent = 'rs';
-        var title = "\u67e5\u5230\u7b26\u5408\u6761\u4ef6\u7684\u8282\u70b9\u6570: <font color=\"red\">"+results.length+"</font>";
+        var title = "the number of nodes eligible: <font color=\"red\">"+results.length+"</font>";
         var bodyContent =   '';
         var items = results;
         for(var i=0;i<items.length;i++){
@@ -1859,7 +1859,7 @@ var prefix = "../jtopo/";
                 +'<td>'+item.text+'</td>'
                 +'</tr>'
         }
-        var bodyAll = '<table class="table table-hover"><thead><tr><th>\u7c7b\u578b</th><th>ID</th><th>\u540d\u79f0</th></tr></thead>'
+        var bodyAll = '<table class="table table-hover"><thead><tr><th>type</th><th>ID</th><th>name</th></tr></thead>'
             +'<tbody>'
             +bodyContent
             +'</tbody></table>';
@@ -1938,12 +1938,12 @@ var prefix = "../jtopo/";
             +'<tr><td>IP:</td><td colspan="2" align="left">'+ dataObj.ip+'</td></tr>' //
             +'<tr><td>MAC:</td><td colspan="2" align="left">'+ dataObj.mac+'</td></tr>' //
             +'<tr><td colspan="3"><table class="table table-condensed">'
-            +'<thead><tr><td>\u5173\u8054\u8282\u70b9</td><td></td><td></td></tr></thead><tbody>' //传输率
+            +'<thead><tr><td>transmit rate</td><td></td><td></td></tr></thead><tbody>' //传输率
             +nodesHtml
             +'</tbody></table></td></tr>'
             +'</table></li>';
 
-        var title = '\u4ea4\u6362\u673a\u8be6\u60c5';
+        var title = 'switch information';
         var div = $("#detailDiv");
         if(!div.attr('id')){
             var html = createDetailWin('detailDiv','Exchange Detail',contentTable,event);
@@ -2171,7 +2171,7 @@ var prefix = "../jtopo/";
                     +'</td></tr>';
             }
             //路径  设置
-            var bodyAll = '<table class="table table-hover"><thead><tr><th>\u8def\u5f84</th><th>\u8bbe\u7f6e</th></tr></thead>'
+            var bodyAll = '<table class="table table-hover"><thead><tr><th>\u8def\u5f84</th><th>setting</th></tr></thead>'
                 +'<tbody>'
                 +bodyContent
                 +'</tbody></table>';

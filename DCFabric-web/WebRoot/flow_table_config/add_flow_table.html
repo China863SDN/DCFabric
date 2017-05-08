@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>系统状态</title>
+    <title>system configuration</title>
     <link href="../css/application.min.css" rel="stylesheet">
     <link rel="shortcut icon" href="img/favicon.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -21,34 +21,35 @@
 <body class="background-dark">
 <div class="logo">
     <h2 class="page-title">
-           <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
-        DCFabric <small>配置管理</small></h2>
+          <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
+        DCFabric <small>configuration management</small></h2>
 </div>
 <nav id="sidebar" class="sidebar nav-collapse collapse">
     <ul id="side-nav" class="side-nav">
         <li class='accordion-group'>
-            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">集群配置</span></a>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">cluster configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">交换机信息</span></a>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">switch information</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">网络拓扑</span></a>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">network topo</span></a>
         </li>
         <li class='accordion-group active'>
-            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">流表配置</span></a>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">flow configuration</span></a>
         </li>
         <li class="accordion-group">
-            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">防火墙管理</span></a>
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">firewall management</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">三层网关配置</span></a>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">L3 gateway configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter表配置</span></a>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter table configuration</span></a>
         </li>
         <li class='accordion-group'>
-            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group表配置</span></a>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group table configuration</span></a>
+
         </li>
         <li class='accordion-group'>
             <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">租户管理</span></a>
@@ -67,7 +68,7 @@
     <div class="content container-fluid">
         <div class="row-fluid">
             <div class="span12">
-                <h4 class="page-title">流表配置 <small></small></h4>
+                <h4 class="page-title">flow configuration<small></small></h4>
             </div>
         </div>
         <div class="row-fluid">
@@ -76,7 +77,7 @@
                     <header style="padding-bottom: 20px;">
                         <h4 style="display: block;float: left;">
                             <i class="icon-file-alt"></i>
-                            添加流表配置列表
+                            add flow configuration list
                         </h4>
                     </header> 
                     <div id="myModal2" class="" style="width: 100%;">
@@ -84,7 +85,7 @@
                             <fieldset class="getflow_val" level="l1">
                                 <div class="span6">
                                     <div class="control-group">
-                                        <label class="control-label" for="controller">控制器</label>
+                                        <label class="control-label" for="controller">controller</label>
                                         <div class="controls">
                                             <select id="controller" name="controller" level="l1" data-style="btn-success" class="selectpicker span12 ">
                                             </select>
@@ -100,7 +101,7 @@
                                     <div class="control-group ">
                                         <label class="control-label" for="tableId">tableId</label>
                                         <div class="controls">
-                                            <input type="text" id="tableId" level="l1" name="tableId" class="span12" placeholder="表号[Default: 0]">
+                                            <input type="text" id="tableId" level="l1" name="tableId" class="span12" placeholder="table number[Default: 0]">
                                         </div>
                                     </div>
                                 </div>
@@ -108,19 +109,19 @@
                                     <div class="control-group ">
                                         <label class="control-label" for="idleTimeout">idleTimeout</label>
                                         <div class="controls ">
-                                            <input type="text" id="idleTimeout" level="l1" name="idleTimeout" class="span12" placeholder="空闲超时时间[Default: 200]">
+                                            <input type="text" id="idleTimeout" level="l1" name="idleTimeout" class="span12" placeholder="idle timeout[Default: 200]">
                                         </div>
                                     </div>
                                     <div class="control-group ">
                                         <label class="control-label" for="hardTimeout">hardTimeout</label>
                                         <div class="controls ">
-                                            <input type="text" id="hardTimeout" level="l1" name="hardTimeout" class="span12" placeholder="硬性超时时间[Default: 200]">
+                                            <input type="text" id="hardTimeout" level="l1" name="hardTimeout" class="span12" placeholder="hard timeout[Default: 200]">
                                         </div>
                                     </div>
                                     <div class="control-group">
                                         <label class="control-label" for="priority">priority</label>
                                         <div class="controls ">
-                                            <input type="text" id="priority" level="l1" name="priority" class="span12" placeholder="优先级">
+                                            <input type="text" id="priority" level="l1" name="priority" class="span12" placeholder="priority class">
                                         </div>
                                     </div>
                                 </div>
@@ -673,7 +674,7 @@
                                                 <div id="clearAction" class="control-group "  style="margin-top: 10px;">
                                                     <label class="control-label" for="clearAction">clearAction</label>
                                                     <div class="controls ">
-                                                        <input type="text" id="clearAction" level="l11" name="clearAction" class="span6" placeholder="表示清空所有Action[无需赋值]">
+                                                        <input type="text" id="clearAction" level="l11" name="clearAction" class="span6" placeholder="clean all Action[no need value]">
                                                     </div>
                                                 </div>
                                                 <!--gotoTable-->
@@ -687,7 +688,7 @@
                                                 <div id="meter" class="control-group " >
                                                     <label class="control-label" for="meter">meter</label>
                                                     <div class="controls ">
-                                                        <input type="text" id="meter" level="l11" name="meter" class="span6" placeholder="计量表ID">
+                                                        <input type="text" id="meter" level="l11" name="meter" class="span6" placeholder="measure table ID">
                                                     </div>
                                                 </div>
                                            </div>
@@ -699,8 +700,8 @@
                     </div> 
                     <div class="form-actions">
                         <div class="pull-right">
-                            <button class="btn btn-success" id="flow_preserve" >保存</button>
-                            <a  class="btn" href="flow_table_config.html">返回</a>
+                            <button class="btn btn-success" id="flow_preserve" >save</button>
+                            <a  class="btn" href="flow_table_config.html">return</a>
                         </div>
                     </div>
                 </section>
@@ -709,14 +710,14 @@
         <div id="myModal" class="modal hide fade" tabindex="-1" role="dialog">
             <div class="modal-header">
                 <button type="button" class="close" data-dismiss="modal" >×</button>
-                <h4 id="myModalLabel">查看流表详细信息</h4>
+                <h4 id="myModalLabel">view flow table information</h4>
             </div>
             <div class="modal-body">
                 <div id="flow_details" class="row" style='margin-left:0px;'>
                 </div>
             </div>
             <div class="modal-footer">
-                <button class="btn" data-dismiss="modal">关闭</button>
+                <button class="btn" data-dismiss="modal">close</button>
             </div>
         </div>
     </div>
@@ -793,11 +794,11 @@
                $.post("../flowtable/add",{ip:ip,port:port,content:JSON.stringify(content)},function(data){
                     if(data.status=="0"||data.status==0){
                         if(data.data){
-                            alert("添加成功！")
+                            alert("add success！")
                             /*$("#myModal2").hide();
                             search();*/
                         }else{
-                            alert("添加失败！");
+                            alert("add failed！");
                         }
                     }
                 },'json');
