@@ -12,16 +12,21 @@ endif
 #Out file path
 OPath=$(PRO_DIR)
 
-CFLAGS = -g -Wall -c
+CFLAGS = -Wall -c
 CFLAGS += -D VERSION=0x020000
 
-ifneq ($(TYPE), test)
-CC=gcc
-TARGET = ./$(PRODUCT)
-else
+ifeq ($(TYPE), test)
 CC=gcc -pg
 LIBS+=$(PRO_DIR)/test/bin/gprof-helper.so
 TARGET = ./$(PRODUCT)_test
+else 
+	ifeq ($(TYPE), release)
+    	CC=gcc
+    	TARGET = ./$(PRODUCT)
+    	else
+    	CC=gcc -g
+    	TARGET = ./$(PRODUCT)_debug
+    	endif
 endif
 
 LIBS+=./third/json-lib/libmjson.a
@@ -61,7 +66,7 @@ all:$(OBJ)
 	@echo "+----------------------------------------------------+"
 	@echo "+     Start building $(PRODUCT) module......     +"
 	@echo "+----------------------------------------------------+"
-	$(CC) -g -o $(TARGET) $(OBJ) $(LIBS)
+	$(CC) -o $(TARGET) $(OBJ) $(LIBS)
 	@echo ""
 	@echo "+----------------------------------------------------+"
 	@echo "+     Finished building $(PRODUCT) program       +"
