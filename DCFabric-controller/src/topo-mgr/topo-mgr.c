@@ -59,6 +59,9 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
     int neigh_port_seq = 0;   //neigh's port_no's Sequence
     int own_port_seq = 0;     //our port_no's Sequence
 
+	BOOL bSwNodeEdgeUp = FALSE;
+	BOOL bNeigborChange = FALSE;
+	
     neigh_sw = find_sw_by_dpid(neighbor_dpid);
     if(neigh_sw)
     {//by:yhy 源交换机存在
@@ -119,25 +122,32 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
     {//by:yhy 接收交换机
        //src_sw->neighbor[own_port_seq] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
        src_sw->neighbor[own_port_seq]->bValid =TRUE;
+	   bSwNodeEdgeUp = TRUE;
     }
     //if (!(neigh_sw->neighbor[neigh_port_seq]))
 	if (!(neigh_sw->neighbor[neigh_port_seq]->bValid))
     {//by:yhy 发送交换机
        // neigh_sw->neighbor[neigh_port_seq] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
         neigh_sw->neighbor[neigh_port_seq]->bValid = TRUE;
+	    bSwNodeEdgeUp = TRUE;
     }
-  
+
+	if ((neigh_sw->neighbor[neigh_port_seq]->sw != src_sw || src_sw->neighbor[own_port_seq]->sw != neigh_sw)||(TRUE == bSwNodeEdgeUp ))
+    {//by:yhy 拓补有变,发送信号,激活topo_change_thread
+
+		bNeigborChange = TRUE;
+    }
 	//by:yhy 更新接收交换机,发送交换机双方的邻居表
     src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  							//该端口序号连接的sw
     src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); 	//该端口与哪个端口相连
     neigh_sw->neighbor[neigh_port_seq]->sw   = src_sw;  						//该端口序号连接的sw
     neigh_sw->neighbor[neigh_port_seq]->port = &(src_sw->ports[own_port_seq]); 	//该端口与哪个端口相连
 
-	if (neigh_sw->neighbor[neigh_port_seq]->sw != src_sw || src_sw->neighbor[own_port_seq]->sw != neigh_sw)
-    {//by:yhy 拓补有变,发送信号,激活topo_change_thread
-        event_add_switch_port_on(src_sw,rx_port);
+	if(bNeigborChange)
+	{
+		event_add_switch_port_on(src_sw,rx_port);
 		event_add_switch_port_on(neigh_sw,tx_port);
-    }
+	}
 	//by:yhy add 201701091313
 	LOG_PROC("HANDLER", "lldp_packet_handler - STOP");
     return 1;

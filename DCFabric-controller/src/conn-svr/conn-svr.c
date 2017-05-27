@@ -859,8 +859,6 @@ INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr)
                 g_server.switches[idx].msg_driver.msg_handler = of_message_handler;
                 g_server.switches[idx].sw_ip = *(UINT4 *)&addr.sin_addr;
                 g_server.switches[idx].sw_port = *(UINT2 *)&addr.sin_port;
-                g_server.switches[idx].recv_buffer.head = 0;
-                g_server.switches[idx].recv_buffer.tail = 0;
                 g_server.switches[idx].send_len = 0;
                 memset(g_server.switches[idx].send_buffer, 0, g_sendbuf_len);
                 //g_server.switches[idx].state = 1;
@@ -899,8 +897,7 @@ void free_switch(gn_switch_t *sw)
     //reset driver
     sw->sw_ip = 0;
     sw->sw_port = 0;
-    sw->recv_buffer.head = 0;
-    sw->recv_buffer.tail = 0;
+
  
 
 
@@ -1173,37 +1170,13 @@ static INT4  init_switch(gn_switch_t *sw)
     }
 
 	
-	//by:yhy 接收缓存分配空间
-    sw->recv_buffer.buff_arr = (buffer_cache_t *)gn_malloc(g_server.buff_num * sizeof(buffer_cache_t));
-    if(NULL == sw->recv_buffer.buff_arr)
-    {
-		//by:yhy add 201701051031
-		LOG_PROC("ERROR", "init_switch -- sw->recv_buffer.buff_arr gn_malloc  Finall return GN_ERR");
-        return GN_ERR;
-    }
-	//by:yhy why? 为何数量要多一个
-    recv_buffer = (UINT1 *)gn_malloc((g_server.buff_num + 1) * g_server.buff_len);
-    if(NULL == recv_buffer)
-    {
-        free(sw->recv_buffer.buff_arr);
-		//by:yhy add 201701051031
-		LOG_PROC("ERROR", "init_switch -- recv_buffer gn_malloc  Finall return GN_ERR");
-        return GN_ERR;
-    }
-	//by:yhy  指针偏移,此处将多分配的那块内存遗弃
-    recv_buffer += g_server.buff_len;
-    for(j = 0; j < g_server.buff_num; j++)
-    {//by:yhy 给每个w->recv_buffer.buff_arr[j].buff分配空间
-        sw->recv_buffer.buff_arr[j].buff = recv_buffer + g_server.buff_len * j;
-    }
 	
 	//by:yhy 发送缓存分配空间
     sw->send_len = 0;
     sw->send_buffer = (UINT1 *)gn_malloc(g_sendbuf_len);
     if(NULL == sw->send_buffer)
     {//by:yhy 分配内存失败,释放buffer
-        free(sw->recv_buffer.buff_arr[0].buff);
-        free(sw->recv_buffer.buff_arr);
+
 		
 		//by:yhy add 201701051031
 		LOG_PROC("ERROR", "init_switch -- sw->send_buffer gn_malloc  Finall return GN_ERR");
@@ -1214,8 +1187,6 @@ static INT4  init_switch(gn_switch_t *sw)
 		sw->neighbor[j] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
 		if(NULL == sw->neighbor[j])
 		{
-			free(sw->recv_buffer.buff_arr[0].buff);
-        	free(sw->recv_buffer.buff_arr);
 			free(sw->send_buffer);
 			//by:yhy add 201701051031
 			LOG_PROC("ERROR", "init_switch -- sw->neighbor gn_malloc  Finall return GN_ERR");
@@ -1305,11 +1276,6 @@ INT4 init_conn_svr()
     value = get_value(g_controller_configure, "[controller]", "max_switch");
     g_server.max_switch = ((NULL == value) ? 7 : atoi(value));
 
-    value = get_value(g_controller_configure, "[controller]", "buff_num");
-    g_server.buff_num = ((NULL == value) ? 1000 : atoi(value));
-
-    value = get_value(g_controller_configure, "[controller]", "buff_len");
-    g_server.buff_len = ((NULL == value) ? 20480 : atoi(value));
 
     value = get_value(g_controller_configure, "[heartbeat_conf]", "heartbeat_interval");
     g_heartbeat_interval= ((NULL == value) ? 5 : atoll(value));

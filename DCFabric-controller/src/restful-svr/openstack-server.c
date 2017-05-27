@@ -305,6 +305,7 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
 		
     if (0 == getNewTokenId(ip, str_tenantname, str_username, str_password))	
 	{
+		LOG_PROC("ERROR", "---%s %d  getNewTokenId",FN,LN);
 		return ;
 	}
 

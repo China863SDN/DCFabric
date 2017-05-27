@@ -124,23 +124,6 @@ INT4 fabric_openstack_dnatip_packet_out_handle(p_fabric_host_node src_port, pack
 		return IP_DROP;
 	}
 
-	//
-	#if 0
-	int_host = get_fabric_host_from_list_by_ip(pfip->n_dst_ip);
-	if (NULL == int_host) {
-		LOG_PROC("INFO", "Floating: Internal host is NULL!");
-		return IP_DROP;
-	}
-
-	
-	//write flow table
-	//packet out rule
-	if (NULL == int_host->sw) {
-		LOG_PROC("INFO", "Port forward: external switch is NULL!");
-		return IP_DROP;
-	}
-	#endif
-
 	
 	gn_switch_t * switch_gw = find_sw_by_dpid(ext_port->external_dpid);
 	if (NULL == switch_gw) {

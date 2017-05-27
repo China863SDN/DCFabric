@@ -66,7 +66,7 @@ extern sem_t fabric_ip_flood_sem;
 //added by xuyanwei at 2015-08-13
 void fabric_vlan_handle(gn_switch_t *sw, packet_in_info_t *packet_in)
 {
-	printf("%s need to be evaluated in the future !!!!\n",FN);
+	//printf("%s need to be evaluated in the future !!!!\n",FN);
 	return ;
 }
 void fabric_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
