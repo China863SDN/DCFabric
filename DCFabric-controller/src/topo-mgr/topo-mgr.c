@@ -42,7 +42,7 @@
 pthread_t g_timer_task_thread;
 
 void *g_lldp_timerid = NULL;
-UINT4 g_lldp_interval = 5;
+UINT4 g_lldp_interval = 3;
 void *g_lldp_timer = NULL;
 
 void *g_spath_timerid = NULL;
@@ -52,7 +52,9 @@ adac_matrix_t g_adac_matrix;
 UINT4 **g_short_path;			//by:yhy 路径 二维数组
 UINT4 **g_short_weight;			//by:yhy 路径权重 二维数组
 
-//by:yhy 接收端(src_sw,rx_port)与发送端(neighbor_dpid,tx_port)之间存在通路
+/* by:yhy
+ * (1)src_sw:接收到LLDP包的交换机;(2)rx_port:接收到LLDP包的端口;(3)neighbor_dpid发送LLDP包交换机的dpid;(4)tx_port:发送LLDP包的端口
+ */
 int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid, UINT4 tx_port)
 {
     gn_switch_t  *neigh_sw   = NULL;
@@ -67,103 +69,97 @@ int mapping_new_neighbor(gn_switch_t *src_sw, UINT4 rx_port, UINT8 neighbor_dpid
     {//by:yhy 源交换机存在
         for(neigh_port_seq=0; neigh_port_seq<neigh_sw->n_ports; neigh_port_seq++)
         {//by:yhy 通过发送交换机的port_no，找到端口序号
-            //if(neigh_sw->sw_ports[neigh_port_seq])
-            {
-                if(neigh_sw->ports[neigh_port_seq].port_no == tx_port)
-                {
-                    break;
-                }
-            }
+			if(neigh_sw->ports[neigh_port_seq].port_no == tx_port)
+			{
+				neigh_sw->ports[neigh_port_seq].type = SW_CON;
+				break;
+			}
         }
-
+		//by:yhy 考虑删除
         g_adac_matrix.A[src_sw->index][neigh_sw->index] = 1;
         g_adac_matrix.src_port[src_sw->index][neigh_sw->index] = rx_port;
         g_adac_matrix.sw[src_sw->index][neigh_sw->index] = src_sw;
     }
 	else 
 	{
-		//by:yhy add 201701051305
-		LOG_PROC("HANDLER", "lldp_packet_handler - find_sw_by_dpid(neighbor_dpid) return GN_ERR");
+		LOG_PROC("LLDP_HANDLER", "lldp_packet_handler - find_sw_by_dpid(neighbor_dpid) return GN_ERR");
 		return GN_ERR;
 	}
 
     //by:yhy 发送时的端口在发送时的交换机中不存在
     if (neigh_port_seq >= neigh_sw->n_ports)
     {
-		//by:yhy add 201701051305
-		LOG_PROC("HANDLER", "lldp_packet_handler - neigh_port_seq >= neigh_sw->n_ports return GN_ERR");
+		LOG_PROC("LLDP_HANDLER", "lldp_packet_handler - neigh_port_seq >= neigh_sw->n_ports return GN_ERR");
         return GN_ERR;
     }
-
 
     //by:yhy 通过接收交换机的port_no，找到端口序号
     for(own_port_seq=0; own_port_seq<src_sw->n_ports; own_port_seq++)
     {
-        //if(sw->sw_ports[own_port_seq])
-        {
-            if(src_sw->ports[own_port_seq].port_no == rx_port)
-            {
-                break;
-            }
-        }
+		if(src_sw->ports[own_port_seq].port_no == rx_port)
+		{
+			src_sw->ports[own_port_seq].type = SW_CON;
+			break;
+		}
     }
 
     //by:yhy 接收时的端口在发送时的交换机中不存在
     if (own_port_seq >= src_sw->n_ports)
     {
-		//by:yhy add 201701051305
-		LOG_PROC("HANDLER", "lldp_packet_handler - own_port_seq >= src_sw->n_ports return GN_ERR");
+		LOG_PROC("LLDP_HANDLER", "lldp_packet_handler - own_port_seq >= src_sw->n_ports return GN_ERR");
         return GN_ERR;
     }
     
+	if(!src_sw->neighbor[own_port_seq] || !neigh_sw->neighbor[neigh_port_seq]) //YCY
+	{
+		return GN_ERR;
+	}
 
-    //if (!(src_sw->neighbor[own_port_seq]))
     if (!(src_sw->neighbor[own_port_seq]->bValid))
     {//by:yhy 接收交换机
-       //src_sw->neighbor[own_port_seq] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
        src_sw->neighbor[own_port_seq]->bValid =TRUE;
 	   bSwNodeEdgeUp = TRUE;
     }
-    //if (!(neigh_sw->neighbor[neigh_port_seq]))
+
 	if (!(neigh_sw->neighbor[neigh_port_seq]->bValid))
     {//by:yhy 发送交换机
-       // neigh_sw->neighbor[neigh_port_seq] = (neighbor_t *)gn_malloc(sizeof(neighbor_t));
         neigh_sw->neighbor[neigh_port_seq]->bValid = TRUE;
 	    bSwNodeEdgeUp = TRUE;
     }
 
 	if ((neigh_sw->neighbor[neigh_port_seq]->sw != src_sw || src_sw->neighbor[own_port_seq]->sw != neigh_sw)||(TRUE == bSwNodeEdgeUp ))
     {//by:yhy 拓补有变,发送信号,激活topo_change_thread
-
 		bNeigborChange = TRUE;
     }
 	//by:yhy 更新接收交换机,发送交换机双方的邻居表
-    src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  							//该端口序号连接的sw
-    src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); 	//该端口与哪个端口相连
-    neigh_sw->neighbor[neigh_port_seq]->sw   = src_sw;  						//该端口序号连接的sw
-    neigh_sw->neighbor[neigh_port_seq]->port = &(src_sw->ports[own_port_seq]); 	//该端口与哪个端口相连
+    src_sw->neighbor[own_port_seq]->sw   = neigh_sw;  							
+    src_sw->neighbor[own_port_seq]->port = &(neigh_sw->ports[neigh_port_seq]); 	
+    neigh_sw->neighbor[neigh_port_seq]->sw   = src_sw;  						
+    neigh_sw->neighbor[neigh_port_seq]->port = &(src_sw->ports[own_port_seq]);
 
 	if(bNeigborChange)
 	{
+		if(src_sw&&neigh_sw)
+		{
+			LOG_PROC("INFO", "%s %d src_sw->sw_ip=0x%x neigh_sw->sw_ip=0x%x rx_port=%d tx_port=%d",FN,LN,src_sw->sw_ip,neigh_sw->sw_ip, rx_port, tx_port );
+		}
 		event_add_switch_port_on(src_sw,rx_port);
 		event_add_switch_port_on(neigh_sw,tx_port);
 	}
-	//by:yhy add 201701091313
-	LOG_PROC("HANDLER", "lldp_packet_handler - STOP");
+
+	LOG_PROC("LLDP_HANDLER", "lldp_packet_handler - STOP");
     return 1;
 }
 //by:yhy lldp包处理
 INT4 lldp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
-    UINT8 sender_id;        //neigh's dpid
-    UINT4 sender_port;      //neigh's port_no
+	LOG_PROC("LLDP_HANDLER", "%s - START",FN);
+	
+    UINT8 sender_id;        //发送方的dpid
+    UINT4 sender_port;      //发送方的port_no
 
-	//by:yhy add 201701091313
-	LOG_PROC("HANDLER", "%s - START",FN);
     lldp_t *pkt = (lldp_t *)packet_in_info->data;
-    if (pkt->chassis_tlv_subtype != LLDP_CHASSIS_ID_LOCALLY_ASSIGNED||
-        pkt->port_tlv_subtype != LLDP_PORT_ID_COMPONENT ||
-        pkt->ttl_tlv_ttl != htons(120))
+    if (pkt->chassis_tlv_subtype != LLDP_CHASSIS_ID_LOCALLY_ASSIGNED||pkt->port_tlv_subtype != LLDP_PORT_ID_COMPONENT ||pkt->ttl_tlv_ttl != htons(120))
     {//by:yhy 判断是否为控制器构造的LLDP包
 		return GN_ERR;
     }
@@ -171,9 +167,7 @@ INT4 lldp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 	//by:yhy 提取发送时放入的dpid和端口号
     sender_id = gn_ntohll(pkt->chassis_tlv_id);
     sender_port = ntohs(pkt->port_tlv_id);
-
-	//by:yhy add 201701091313
-	LOG_PROC("HANDLER", "%s - sender_id:%llu ,sender_port:%u",FN,sender_id,sender_port);
+	LOG_PROC("LLDP_HANDLER", "%s - sender_id:%llu ,sender_port:%u",FN,sender_id,sender_port);
     
     return mapping_new_neighbor(sw, packet_in_info->inport, sender_id, sender_port);
 }
@@ -231,7 +225,7 @@ void lldp_tx(gn_switch_t *sw, UINT4 port_no, UINT1 *src_addr)
     }
 }
 
-//by:yhy 定时发送lldp(参数无用)
+//by:yhy 定时发送lldp
 void lldp_tx_timer()
 {
     UINT4 num  = 0;
@@ -245,11 +239,14 @@ void lldp_tx_timer()
     {
 
         sw = &g_server.switches[num];
-        if(CONNECTED == sw->conn_state)
+        if(/*(sw->ports[port].state == 0) &&*/(CONNECTED == sw->conn_state))
         {	
 			for (port=0; port<sw->n_ports; port++)
 			{
-				lldp_tx(sw, sw->ports[port].port_no, sw->ports[port].hw_addr);
+				if(sw->ports[port].state == 0)
+				{
+					lldp_tx(sw, sw->ports[port].port_no, sw->ports[port].hw_addr);
+				}
 			}
         }
     }

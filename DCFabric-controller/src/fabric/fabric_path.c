@@ -355,9 +355,9 @@ p_fabric_path_node copy_fabric_path_node(p_fabric_path_node node)
 };
 ////////////////////////////////////////////////////////////////////////
 
-//by:yhy 创建:源sw,经过端口port,目的sw,的一个路径
-/*
- *创建一个只有起始点(交换机:sw,端口:port)的一条路径
+
+/* by:yhy 
+ * 创建一个只有起始点(交换机:sw,端口:port)的一条路径
  */
 p_fabric_path create_fabric_path(gn_switch_t* sw,gn_port_t* port)
 {
@@ -758,7 +758,7 @@ p_fabric_sw_node create_fabric_sw_node(gn_switch_t* sw,UINT4 tag)
 	return ret;
 };
 
-//by:yhy 释放一个sw的内存空间
+//by:yhy 
 p_fabric_sw_node delete_fabric_sw_node(p_fabric_sw_node node)
 {
 	p_fabric_sw_node ret = NULL;

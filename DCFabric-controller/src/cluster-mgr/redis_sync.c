@@ -30,6 +30,7 @@
 #include "redis_client.h"
 #include "../topo-mgr/topo-mgr.h"
 #include "common.h"
+#include "event.h"
 
 
 extern UINT4 g_openstack_on;
@@ -47,17 +48,19 @@ void persist_fabric_sw_list()
 	if(NULL != sw_node && NULL != sw_node->sw)
 	{
 		g_filed_num_master = 0;
-		memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+		memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+		
 	}
     while (NULL != sw_node && NULL != sw_node->sw)
     {
+    	
 		bSynFlag = TRUE;    
         //save dpid
 		g_filed_pad_master[g_filed_num_master].type = SW_LIST_OWN_DPID;
 		sprintf(g_filed_pad_master[g_filed_num_master].pad, "%llu", sw_node->sw->dpid);
 		g_filed_pad_master[g_filed_num_master].len = strlen(g_filed_pad_master[g_filed_num_master].pad);
 		g_filed_num_master++;
-
+		
         //save tag
 		g_filed_pad_master[g_filed_num_master].type = SW_LIST_OWN_TAG;
 		sprintf(g_filed_pad_master[g_filed_num_master].pad, "%u", sw_node->tag);
@@ -72,22 +75,24 @@ void persist_fabric_sw_list()
 
         for (index = 0; index < sw_node->sw->n_ports; index++)
         {
+        	
             neighbor_sw = sw_node->sw->neighbor[index];
             //if (NULL != neighbor_sw && NULL != neighbor_sw->sw && NULL != neighbor_sw->port)
-            if (neighbor_sw->bValid&& NULL != neighbor_sw->sw && NULL != neighbor_sw->port)
+            if (neighbor_sw&&neighbor_sw->bValid&& NULL != neighbor_sw->sw && NULL != neighbor_sw->port)
             {
+            	
                 //save own port_no
                 g_filed_pad_master[g_filed_num_master].type = SW_LIST_OWN_PORT;
         		sprintf(g_filed_pad_master[g_filed_num_master].pad, "%u", sw_node->sw->ports[index].port_no);
         		g_filed_pad_master[g_filed_num_master].len = strlen(g_filed_pad_master[g_filed_num_master].pad);
         		g_filed_num_master++;
-
+				
                 //save neighbor dpid
                 g_filed_pad_master[g_filed_num_master].type = SW_LIST_NEIGHBOR_DPID;
         		sprintf(g_filed_pad_master[g_filed_num_master].pad, "%llu", neighbor_sw->sw->dpid);
         		g_filed_pad_master[g_filed_num_master].len = strlen(g_filed_pad_master[g_filed_num_master].pad);
         		g_filed_num_master++;
-
+				
                 //save neighbor port_no
                 g_filed_pad_master[g_filed_num_master].type = SW_LIST_NEIGHBOR_PORT;
         		sprintf(g_filed_pad_master[g_filed_num_master].pad, "%u", neighbor_sw->port->port_no);
@@ -97,7 +102,7 @@ void persist_fabric_sw_list()
         }
 		
 		//persist_data(FABRIC_SW_NODE, OPERATE_ADD, g_filed_num_master, g_filed_pad_master);
-
+		
         pre_dpid = sw_node->sw->dpid;
         sw_node = sw_node->next;       
     }
@@ -105,6 +110,7 @@ void persist_fabric_sw_list()
 	{
 		persist_data(FABRIC_SW_NODE, OPERATE_ADD, g_filed_num_master, g_filed_pad_master);
 	}
+	
 }
 
 void recover_fabric_sw_list(INT4 num, const field_pad_t* field_pad_p)
@@ -116,6 +122,7 @@ void recover_fabric_sw_list(INT4 num, const field_pad_t* field_pad_p)
     UINT4 own_port_no = 0;
     UINT8 neighbor_dpid = 0;
     UINT4 neighbor_port_no = 0;
+	gn_switch_t *sw = NULL;
     p_fabric_sw_node node = NULL;
     while (index < num)
     {
@@ -143,7 +150,13 @@ void recover_fabric_sw_list(INT4 num, const field_pad_t* field_pad_p)
         own_pre_dpid = strtoull(field_pad_p[index].pad, NULL, 10);
         index++;
 
-        //ͬ��tag
+		get_sw_from_dpid(own_dpid, &sw);
+		if(sw&&sw->sw_ip)
+		{
+        	sw->vlan_tag = own_tag;
+		}
+		
+        //???tag
         node = get_fabric_sw_node_by_dpid(own_dpid);
         if (NULL == node)
         {
@@ -151,13 +164,13 @@ void recover_fabric_sw_list(INT4 num, const field_pad_t* field_pad_p)
         }
         node->tag = own_tag;
 
-        //ͬ��λ��
+        //???λ??
         if(0 == adjust_fabric_sw_node_list(own_pre_dpid, own_dpid))
         {
             continue;
         }
 
-        //ͬ�����ڽڵ���Ϣ
+        //????????????
         while (SW_LIST_OWN_PORT == field_pad_p[index].type && index < num)
         {
             own_port_no = atoll(field_pad_p[index].pad);
@@ -197,7 +210,7 @@ void persist_fabric_host_list()
 	if(NULL != node)
 	{
 		g_filed_num_master = 0;
-		memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+		memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 	}
 	while(NULL != node)
 	{
@@ -239,6 +252,7 @@ void recover_fabric_host_list(INT4 num, const field_pad_t* field_pad_p)
     UINT4 ip = 0;
     UINT8 dpid = 0;
     UINT4 port = 0;
+	gn_switch_t *sw = NULL;
     while (index < num)
     {
         if (HOST_LIST_HOST_IP!= field_pad_p[index].type)
@@ -265,10 +279,21 @@ void recover_fabric_host_list(INT4 num, const field_pad_t* field_pad_p)
         port = atoll(field_pad_p[index].pad);
         index++;
 
+		if((port < 0)||(port >= MAX_PORTS))
+		{
+			continue;
+		}
+		
         //find host node
         p_fabric_host_node node = get_fabric_host_from_list_by_ip(ip);
         if (NULL != node)
         {
+    		get_sw_from_dpid(dpid, &sw);
+			if(sw&&sw->sw_ip)
+			{
+				node->sw = sw;
+            	node->port = port;
+			}
             p_fabric_sw_node sw_node = get_fabric_sw_node_by_dpid(dpid);
             if (NULL != sw_node && NULL != sw_node->sw)
             {
@@ -291,7 +316,7 @@ void persist_fabric_openstack_external_list()
 	if(NULL != node)
 	{
 		g_filed_num_master = 0;
-    	memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+    	memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 	}
 	while(NULL != node)
 	{
@@ -302,6 +327,11 @@ void persist_fabric_openstack_external_list()
             //save network id
             g_filed_pad_master[g_filed_num_master].type = EXTERNAL_NETWORK_ID;
             sprintf(g_filed_pad_master[g_filed_num_master].pad, "%s", ext->network_id);
+            g_filed_pad_master[g_filed_num_master].len = strlen(g_filed_pad_master[g_filed_num_master].pad);
+            g_filed_num_master++;
+
+			g_filed_pad_master[g_filed_num_master].type = EXTERNAL_SUBNETWORK_ID;
+            sprintf(g_filed_pad_master[g_filed_num_master].pad, "%s", ext->subnet_id);
             g_filed_pad_master[g_filed_num_master].len = strlen(g_filed_pad_master[g_filed_num_master].pad);
             g_filed_num_master++;
             
@@ -359,6 +389,7 @@ void recover_fabric_openstack_external_list(INT4 num, const field_pad_t* field_p
 {
     INT4 index = 0;
     INT1 network_id[48] = {0};
+	INT1 subnet_id[48] = {0};
 	UINT4 external_gateway_ip;
 	UINT4 external_outer_interface_ip;
 	UINT1 external_gateway_mac[6] = {0};
@@ -378,6 +409,14 @@ void recover_fabric_openstack_external_list(INT4 num, const field_pad_t* field_p
             continue;
         }
         strncpy(network_id, field_pad_p[index].pad, 48);
+        index++;
+
+		if (EXTERNAL_SUBNETWORK_ID!= field_pad_p[index].type)
+        {
+            index++;
+            continue;
+        }
+        strncpy(subnet_id, field_pad_p[index].pad, 48);
         index++;
         
         if (EXTERNAL_GATEWAY_IP!= field_pad_p[index].type)
@@ -436,7 +475,8 @@ void recover_fabric_openstack_external_list(INT4 num, const field_pad_t* field_p
             external_outer_interface_mac,
             external_dpid,
             external_port,
-            network_id);
+            network_id,
+            subnet_id);
 
     }
 }
@@ -451,7 +491,7 @@ void persist_fabric_nat_icmp_iden_single(UINT4 operation_type, openstack_externa
     if (NULL != ext)
     {
 		g_filed_num_master = 0;
-		memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+		memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 		
         //save identifier
         g_filed_pad_master[g_filed_num_master].type = NAT_ICMP_IDENTIFIER;
@@ -503,7 +543,7 @@ void persist_fabric_nat_icmp_iden_list()
 	if(NULL != node)
 	{
 		g_filed_num_master = 0;
-		memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+		memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 	}
 	while(NULL != node)
 	{
@@ -633,7 +673,7 @@ void persist_fabric_nat_host_list()
 		if(NULL != node)
 		{
 			g_filed_num_master = 0;
-			memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+			memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 		}
 
 		while(NULL != node)
@@ -762,9 +802,9 @@ void persist_fabric_nat_host_list()
 
 void persist_fabric_nat_host_single(UINT4 operation_type, nat_host_p host_p)
 {
-    LOG_PROC("INFO", "Ready to sync nat host, operation type=%d.", operation_type);
+    //LOG_PROC("INFO", "Ready to sync nat host, operation type=%d.", operation_type);
     g_filed_num_master = 0;
-    memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+    memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
     
     //save host_ip
     g_filed_pad_master[g_filed_num_master].type = NAT_HOST_IP;
@@ -1050,7 +1090,7 @@ void persist_fabric_openstack_lbaas_members_single(UINT4 operation_type, opensta
     LOG_PROC("INFO", "Ready to sync openstack lbaas members conns, operation type=%d.", operation_type);
 
     g_filed_num_master = 0;
-    memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+    memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 
     //save ext_ip
     g_filed_pad_master[g_filed_num_master].type = LBAAS_MEMBERS_EXT_ID;
@@ -1100,7 +1140,7 @@ void persist_fabric_openstack_lbaas_members_list()
 	if(NULL != node)
 	{
 		g_filed_num_master = 0;
-		memset(g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
+		memset((void*)g_filed_pad_master, 0, sizeof(struct field_pad) * MAX_FILED_NUM);
 	}
 	while(NULL != node)
 	{
@@ -1234,10 +1274,16 @@ void recover_fabric_openstack_lbaas_members_list(UINT4 operation_type, INT4 num,
 //by:yhy 将所有控制器相关的数据更新入Hbase
 void persist_fabric_all()
 {
-    persist_fabric_sw_list();
-    persist_fabric_host_list();
-    persist_fabric_openstack_external_list();
-    persist_fabric_nat_icmp_iden_list();
-    persist_fabric_nat_host_list();
-    persist_fabric_openstack_lbaas_members_list();
+    //persist_fabric_sw_list();
+    //persist_fabric_host_list();
+    //persist_fabric_openstack_external_list();
+    //persist_fabric_nat_icmp_iden_list();
+    //persist_fabric_nat_host_list();
+    //persist_fabric_openstack_lbaas_members_list();
+
+	
+	char wrbuf = DATASYNC_TRIGGER;
+	write(g_iRedisSyncFd[1],&wrbuf, sizeof(UINT1));
+	
+	Write_Event(EVENT_DATASYNC);
 }

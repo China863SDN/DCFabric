@@ -1,13 +1,3 @@
-/******************************************************************************
- *                                                                             *
- *   File Name   : ovsdb.c           *
- *   Author      : greenet Administrator           *
- *   Create Date : 2015-3-20           *
- *   Version     : 1.0           *
- *   Function    : .           *
- *                                                                             *
- ******************************************************************************/
-
 #include "ovsdb.h"
 #include "openflow-common.h"
 #include <stdlib.h>
@@ -23,24 +13,25 @@ INT4 g_ovsdb_sockfd;
 fd_set g_ovsdb_recvmask;
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_ovsdb_of_version = OFP13_VERSION;           //openstack ovs锟斤拷openflow锟芥��
-UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;           //openstack锟斤拷锟斤拷锟斤拷锟斤拷 gre/vxlan
+UINT1 g_ovsdb_of_version = OFP13_VERSION;          
+UINT1 g_tunnel_type = NETWORK_TYPE_VXLAN;        
+
 //by:yhy 存放连入控制器的OVSDB的socket句柄
 INT4 g_ovsdb_clients[OVSDB_MAX_CONNECTION] = { 0 };
-INT4 g_ovsdb_clients_bak[OVSDB_MAX_CONNECTION] = { 0 };    //clients锟侥憋拷锟斤?? 锟斤拷锟斤拷删锟斤拷丝锟斤拷锟斤拷拥慕锟斤拷锟斤拷锟?
+//by:yhy 存放连入控制器的OVSDB的IP
 UINT4 g_ovsdb_clients_ip[OVSDB_MAX_CONNECTION] = { 0 };
-
+//by:yhy 存放连入控制器的OVSDB
 ovsdb_server_t g_ovsdb_nodes[OVSDB_MAX_CONNECTION];
-//by:yhy 全局 ovsdb服务器端口
+//by:yhy 全局ovsdb服务器端口
 UINT4 g_ovsdb_port = OVSDB_SERVER_PORT;    
-//by:yhy 全局 ovsdb通道开启标志
+//by:yhy 全局ovsdb通道开启标志//受配置文件控制
 UINT4 g_ovsdb_turnel_on = 1;
 
 INT4  g_iOvsdbEpollFd = 0;
 
 
 
-//by:yhy 
+//by:yhy 关闭所有ovsdb服务与连入的ovsdb连接
 INT4 ovsdb_connect_quit()
 {
     INT4 index;
@@ -61,8 +52,8 @@ INT4 ovsdb_connect_quit()
     }
     return GN_OK;
 }
-//by:yhy socket中read出错时,将错误代码存入errno中,EAGAIN表示无数据可读
-//       判断socket是否出错或者死亡
+
+//by:yhy socket中read出错时,将错误代码存入errno中,EAGAIN表示无数据可读//已经不使用
 static inline BOOL is_socket_dead(INT4 recv_res)
 {
     if ((recv_res == 0) || ((recv_res < 0) && (errno != EAGAIN)))
@@ -74,7 +65,7 @@ static inline BOOL is_socket_dead(INT4 recv_res)
 
 
 //{"id":"1b5f9ab0-4abc-40c3-97bc-7ea66e663923","method":"monitor","params":["Open_vSwitch",null,{"Bridge":{},"Port":{},"Interface":{},"Controller":{},"Manager":{},"Mirror":{},"NetFlow":{},"Open_vSwitch":{},"QoS":{},"Queue":{},"sFlow":{},"SSL":{},"Flow_Sample_Collector_Set":{},"Flow_Table":{},"IPFIX":{}}]}
-//by:yhy 向ovsdb发送检索用的json包
+//by:yhy 向句柄对应的ovsdb发送检索用的json包
 void search_from_ovsdb_table_all(INT4 conn_fd)
 {
     INT1 *text;
@@ -161,7 +152,7 @@ void search_from_ovsdb_table_all(INT4 conn_fd)
      json_insert_child(value, key);
      */
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
    
 	while(Length_BuffSended !=strlen(text))
 	{
@@ -177,6 +168,7 @@ void search_from_ovsdb_table_all(INT4 conn_fd)
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -185,9 +177,10 @@ void search_from_ovsdb_table_all(INT4 conn_fd)
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 }
-//by:yhy 在openvswitch数据库中查找对应MAC的host主机
-//遍历所有ovsdb,发送查询用的JSON包
+
+//by:yhy 遍历所有ovsdb,在其发送查找对应MAC主机的命令
 void search_host_in_ovsdb_by_mac(UINT1* mac)
 {
 	INT4 index = 0;
@@ -210,8 +203,9 @@ void search_host_in_ovsdb_by_mac(UINT1* mac)
 	{
 		INT4 conn_fd = g_ovsdb_clients[index];
 
-		if (conn_fd)
+		if (conn_fd>0)
 		{
+			#if 0
 			INT1 *text;
 		    json_t *array, *obj, *key, *value, *table_obj, *named_array, *_named_array, *map_array, *mac_list_array, *mac_array;
 
@@ -295,11 +289,47 @@ void search_host_in_ovsdb_by_mac(UINT1* mac)
 		    json_insert_child(named_array, key);
 
 			json_tree_to_string(obj, &text);
-		    json_free_value(&obj);
-		
+		    json_free_value_all(&obj);
+
+			LOG_PROC("INFO", "text = %s  ************%s %d",text,FN,LN);
 		    while(Length_BuffSended !=strlen(text))
 			{
 				Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
+				if(Result_Send <0)
+				{
+					iErrno = errno;
+					if((EINTR== iErrno)||(EAGAIN ==iErrno))
+					{
+						continue;
+					}
+					else
+					{
+						LOG_PROC("ERROR", "%s,Send Error Code: %d conn_fd=%d",FN,iErrno,conn_fd);
+						Del_OVSDB_by_conn_fd(conn_fd);
+						free(text);
+						return;
+					}
+				}
+				else
+				{
+					Length_BuffSended += Result_Send;
+				}
+			}
+			free(text);
+			#else
+			INT1 query_str[512];
+			
+		
+			INT1 text[] = {"{\"id\":\"07\",\"method\":\"transact\",\"params\":"
+				"[\"Open_vSwitch\",{\"op\":\"select\",\"table\":\"Interface\","
+				"\"where\":[[\"external_ids\",\"includes\",[\"map\",[[\"attached-mac\",\"%x:%x:%x:%x:%x:%x\"]]]]],"
+				"\"columns\":[\"external_ids\",\"ofport\",\"mac_in_use\"]}]}"} ;
+
+				
+			sprintf(query_str, text, mac[0],mac[1],mac[2],mac[3],mac[4],mac[5]);
+		    while(Length_BuffSended !=strlen(query_str))
+			{
+				Result_Send = send(conn_fd, (query_str+Length_BuffSended), (strlen(query_str)-Length_BuffSended), 0);
 				if(Result_Send <0)
 				{
 					iErrno = errno;
@@ -316,24 +346,25 @@ void search_host_in_ovsdb_by_mac(UINT1* mac)
 				}
 				else
 				{
+					
 					Length_BuffSended += Result_Send;
 				}
-			}
+			}	
+			#endif
 		}
 	}
 }
 
 
 //{"id": "d0d14471-5a66-412c-bcae-0e594f5ee9af","method": "transact","params": ["Open_vSwitch",{"op": "mutate","table": "Bridge","where": [["_uuid","==",["uuid","6656bc46-915c-4eef-8e07-3c53cf916387"]]],"mutations": [["ports","insert",["named-uuid","new_port"]]]},{"op": "insert","table": "Port","row": {"name": "gre-10.8.1.212","interfaces": ["set",[["named-uuid","new_interface"]]]},"uuid-name": "new_port"},{"op": "insert","table": "Interface","row": {"name": "gre-10.8.1.212","options": ["map",[["local_ip","10.8.1.211"],["remote_ip","10.8.1.212"],["key","flow"]]],"type": "gre"},"uuid-name": "new_interface"}]}
-void add_port_and_portoption(INT4 conn_fd, INT1 *_uuid_br, INT1 *port_name,
-        INT1 *local_ip, INT1 *remote_ip, INT1 *option_key, INT1 *type)
+//by:yhy 向句柄对应的ovsdb发送添加port和相关配置的命令
+void add_port_and_portoption(INT4 conn_fd, INT1 *_uuid_br, INT1 *port_name,INT1 *local_ip, INT1 *remote_ip, INT1 *option_key, INT1 *type)
 {
     INT1 *text;
 	INT4 Length_BuffSended =0;
 	INT4 Result_Send =0;
 	INT4 iErrno =0;
-    json_t *root_array, *array, *obj, *key, *value, *db_obj, *_uuid_array,
-            *uuid_array, *named_array, *row_obj;
+    json_t *root_array, *array, *obj, *key, *value, *db_obj, *_uuid_array,*uuid_array, *named_array, *row_obj;
 
     obj = json_new_object();
 
@@ -533,7 +564,7 @@ void add_port_and_portoption(INT4 conn_fd, INT1 *_uuid_br, INT1 *port_name,
     json_insert_child(db_obj, key);
 
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
     while(Length_BuffSended !=strlen(text))
 	{
 		Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
@@ -548,6 +579,7 @@ void add_port_and_portoption(INT4 conn_fd, INT1 *_uuid_br, INT1 *port_name,
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -556,9 +588,11 @@ void add_port_and_portoption(INT4 conn_fd, INT1 *_uuid_br, INT1 *port_name,
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 }
 
 //{"id":"d0d14471-5a66-412c-bcae-0e594f5ee9af","method":"transact","params":["Open_vSwitch",{"op":"mutate","table":"Bridge","where":[["_uuid","==",["uuid","6656bc46-915c-4eef-8e07-3c53cf916387"]]],"mutations":[["ports","insert",["named-uuid","new_port"]]]},{"op":"insert","table":"Port","row":{"name":"gre-10.8.1.212","interfaces":["set",[["named-uuid","new_interface"]]]},"uuid-name":"new_port"},{"op":"insert","table":"Interface","row":{"name":"gre-10.8.1.212"},"uuid-name":"new_interface"}]}
+//by:yhy 向句柄对应的ovsdb发送添加port的命令
 void add_port(INT4 conn_fd, INT1 *br_uuid, INT1 *port_name)
 {
     INT1 *text;
@@ -729,7 +763,7 @@ void add_port(INT4 conn_fd, INT1 *br_uuid, INT1 *port_name)
     json_insert_child(db_obj, key);
 
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
     while(Length_BuffSended !=strlen(text))
 	{
 		Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
@@ -744,6 +778,7 @@ void add_port(INT4 conn_fd, INT1 *br_uuid, INT1 *port_name)
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -752,9 +787,11 @@ void add_port(INT4 conn_fd, INT1 *br_uuid, INT1 *port_name)
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 }
 
 //{"id":"315c15f7-8b78-41ff-880f-fc6211cb5b8e","method":"transact","params":["Open_vSwitch",{"op":"mutate","table":"Open_vSwitch","where":[["_uuid","==",["uuid","17074e89-2ac5-4bba-997a-1a5a3527cf56"]]],"mutations":[["bridges","insert",["named-uuid","new_bridge"]]]},{"op":"insert","table":"Bridge","row":{"name":"br-int","fail_mode":["set",["secure"]],"protocols":["set",["OpenFlow13"]]},"uuid-name":"new_bridge"}]}
+//by:yhy 向句柄对应的ovsdb发送添加bridge的命令
 void add_bridge(INT4 conn_fd, INT1 *br_name, INT1 *open_vswitch_uuid, INT1 *fail_mode, INT1 *of_proto)
 {
     INT1 *text;
@@ -903,7 +940,7 @@ void add_bridge(INT4 conn_fd, INT1 *br_name, INT1 *open_vswitch_uuid, INT1 *fail
     json_insert_child(db_obj, key);
 
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
     while(Length_BuffSended !=strlen(text))
 	{
 		Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
@@ -918,6 +955,7 @@ void add_bridge(INT4 conn_fd, INT1 *br_name, INT1 *open_vswitch_uuid, INT1 *fail
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -926,8 +964,10 @@ void add_bridge(INT4 conn_fd, INT1 *br_name, INT1 *open_vswitch_uuid, INT1 *fail
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 }
 
+//by:yhy
 void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
 {
     INT4 index;
@@ -938,7 +978,8 @@ void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
     INT1 *compute_ip = NULL;
 
     ovsdb_server_t *remote_node = NULL;
-    if(g_ovsdb_turnel_on == 0){
+    if(g_ovsdb_turnel_on == 0)
+	{
     	return;
     }
 
@@ -968,13 +1009,11 @@ void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
                 {
                     if (g_tunnel_type == NETWORK_TYPE_GRE)
                     {
-                        add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
-                                control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_GRE);
+                        add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_GRE);
                     }
                     else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
                     {
-                        add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,
-                                control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_VXLAN);
+                        add_port_and_portoption(remote_node->node_fd, remote_node->bridge[index_br]._uuid,control_tunnel_port_name, remote_ip, compute_ip, "key", INTERFACE_TYPE_VXLAN);
                     }
                     break;
                 }
@@ -983,13 +1022,11 @@ void add_tunnel(ovsdb_server_t *compute_node, ovs_bridge_t *compute_bridge)
             //compute---->control
             if (g_tunnel_type == NETWORK_TYPE_GRE)
             {
-                add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
-                        compute_ip, remote_ip, "key", INTERFACE_TYPE_GRE);
+                add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,compute_ip, remote_ip, "key", INTERFACE_TYPE_GRE);
             }
             else if (g_tunnel_type == NETWORK_TYPE_VXLAN)
             {
-                add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,
-                        compute_ip, remote_ip, "key", INTERFACE_TYPE_VXLAN);
+                add_port_and_portoption(compute_node->node_fd, compute_bridge->_uuid, compute_tunnel_port_name,compute_ip, remote_ip, "key", INTERFACE_TYPE_VXLAN);
             }
 
             free(remote_ip);
@@ -1090,7 +1127,6 @@ void set_controller(INT4 conn_fd, INT1 *br_uuid, INT1 *controller_ip)
     key = json_new_string("new_controller");
     json_insert_child(uuid_array, key);
 
-    //
     db_obj = json_new_object();
     json_insert_child(root_array, db_obj);
 
@@ -1120,7 +1156,7 @@ void set_controller(INT4 conn_fd, INT1 *br_uuid, INT1 *controller_ip)
     json_insert_child(db_obj, key);
 
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
     while(Length_BuffSended !=strlen(text))
 	{
 		Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
@@ -1135,6 +1171,7 @@ void set_controller(INT4 conn_fd, INT1 *br_uuid, INT1 *controller_ip)
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -1143,6 +1180,7 @@ void set_controller(INT4 conn_fd, INT1 *br_uuid, INT1 *controller_ip)
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 
 }
 
@@ -1247,7 +1285,7 @@ void set_failmod_and_ofver(INT4 conn_fd, INT1 *_uuid_br, INT1 *fail_mode, INT1 *
     json_insert_child(uuid_array, key);
 
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
     while(Length_BuffSended !=strlen(text))
 	{
 		Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
@@ -1262,6 +1300,7 @@ void set_failmod_and_ofver(INT4 conn_fd, INT1 *_uuid_br, INT1 *fail_mode, INT1 *
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -1270,6 +1309,7 @@ void set_failmod_and_ofver(INT4 conn_fd, INT1 *_uuid_br, INT1 *fail_mode, INT1 *
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 }
 //by;yhy socket中echo回复
 //{"id":"echo","result":[]}
@@ -1294,7 +1334,7 @@ void echo_reply_ovsdb(INT4 conn_fd)
     json_insert_child(obj, key);
 
     json_tree_to_string(obj, &text);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
     while(Length_BuffSended !=strlen(text))
 	{
 		Result_Send = send(conn_fd, (text+Length_BuffSended), (strlen(text)-Length_BuffSended), 0);
@@ -1309,6 +1349,7 @@ void echo_reply_ovsdb(INT4 conn_fd)
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				Del_OVSDB_by_conn_fd(conn_fd);
+				free(text);
 				return;
 			}
 		}
@@ -1317,9 +1358,10 @@ void echo_reply_ovsdb(INT4 conn_fd)
 			Length_BuffSended += Result_Send;
 		}
 	}
+	free(text);
 }
 //by:yhy why?
-BOOL handle_search_host_by_mac(INT4 client_ip, INT4 seq, json_t *result)
+BOOL handle_search_host_by_mac(INT4 client_fd, INT4 seq, json_t *result)
 {
     json_t *tmp, *row, *ofport, *externalids, *in_use_mac, *attach_mac = NULL;
 	UINT4 port = 0;
@@ -1340,11 +1382,13 @@ BOOL handle_search_host_by_mac(INT4 client_ip, INT4 seq, json_t *result)
 			if ((ofport) && (ofport->child)&&(ofport->child->text)) 
 			{
 				port = strtoul(ofport->child->text, 0, 10);
+				json_free_value(&ofport);
 			}
 
 			in_use_mac = json_find_first_label(tmp, "mac_in_use");
 			if ((in_use_mac) && (in_use_mac->child)) {
 				macstr2hex(in_use_mac->child->text, phy_mac);
+				json_free_value(&in_use_mac);
 			}
 			
 			externalids = json_find_first_label(tmp, "external_ids");
@@ -1360,13 +1404,16 @@ BOOL handle_search_host_by_mac(INT4 client_ip, INT4 seq, json_t *result)
 						macstr2hex(attach_mac->text, host_mac);
 					}
 				}
+				json_free_value(&externalids);
 			}
 		}
+		json_free_value(&row);
     }
 
-	if (port) 
+	if (port&&(client_fd>0)) 
 	{
-		gn_switch_t* sw = find_sw_by_port_physical_mac(phy_mac);
+		//gn_switch_t* sw = find_sw_by_port_physical_mac(phy_mac);
+		gn_switch_t* sw = get_sw_by_conn_fd(client_fd);
 		if (sw) 
 		{
 			update_openstack_host_port_by_mac(host_mac, sw, port);
@@ -1384,6 +1431,7 @@ BOOL handle_controller_table(INT4 client_fd, INT4 seq, json_t *result)
     controller = json_find_first_label(result->child, "Controller");
     if (controller)
     {
+    	json_free_value(&controller);
         return TRUE;
     }
 
@@ -1407,6 +1455,7 @@ void handle_openvswitch_table(INT4 client_fd, INT4 seq, json_t *result)
             memcpy(g_ovsdb_nodes[seq].open_vswitch._uuid, open_vswitch_uuid->text, strlen(open_vswitch_uuid->text));
             LOG_PROC("INFO", "Hand open_vswitch uuid: %s", g_ovsdb_nodes[seq].open_vswitch._uuid);
         }
+		json_free_value(&open_vswitch);
     }
 }
 
@@ -1483,18 +1532,21 @@ void handle_bridge_table(INT4 client_fd, INT4 seq, json_t *result, BOOL have_con
 				json_t* br_p = br_port->child->child->next->child;
 				
 				while (br_p) {
-					// clear all qos info
+					
+					//clear all qos info
 					clear_qos_in_port_table(client_fd, br_p->child->next->text);
 					clear_qos_in_qos_table(client_fd);
 					clear_queue_in_queue_table(client_fd);
 					
 					br_p = br_p->next;
 				}
+				json_free_value(&br_port);
 			}
 
             br_idx++;
             br_uuid = br_uuid->next;
         }
+		json_free_value(&br);
     }
 
     if(!has_br_int)    //add br-int
@@ -1540,20 +1592,20 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
     {
         return;
     }
-	//by:yhy 此处无用
-    json_tree_to_string(root, &test);
 	//by:yhy 查找"method"JSON对象
     method = json_find_first_label(root, "method");
+	id =json_find_first_label(root, "id");
+	params = json_find_first_label(root, "params");
     if (method)
     {
         if (strncmp(method->child->text, "update", 6) == 0)   
         {//by:yhy method->child->text
-            id = method->next;
+            //id = method->next;
             if (id)
             {//by:yhy method->next
                 if (id->child->type == JSON_NULL)
                 {
-                    params = id->next;
+                    //params = method->next;
                     if (params)
                     {//by:yhy method->next->next
                         br = json_find_first_label(params->child->child->next, "Bridge");
@@ -1602,24 +1654,32 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
                                 }
 								br_idx++;
                             }
-
+							json_free_value(&br);
+							json_free_value(&params);
+							json_free_value(&id);
+							json_free_value(&method);
+							json_free_value_all(&root);
                             return;
                         }
 						
 						queue = json_find_first_label(params->child->child->next, "Queue");
 						if (queue) {
 							notify_recevice_queue_uuid(queue);
+							json_free_value(&queue);
 						}
 
 						qos = json_find_first_label(params->child->child->next, "QoS");
 						if (qos) {
 							notify_recevice_qos_uuid(qos);
+							json_free_value(&qos);
 						}
-						
+						json_free_value(&params);
                     }
                 }
+				json_free_value(&id);
             }
         }
+		json_free_value(&method);
     }
 	//by:yhy 查找"id"JSON对象
     id = json_find_first_label(root, "id");
@@ -1643,7 +1703,7 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
 		{
 			result = id->next;
 			if (result) {
-				handle_search_host_by_mac(client_ip, seq, result);
+				handle_search_host_by_mac(client_fd, seq, result);
 			}
 		}
 		else if (strncmp(id->child->text, SEARCH_INTERFACE_BY_PORT_NO, 2) == 0) 
@@ -1668,8 +1728,8 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
 		
         json_free_value(&id);
     }
-
-    json_free_value(&root);
+	
+   json_free_value_all(&root);
 }
 
 INT4 get_json(const INT1 *json_str)
@@ -1749,7 +1809,7 @@ INT4 ovsdb_new_client(INT4 iSockFd, struct sockaddr_in addr)
 	    if (g_ovsdb_clients[index] == 0)
 	    {//by:yhy 检索到未使用的节点,开始初始化
 	        g_ovsdb_clients[index] = iSockFd;
-	        g_ovsdb_clients_bak[index] = iSockFd;
+	        //g_ovsdb_clients_bak[index] = iSockFd;
 	        g_ovsdb_clients_ip[index] = *(UINT4 *) &addr.sin_addr;
 
 	        g_ovsdb_nodes[index].bridge[0].is_using = FALSE;
@@ -1766,7 +1826,7 @@ INT4 ovsdb_new_client(INT4 iSockFd, struct sockaddr_in addr)
 	        break;
 	    }
 	}
-	if (index >= OVSDB_MAX_CONNECTION)    // exceed max connections.
+	if (index >= OVSDB_MAX_CONNECTION) 
     {
         LOG_PROC("ERROR", "Max OVSDB connected limited [%d]", OVSDB_MAX_CONNECTION);
         close(iSockFd);
@@ -1774,6 +1834,7 @@ INT4 ovsdb_new_client(INT4 iSockFd, struct sockaddr_in addr)
     }
 	return GN_OK;
 }
+
 INT4 ovsdb_client_read(INT4 iSockFd)
 {
 	INT4 index = 0;
@@ -1782,18 +1843,14 @@ INT4 ovsdb_client_read(INT4 iSockFd)
 	INT4 offset = 0;
 	INT1 ovsdb_buff[OVSDB_BUFF_LEN + 1] = { 0 };
 	INT1 json_string[102400] = {0};
-
 	INT4 recv_len = 0;
 	INT4 nErr = 0;
 	INT4 ret = 0;
-
-
 	index = ovsdb_FindClientIndexBySockfd(iSockFd);
 	if(index < 0)
 	{
 		return GN_ERR;
 	}
-
 	while(1)
 	{
 		ret = read(iSockFd, ovsdb_buff + recv_len, OVSDB_BUFF_LEN - recv_len);
@@ -1807,27 +1864,25 @@ INT4 ovsdb_client_read(INT4 iSockFd)
 	        do
 	        {
 				//by:yhy 提取json{}或者[]的这样一个节点
-	           len = get_json(p_str);
-	           memcpy(json_string, p_str, len);
-	           json_string[len] = '\0';
-			   //by:yhy 处理一个json节点数据
-	           proc_ovsdb_msg(json_string, g_ovsdb_clients[index], g_ovsdb_clients_ip[index], index);
+				len = get_json(p_str);
+				memcpy(json_string, p_str, len);
+				json_string[len] = '\0';
+				//by:yhy 处理一个json节点数据
+				proc_ovsdb_msg(json_string, g_ovsdb_clients[index], g_ovsdb_clients_ip[index], index);
 
-	           offset += len;
-	           p_str += len;
+				offset += len;
+				p_str += len;
 	        }while(len);
 			//by:yhy 本次读取的数据中json包不完整,说明人需要从socket中读取信息,接续此次读取做拼接处理
 	        if(recv_len != offset)
 	        {
 	            memmove(ovsdb_buff, ovsdb_buff + offset, recv_len - offset );
 	            recv_len = recv_len - offset;
-	          
 	        }
 	    }
 		else
 		{
 			nErr  = errno;
-			
 			if(EAGAIN == nErr) // 缓冲区数据读完
 			{
 				break;
@@ -1843,6 +1898,7 @@ INT4 ovsdb_client_read(INT4 iSockFd)
 	}
 	return GN_OK;
 }
+
 INT4 ovsdb_client_write(INT4 iSockFd)
 {
 	return GN_OK;
@@ -1854,8 +1910,6 @@ INT4 ovsdb_svr_read(INT4 iSockFd)
 	INT4 iErrno = 0;
 	socklen_t addrlen;
     struct sockaddr_in addr;
-
-
 	addrlen = sizeof(struct sockaddr);
 	while(1)
 	{
@@ -1869,11 +1923,11 @@ INT4 ovsdb_svr_read(INT4 iSockFd)
 			}
 			break;
 		}
-		
 		ovsdb_new_client(conn_fd, addr);
 	}
 	return GN_OK;
 }
+
 INT4 ovsdb_err_proc(INT4 iSockFd)
 {
 	INT4 index = 0;
@@ -1895,6 +1949,7 @@ INT4 ovsdb_err_proc(INT4 iSockFd)
 	}
 	return GN_OK;
 }
+
 #if 0
 //by:yhy ovsdb接收消息
 void *ovsdb_recv_msg(void *para)
@@ -1953,7 +2008,7 @@ void *ovsdb_recv_msg(void *para)
                 if (g_ovsdb_clients[index] == 0)
                 {//by:yhy 检索到未使用的节点,开始初始化
                     g_ovsdb_clients[index] = conn_fd;
-                    g_ovsdb_clients_bak[index] = conn_fd;
+                    //g_ovsdb_clients_bak[index] = conn_fd;
                     g_ovsdb_clients_ip[index] = clientip;
 
                     g_ovsdb_nodes[index].bridge[0].is_using = FALSE;
@@ -2063,6 +2118,7 @@ void *ovsdb_recv_msg(void *para)
 	return NULL;
 }
 #endif
+
 //by:yhy ovsdb的tcp sever初始化
 INT4 ovsdb_connect_init()
 {
@@ -2086,7 +2142,7 @@ INT4 ovsdb_connect_init()
     tcp_serv_fd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (tcp_serv_fd == -1)
     {
-        LOG_PROC("ERROR", "Create OVSDB server failed");
+        LOG_PROC("ERROR", "%s:%d  Create OVSDB server failed",FN,LN);
         return GN_ERR;
     }
 
@@ -2098,20 +2154,20 @@ INT4 ovsdb_connect_init()
 	//by:yhy 绑定tcp sever
     if (bind(tcp_serv_fd, (struct sockaddr *) &tcpsaddr, ssize) == -1)
     {
-        LOG_PROC("ERROR", "Create OVSDB server failed");
+        LOG_PROC("ERROR", "%s:%d  Create OVSDB server failed",FN,LN);
         close(tcp_serv_fd);
     }
     //by:yhy 启动tcp sever监听
     if (listen(tcp_serv_fd, OVSDB_MAX_CONNECTION) == -1)
     {
-        LOG_PROC("ERROR", "Create OVSDB server failed");
+        LOG_PROC("ERROR", "%s:%d  Create OVSDB server failed",FN,LN);
         close(tcp_serv_fd);
     }
 
     LOG_PROC("INFO", "Create OVSDB server succeed, listening at [%d]", g_ovsdb_port);
     return tcp_serv_fd;
 }
-//by:yhy why?
+
 INT4 init_ovsdb()
 {
 	INT4 index = 0;  
@@ -2123,7 +2179,7 @@ INT4 init_ovsdb()
         return GN_ERR;
     }
 
-	for(index=0; index< OVSDB_MAX_CONNECTION; index++)
+	for(index=0; index< g_server.max_switch; index++)
 	{
 		pstOvsdbEpollsvr_SockfuncAddr = register_EpollSock_Handle(ovsdb_client_read, ovsdb_client_write, ovsdb_err_proc);
 		if (NULL == pstOvsdbEpollsvr_SockfuncAddr) 
@@ -2145,14 +2201,17 @@ INT4 init_ovsdb()
     return GN_OK;
 }
 
-// get conn fd by sw ip
+/* by:yhy
+ * 根据交换机ip:sw_ip查找socket句柄
+ */
 INT4 get_conn_fd_by_sw_ip(UINT4 sw_ip)
 {		
 	INT4 index = 0;
 	
-	for (index = 0; index < OVSDB_MAX_CONNECTION; index++) {		
-		if (g_ovsdb_clients_ip[index] == sw_ip) {
-			
+	for (index = 0; index < OVSDB_MAX_CONNECTION; index++)
+	{		
+		if (g_ovsdb_clients_ip[index] == sw_ip) 
+		{
 			return g_ovsdb_clients[index];
 		}
 	}
@@ -2164,16 +2223,32 @@ INT4 get_conn_fd_by_sw_ip(UINT4 sw_ip)
 UINT4 get_sw_ip_by_conn_fd(INT4 conn_fd)
 {
 	INT4 index = 0;
-	
-	for (index = 0; index < OVSDB_MAX_CONNECTION; index++) {		
-		if (g_ovsdb_clients[index] == conn_fd) {
-			
+	for (index = 0; index < OVSDB_MAX_CONNECTION; index++)
+	{		
+		if (g_ovsdb_clients[index] == conn_fd) 
+		{
 			return g_ovsdb_clients_ip[index];
 		}
 	}
-
 	return 0;
 }
+
+
+// get sw ip by conn fd
+gn_switch_t *get_sw_by_conn_fd(INT4 conn_fd)
+{
+	UINT4  iClientIp = 0;
+	gn_switch_t  *sw = NULL;
+	iClientIp = get_sw_ip_by_conn_fd(conn_fd);
+	if(0 == iClientIp)
+	{
+		return NULL;
+	}
+	sw = find_sw_by_swip(iClientIp);
+	return sw;
+}
+
+
 //根据套接字句柄删除OVSDB的相关操作
 //成功返回1,失败返回0
 UINT1 Del_OVSDB_by_conn_fd(INT4 conn_fd)

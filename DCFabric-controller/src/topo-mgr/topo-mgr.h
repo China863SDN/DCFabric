@@ -53,4 +53,6 @@ INT4 lldp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info);
 INT4 init_topo_mgr();
 void lldp_tx(gn_switch_t *sw, UINT4 port_no, UINT1 *src_addr);
 void lldp_tx_timer();
+INT4 init_timer_task(void);
+
 #endif /* TOPO_MGR_H_ */

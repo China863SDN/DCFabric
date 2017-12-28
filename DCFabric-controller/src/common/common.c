@@ -63,7 +63,7 @@ void Debug_PrintTrace(void)
 		LOG_PROC("DEBUG", "Obtained %zd stack frames",size);
 		for ( i = 0; i < size; i++ )
 		{
-			LOG_PROC("DEBUG", "%s",strings[i]);
+			LOG_PROC("DEBUG", "func %s", strings[i]);
 		}
 		free( strings );
 		strings = NULL;
@@ -72,11 +72,14 @@ void Debug_PrintTrace(void)
 
 void MsecSleep(UINT4 uiMillSec)
 {
+#if 0
 	struct timeval tv;
 
 	tv.tv_sec = uiMillSec/1000;
 	tv.tv_usec = (uiMillSec%1000)*1000;
 	select(1, NULL, NULL, NULL, &tv);
+#endif
+	usleep(uiMillSec*1000);
 	return;
 
 }

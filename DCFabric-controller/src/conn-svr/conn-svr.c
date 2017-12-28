@@ -67,10 +67,14 @@ pthread_mutex_t 	 g_PipeEventMutex;
 UINT4                g_uiPipeEventWrOffset = 0;
 UINT4                g_uiPipeEventRdOffset = 0;
 
+UINT4 g_fabric_tag = 0;
+UINT4 vlan_start_tag = FABRIC_START_TAG;
 
 
 UINT4 g_sendbuf_len = 81920;
 UINT4 g_controller_south_port = 0;
+
+switch_conn_times_p  g_sw_conn_times_list = NULL;
 
 void proc_port_forward( port_forward_proc_p p_forward_proc);
 
@@ -157,7 +161,7 @@ void of13_delete_line2(gn_switch_t* sw,UINT4 port_index)
 		n_sw = sw->neighbor[port_index]->sw;
 		port = sw->ports[port_index].port_no;
 		// if neighbor is alived, find neighbor, delete port
-		if(n_sw->conn_state != INITSTATE)//(n_sw->state != 0)
+		if(n_sw&&(n_sw->conn_state != INITSTATE))//(n_sw->state != 0)
 		{
 			n_port = sw->neighbor[port_index]->port->port_no;
 			// get neighbor sw's neighbor
@@ -170,6 +174,7 @@ void of13_delete_line2(gn_switch_t* sw,UINT4 port_index)
 			           // free(n_sw->neighbor[n_port_index]);
 			           // n_sw->neighbor[n_port_index] = NULL;
 			           n_sw->neighbor[n_port_index]->bValid = FALSE;
+					   n_sw->ports[n_port_index].type = UNKOWN;
 			            // delete neighbor
 						event_delete_switch_port_on(n_sw,n_port);
 					}
@@ -180,6 +185,7 @@ void of13_delete_line2(gn_switch_t* sw,UINT4 port_index)
 	    //free(sw->neighbor[port_index]);
 	    //sw->neighbor[port_index] = NULL;
 	    sw->neighbor[port_index]->bValid = FALSE;
+		sw->ports[n_port_index].type = UNKOWN;
 		event_delete_switch_port_on(sw,port);
 	}
 	// event end
@@ -206,6 +212,25 @@ gn_switch_t *find_sw_by_sockfd(INT4 iSockFd)
 
     return NULL;
 }
+gn_switch_t *find_sw_by_swip(UINT4 sw_ip)
+{
+	UINT4 num;
+	gn_switch_t  *sw = NULL;
+
+	for(num=0; num < g_server.max_switch; num++)
+	{
+		sw = &g_server.switches[num];
+		if(sw && (INITSTATE != sw->conn_state)&&(sw_ip == sw->sw_ip))
+		{
+			//LOG_PROC("INFO", "#######################%s %d sw_ip=0x%x",FN,LN,sw_ip);
+			return sw;
+		}
+	}
+
+	return NULL;
+}
+
+	
 
 //by:yhy 根据dpid在g_server中查找对应的gn_switch_t
 gn_switch_t *find_sw_by_dpid(UINT8 dpid)
@@ -347,7 +372,7 @@ void msg_recv(gn_switch_t *sw)
 		if(GN_OK != iRet) 
 		{
 			LOG_PROC("ERROR", "Error: %s! %d",FN, LN);
-			return ;
+			continue;
 		}
 		while(GN_OK == pop_MsgSock_from_queue( &g_tRecv_queue, g_pMsgNodeBuff, &newsockmsgRecv))
 		{
@@ -519,114 +544,102 @@ void *msg_recv_thread(void *index)
 void *msg_proc_thread(void *index)
 {
     gn_switch_t *sw = NULL;
-        INT4 iRet = 0;
-        UINT4 head = 0;
-        UINT4 tail = 0;
-        UINT4 uiMsgType = 0;
-        UINT4 uiswIndex = 0;
-        INT4  iSockFd = 0;
-        INT4  num = 0;
-        INT4 switch_idx = -1;
-        socklen_t addrlen;
-        struct sockaddr_in addr;
-        
-        p_Queue_node pNode  = NULL;
-        
-        gst_msgsock_t newsockmsgProc= {0};	
-        gst_msgsock_t newsockmsgSend= {0};
-        
-        prctl(PR_SET_NAME, (unsigned long) "Msg_Proc_Thread" ) ;  
-        
-        addrlen = sizeof(struct sockaddr);
-        while(1)
-        {
-            iRet = Read_Event(EVENT_PROC);
-            if(GN_OK != iRet) 
-            {
-                LOG_PROC("ERROR", "Error: %s! %d",FN, LN);
-                    return NULL;
-            }
+	INT4 iRet = 0;
+	UINT4 head = 0;
+	UINT4 tail = 0;
+	UINT4 uiMsgType = 0;
+	UINT4 uiswIndex = 0;
+	INT4  iSockFd = 0;
+	INT4  num = 0;
+	INT4 switch_idx = -1;
+	socklen_t addrlen;
+	struct sockaddr_in addr;
+	
+	p_Queue_node pNode  = NULL;
+	
+	gst_msgsock_t newsockmsgProc= {0};	
+	gst_msgsock_t newsockmsgSend= {0};
+	
+	prctl(PR_SET_NAME, (unsigned long) "Msg_Proc_Thread" ) ;  
+	
+	addrlen = sizeof(struct sockaddr);
+	while(1)
+	{
+		iRet = Read_Event(EVENT_PROC);
+		if(GN_OK != iRet) 
+		{
+			LOG_PROC("ERROR", "Error: %s %d errno=%d",FN, LN,errno);
+			//return NULL;
+			continue;
+		}
 
-            while(GN_OK == pop_MsgSock_from_queue( &g_tProc_queue,g_pMsgNodeBuff, &newsockmsgProc))
-        	{
-        		
-        		//continue;
-
-				/*
-				num++;
-
-				if((!(num%1000))||(g_tProc_queue.QueueLength>500))
-				{
-					LOG_PROC("ERROR", "Error: %s! %d &g_tSend_queue.QueueLength = %d",FN,LN, g_tProc_queue.QueueLength );
-					num=0;
-				}
-				*/
+		while(GN_OK == pop_MsgSock_from_queue( &g_tProc_queue,g_pMsgNodeBuff, &newsockmsgProc))
+		{
 			uiMsgType =  newsockmsgProc.uiMsgType;
 			uiswIndex = newsockmsgProc.uiSw_Index ;
 			iSockFd = newsockmsgProc.iSockFd;
 
-                switch(uiMsgType)
-                {
-                    case NEWACCEPT:
-                        {
-                            if(!getpeername(iSockFd, (struct sockaddr *)&addr, &addrlen))
-                            {
-                                //printf( "Peer IP：%s ", inet_ntoa(addr.sin_addr));
-                                //printf( "Peer PORT：%d ", ntohs(addr.sin_port));
-                                switch_idx = new_switch(iSockFd, addr);
-	                            if(switch_idx == -1 )
-	                            {
-	                                LOG_PROC("ERROR", "Accept a new switch failed, max switch count is reached.");
-	                                close(iSockFd);
-	                            }
-                            }
-							  break;
-                            
-                        }
-                    case CONNECTED:
-                        {
-                            sw = &g_server.switches[uiswIndex];
-                            msg_process(sw);
-                            break;
-                        }
-                    case WAITCLOSE:
-                        {
-							sw = &g_server.switches[uiswIndex];
-                            if(WAITCLOSE == sw->conn_state)
-                            {
-                                push_MsgAndEvent(EVENT_SEND, pNode, &g_tSend_queue, newsockmsgSend,WAITCLOSE, iSockFd, sw->index );
-                            }
+			switch(uiMsgType)
+			{
+				case NEWACCEPT:
+				{
+					if(!getpeername(iSockFd, (struct sockaddr *)&addr, &addrlen))
+					{
+						//printf( "Peer IP：%s ", inet_ntoa(addr.sin_addr));
+						//printf( "Peer PORT：%d ", ntohs(addr.sin_port));
+						switch_idx = new_switch(iSockFd, addr);
+						if(switch_idx == -1 )
+						{
+							LOG_PROC("ERROR", "Accept a new switch failed, max switch count is reached.");
+							close(iSockFd);
+							exit(0);
+						}
+					}
+					  break;
+				}
+				case CONNECTED:
+				{
+					sw = &g_server.switches[uiswIndex];
+					msg_process(sw);
+					break;
+				}
+				case WAITCLOSE:
+				{
+					sw = &g_server.switches[uiswIndex];
+					if(WAITCLOSE == sw->conn_state)
+					{
+						push_MsgAndEvent(EVENT_SEND, pNode, &g_tSend_queue, newsockmsgSend,WAITCLOSE, iSockFd, sw->index );
+					}
 
-                            break;
-                        }
-                    case CLOSE_ACT:
-                        {
-                            sw = &g_server.switches[uiswIndex];
-                            free_switch(sw);
-                            break;
-                        }
-						case LLDP:
-						{
-							lldp_tx_timer();
-							break;
-						}
-						case HEARTBEAT:
-						{
-							heartbeat_tx_timer();
-							break;
-						}
-						case GETPORTSTATE:
-						{
-							get_throughput();
-							break;
-						}
-						case PORT_FORWARD:
-								  {
-                                                           proc_port_forward((port_forward_proc_p) newsockmsgProc.param);
-									  break;
-								  }
-                };
-            
+					break;
+				}
+				case CLOSE_ACT:
+				{
+					sw = &g_server.switches[uiswIndex];
+					free_switch(sw);
+					break;
+				}
+				case LLDP:
+				{
+					lldp_tx_timer();
+					break;
+				}
+				case HEARTBEAT:
+				{
+					heartbeat_tx_timer();
+					break;
+				}
+				case GETPORTSTATE:
+				{
+					get_throughput();
+					break;
+				}
+				case PORT_FORWARD:
+				{
+					proc_port_forward((port_forward_proc_p) newsockmsgProc.param);
+					break;
+				}
+			}
         }
     }
     return NULL;
@@ -655,7 +668,8 @@ void *msg_send_thread(void *index)
 		if(GN_OK != iRet) 
 		{
 			LOG_PROC("ERROR", "Error: %s! %d",FN,LN);
-			return NULL;
+			//return NULL;
+			continue;
 		}
 		while(GN_OK == pop_MsgSock_from_queue( &g_tSend_queue, g_pMsgNodeBuff,&newsockmsgSend))
 		{
@@ -677,37 +691,37 @@ void *msg_send_thread(void *index)
 			//LOG_PROC("INFO","%s %d uiMsgType=%d",FN, LN,uiMsgType);
 			sw = &g_server.switches[uiswIndex];
 	
-		if(CONNECTED ==  uiMsgType)
-		{
-			//by:yhy 根据发送长度判断是否有数据发送
-		    if(sw->send_len)
-		    {
-		    	iWriteLen = 0;
-		        pthread_mutex_lock(&sw->send_buffer_mutex);
-				while(iWriteLen < sw->send_len)				//modify by ycy
-				{
-		        	iRet = write(sw->sock_fd, sw->send_buffer+iWriteLen, sw->send_len-iWriteLen);
-			
-					if(iRet <= 0)
+			if(CONNECTED ==  uiMsgType)
+			{
+				//by:yhy 根据发送长度判断是否有数据发送
+		    	if(sw->send_len)
+			    {
+			    	iWriteLen = 0;
+			        pthread_mutex_lock(&sw->send_buffer_mutex);
+					while(iWriteLen < sw->send_len)				//modify by ycy
 					{
-						iErrno = errno;
-					
+			        	iRet = write(sw->sock_fd, sw->send_buffer+iWriteLen, sw->send_len-iWriteLen);
+				
+						if(iRet <= 0)
+						{
+							iErrno = errno;
 						
-						if(EAGAIN == iErrno)
-						{
-							break;
-						}
-						if(EINTR == iErrno)
-						{
-							usleep(5);
-							continue;
-						}
+							
+							if(EAGAIN == iErrno)
+							{
+								break;
+							}
+							if(EINTR == iErrno)
+							{
+								usleep(5);
+								continue;
+							}
 							LOG_PROC("DEBUG", "%s : len=%d nErr=%d sw->sock_fd=%d uiswIndex=%d sw->conn_state=%d ",FN,iRet, iErrno,sw->sock_fd, uiswIndex,sw->conn_state);
-						if((CONNECTED == sw->conn_state)||(NEWACCEPT ==  uiMsgType))
-						{
-							//send wait_close to epoll by pipe
-							registerEpoll_OpSock(DELSOCK, sw->sock_fd , sw->data);
-						}
+							if((CONNECTED == sw->conn_state)||(NEWACCEPT ==  uiMsgType))
+							{
+								//send wait_close to epoll by pipe
+								registerEpoll_OpSock(DELSOCK, sw->sock_fd , sw->data);
+							}
 
 							break;
 						}
@@ -726,8 +740,8 @@ void *msg_send_thread(void *index)
 							memcpy(sw->send_buffer, sw->send_buffer+iWriteLen, sw->send_len);
 						}
 					}
-			        pthread_mutex_unlock(&sw->send_buffer_mutex);
-			    }
+				        pthread_mutex_unlock(&sw->send_buffer_mutex);
+				}
 			}
 			else if(WAITCLOSE ==  uiMsgType)
 			{	
@@ -864,6 +878,8 @@ INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr)
                 //g_server.switches[idx].state = 1;
                 g_server.switches[idx].sock_state = 0;
 				g_server.switches[idx].conn_state = NEWACCEPT;
+				g_server.switches[idx].vlan_tag = g_fabric_tag;
+				g_fabric_tag++;
                 pthread_mutex_lock(&g_server.cur_switch_mutex);
 				g_server.cur_switch++;
 				pthread_mutex_unlock(&g_server.cur_switch_mutex);
@@ -871,6 +887,7 @@ INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr)
                 of13_msg_hello(&g_server.switches[idx], NULL);
 
 				registerEpoll_OpSock(ADDSOCK, switch_sock, g_server.switches[idx].data);
+				LOG_PROC("INFO", "%s %d sw ip = 0x%x connect",FN,LN, g_server.switches[idx].sw_ip);
                 return idx;
             }
         }
@@ -880,13 +897,14 @@ INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr)
 //by:yhy 释放交换机结构体
 void free_switch(gn_switch_t *sw)
 {
+	UINT4 j = 0;
     UINT4 port_idx;
     UINT1 dpid[8];
     ulli64_to_uc8(sw->dpid, dpid);
     /*LOG_PROC("WARNING", "Switch [%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x] disconnected", dpid[0],
-            dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7]);   
+            dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6], dpid[7]);   */
 	
-	 LOG_PROC("INFO","%s %d sockfd=%d",FN, LN,sw->sock_fd );*/
+	LOG_PROC("INFO","%s %d sockfd=%d sw->dpid=0x%x sw->sw_ip=0x%x break connect",FN, LN,sw->sock_fd ,sw->dpid, sw->sw_ip);
 
 	if((0 == sw->sw_ip)||(INITSTATE == sw->conn_state))
 	{
@@ -928,8 +946,13 @@ void free_switch(gn_switch_t *sw)
         	of13_delete_line2(sw,port_idx);
         }
     }
-    memset(sw->ports, 0, sizeof(gn_port_t) * MAX_PORTS);
+    memset(sw->ports, 0x00, sizeof(gn_port_t) * MAX_PORTS);
 
+	for(j = 0; j < MAX_PORTS; j++)
+	{
+		sw->ports[j].state = PORT_LINK_DOWN;
+	}
+	
     //reset user
 	/*Need to be deleted
     for (hash_idx = 0; hash_idx < g_macuser_table.macuser_hsize; hash_idx++)
@@ -1040,8 +1063,10 @@ INT4 svr_read_func(INT4 iSockFd)
 			newsockmsgProc.iSockFd =  switch_sock;		
 			newsockmsgProc.uiSw_Index = 0;	
 			newsockmsgProc.uiUsedFlag = 1;			
-			push_MsgSock_into_queue( &g_tProc_queue, pNode, &newsockmsgProc);	
-			Write_Event(EVENT_PROC);			
+			if(GN_OK == push_MsgSock_into_queue( &g_tProc_queue, pNode, &newsockmsgProc))
+			{
+				Write_Event(EVENT_PROC);
+			}
 		}	
 	}
 	return GN_OK;
@@ -1192,8 +1217,8 @@ static INT4  init_switch(gn_switch_t *sw)
 			LOG_PROC("ERROR", "init_switch -- sw->neighbor gn_malloc  Finall return GN_ERR");
         	return GN_ERR;
 		}
+		sw->ports[j].state = PORT_LINK_DOWN;
 	 }
-	
     return GN_OK;
 }
 
@@ -1275,14 +1300,20 @@ INT4 init_conn_svr()
 
     value = get_value(g_controller_configure, "[controller]", "max_switch");
     g_server.max_switch = ((NULL == value) ? 7 : atoi(value));
+	g_server.max_switch = (g_server.max_switch < 7)? 7 : g_server.max_switch;
 
 
     value = get_value(g_controller_configure, "[heartbeat_conf]", "heartbeat_interval");
     g_heartbeat_interval= ((NULL == value) ? 5 : atoll(value));
+	g_heartbeat_interval = (g_heartbeat_interval < 5)? 5 : g_heartbeat_interval;
 
     value = get_value(g_controller_configure, "[heartbeat_conf]", "heartbeat_times");
     g_heartbeat_times= ((NULL == value) ? 3 : atoll(value));
-	
+	g_heartbeat_times= (g_heartbeat_times < 3) ? 3 : g_heartbeat_times;
+
+	value = get_value(g_controller_configure, "[controller]", "vlan_start_tag");
+	vlan_start_tag = (NULL == value) ? FABRIC_START_TAG: strtoull(value, NULL, 10);
+	g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
 
 	//by:yhy 获取CPU核心数
     g_server.cpu_num = get_total_cpu();
@@ -1353,10 +1384,13 @@ void print_port_forward(openstack_port_forward_p p_forward_proc_list)
 	port_forward_templist = p_forward_proc_list;
 	while(port_forward_templist)
 	{
-		LOG_PROC("INFO","p_forward_proc_list proto=%d state=%d src_port=%d dst_port=%d",port_forward_templist->proto, port_forward_templist->state, port_forward_templist->src_port, port_forward_templist->dst_port);
-		
-		LOG_PROC("INFO","p_forward_proc_list n_src_ip=0x%x n_dst_ip=0x%x src_ip=%s dst_ip=%s",port_forward_templist->n_src_ip, port_forward_templist->n_dst_ip, port_forward_templist->src_ip, port_forward_templist->dst_ip);
-		
+		LOG_PROC("INFO","p_forward_proc_list proto=%d state=%d src_port=%d-%d dst_port=%d-%d",
+            port_forward_templist->proto, port_forward_templist->state, 
+            port_forward_templist->src_port_start, port_forward_templist->src_port_end, 
+            port_forward_templist->dst_port_start, port_forward_templist->dst_port_end);
+		LOG_PROC("INFO","p_forward_proc_list n_src_ip=0x%x n_dst_ip=0x%x src_ip=%s dst_ip=%s",
+            port_forward_templist->n_src_ip, port_forward_templist->n_dst_ip, 
+            port_forward_templist->src_ip, port_forward_templist->dst_ip);
 		LOG_PROC("INFO","p_forward_proc_list network_id=%s",port_forward_templist->network_id);
 		port_forward_templist = port_forward_templist->next;
 	}
@@ -1377,4 +1411,47 @@ void proc_port_forward( port_forward_proc_p p_forward_proc)
     g_openstack_forward_list = p_forward_proc->copy_list;
 	//print_port_forward(g_openstack_forward_list);
     gn_free(&p_forward_proc);
+}
+
+UINT4 update_switch_conn_times(UINT8 dpid)
+{
+	switch_conn_times_p    sw_conn_times = g_sw_conn_times_list;
+
+	if(NULL == g_sw_conn_times_list)
+	{
+		sw_conn_times =  (switch_conn_times_t *)gn_malloc(sizeof(switch_conn_times_t));
+		if(sw_conn_times)
+		{
+			memset(sw_conn_times, 0x0, sizeof(switch_conn_times_t));
+			sw_conn_times->dpid = dpid;
+			sw_conn_times->conn_times++;
+			sw_conn_times->next = NULL;
+			g_sw_conn_times_list = sw_conn_times;
+			return sw_conn_times->conn_times;
+		}
+		
+	}
+	while(sw_conn_times)
+	{
+		if(sw_conn_times->dpid == dpid)
+		{
+			sw_conn_times->dpid = dpid;
+			sw_conn_times->conn_times++;
+			return sw_conn_times->conn_times;
+		}
+		sw_conn_times = sw_conn_times->next;
+	}
+	sw_conn_times = (switch_conn_times_t *)gn_malloc(sizeof(switch_conn_times_t));
+	if(sw_conn_times)
+	{
+		memset(sw_conn_times, 0x0, sizeof(switch_conn_times_t));
+		sw_conn_times->dpid = dpid;
+		sw_conn_times->conn_times++;
+		sw_conn_times->next = g_sw_conn_times_list->next;
+		g_sw_conn_times_list->next = sw_conn_times;
+		return sw_conn_times->conn_times;
+	} 
+
+	return 0;
+	
 }

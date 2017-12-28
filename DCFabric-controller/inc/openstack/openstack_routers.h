@@ -15,25 +15,29 @@ extern struct _openstack_router *  g_openstack_router_list;
 
 extern struct _openstack_port_forward *  g_openstack_forward_list;
 
-typedef struct _openstack_router{
+typedef struct _openstack_router
+{
+	UINT1 status;
 	char router_id[128];
-        struct _openstack_router* next;
+	UINT4 external_fixed_ips;
+    struct _openstack_router* next;
 }openstack_router,* openstack_router_p;
 
 
 typedef struct _openstack_port_forward{
-        int  proto;//0:tcp, 1:udp
-        int  state;//0:disable 1:able
-	char src_ip[OPENSTACK_IP_LEN];
-	char dst_ip[OPENSTACK_IP_LEN];	
-        UINT4 n_src_ip; //n_intIp
-        UINT4 n_dst_ip; //n_extIp
-        int  src_port;  //n_intPort;
-        int  dst_port;  //n_extPort;
-        char network_id[OPENSTACK_IP_LEN];
-        
-        struct _openstack_port_forward * next;
+    int  proto;                    //0:tcp 1:udp
+    int  state;                    //0:disable 1:able
+    char src_ip[OPENSTACK_IP_LEN]; //external
+    char dst_ip[OPENSTACK_IP_LEN]; //internal
+    UINT4 n_src_ip;                //external
+    UINT4 n_dst_ip;                //internal
+    UINT2 src_port_start;          //external
+    UINT2 src_port_end;            //external
+    UINT2 dst_port_start;          //internal
+    UINT2 dst_port_end;            //internal
+    char network_id[OPENSTACK_IP_LEN];
 
+    struct _openstack_port_forward * next;
 }openstack_port_forward,* openstack_port_forward_p;
 
 typedef struct _port_forward_param
@@ -52,13 +56,14 @@ typedef struct _port_proc_param
 
 }port_forward_proc, *port_forward_proc_p;
 
-
+UINT1 visit_openstack_router_list_find_unvalid(void);
+UINT1 reset_openstack_router_status(void);
 //路由列表相关接口
-openstack_router_p create_openstack_router(char* router_id);
+openstack_router_p create_openstack_router(char* router_id,UINT4 external_fixed_ips);
 
 void destory_openstack_router(openstack_router_p router_node);
 
-bool update_openstack_router_list(openstack_router_p * header,  char* router_id, char* fixed_ip, char* network_id);
+bool update_openstack_router_list(openstack_router_p * header,  char* router_id, UINT4 fixed_ip, char* network_id);
 
 openstack_router_p get_openstack_router_by_router_id(openstack_router_p header, char* router_id);
 

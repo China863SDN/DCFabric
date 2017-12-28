@@ -118,21 +118,37 @@ void fabric_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in){
 	return;
 };
 
-
-p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 inport){
+/* by:yhy
+ * 保存host信息
+ */
+p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 targetip, UINT4 inport)
+{
 	p_fabric_host_node p_node =  get_fabric_host_from_list_by_mac(sendmac);
-	if(p_node!=NULL){
+	if(p_node!=NULL)
+	{
+		if((p_node->port != inport)&&(inport < MAX_PORTS))
+		{
+			sw->ports[inport].type = HOST_CON;
+			p_node->port =inport;
+			install_fabric_output_flow(sw,sendmac,inport);
+		}
 		if(!check_IP_in_fabric_host(p_node,sendip))
 		{
 			add_fabric_host_ip(p_node,sendip);
 		}
-	}else{
+	}
+	else
+	{
 		p_node = create_fabric_host_list_node(sw,inport,sendmac,sendip,NULL);
-		if (NULL == p_node) {
+		if (NULL == p_node) 
+		{
 		    return NULL;	
 		}
-		insert_fabric_host_into_list(p_node);
-        install_fabric_output_flow(sw,sendmac,inport);
+		if((GN_OK == insert_fabric_host_into_list(p_node))&&(inport < MAX_PORTS))
+		{
+			sw->ports[inport].type = HOST_CON;
+        	install_fabric_output_flow(sw,sendmac,inport);
+		}
 		
 //		UINT1 LocalHostdpid[8];
 //      ulli64_to_uc8(sendmac, LocalHostdpid);
@@ -162,7 +178,6 @@ p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 se
     {
         p_node->ip_list[0] = sendip;
     }
-	install_fabric_output_flow(sw,sendmac,inport);
 	return p_node;
 }
 
@@ -187,7 +202,7 @@ INT4 fabric_arp_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,pa
 }
 INT4 fabric_ip_p_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,UINT1* srcmac,packet_in_info_t *packet_in){
 	ip_t *p_ip = (ip_t *)(packet_in->data);
-	if(p_ip->proto == 1){
+	if(p_ip->proto == PROTO_ICMP){
 		//printf("ip->proto == 1 %s\n",FN);
 		fabric_ip_packet_flood(packet_in);
 		//fabric_push_ip_flood_queue(ip->dest,ip,packet_in);
@@ -230,7 +245,7 @@ INT4 fabric_ip_packet_output(p_fabric_host_node src_port,p_fabric_host_node dst_
 	fabric_packet_output(dst_port->sw,packet_in,dst_port->port);
 	return GN_OK;
 }
-INT4 fabric_ip_packet_check_access(p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set){
+INT4 fabric_ip_packet_check_access(gn_switch_t *sw,p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set){
 	return GN_OK;
 }
 //by:yhy 根据给定的参数,判断下一步操作的类型
@@ -238,17 +253,23 @@ INT4 fabric_compute_src_dst_forward(p_fabric_host_node src_port,p_fabric_host_no
 {
 	if (NULL != dst_port)
 	{
+		if(src_port)
+		LOG_PROC("INFO", "%s %d src_port->ip=0x%x dst_port->ip=0x%x",FN, LN, src_port->ip_list[0], dst_port->ip_list[0]);
 		// packet out
 		return Internal_port_flow;
 	}
 	else 
 	{
+		
+		LOG_PROC("INFO", "%s %d src_port->ip=0x%x ",FN, LN, src_port->ip_list[0]);
+		if(dst_port)
+			LOG_PROC("INFO", "%s %d dst_port->ip=0x%x ",FN, LN, dst_port->ip_list[0]);
 		return IP_FLOOD;
 	}
 
     return GN_OK;
 }
-INT4 fabric_arp_reply_output(p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in){
+INT4 fabric_arp_reply_output(UINT8 external_dpid,p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in){
 	arp_t *arp = (arp_t *)(packet_in->data);
 	fabric_push_flow_queue(src,arp->sendip, dst, targetIP);
 	memcpy(arp->eth_head.dest,dst->mac, 6);

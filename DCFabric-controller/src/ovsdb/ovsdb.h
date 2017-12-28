@@ -72,8 +72,6 @@ typedef struct ovs_bridge
 
 typedef struct ovsdb_server
 {
-//    UINT4 node_type;  //??????????????
-    //UINT4 resv;
 	void * funcptr;
     UINT4 node_ip;
     int node_fd;
@@ -83,9 +81,7 @@ typedef struct ovsdb_server
 
 pthread_t g_ovsdb_recv_tid;
 
-UINT1 g_tunnel_type;        //openstack�������� gre/vxlan
-UINT1 g_ovsdb_of_version;   //openstack ovs��openflow�汾
-UINT4 g_ovsdb_port;         //ovsdb�ӿڣ�Ĭ�϶˿�6640
+
 
 extern ovsdb_server_t g_ovsdb_nodes[];
 
@@ -95,6 +91,7 @@ INT4 init_ovsdb();
 
 INT4 get_conn_fd_by_sw_ip(UINT4 sw_ip);
 UINT1 Del_OVSDB_by_conn_fd(INT4 conn_fd);
+gn_switch_t *get_sw_by_conn_fd(INT4 conn_fd);
 
 
 #endif /* OVSDB_H_ */

@@ -1,31 +1,3 @@
-/*
- * DCFabric GPL Source Code
- * Copyright (C) 2015, BNC <DCFabric-admin@bnc.org.cn>
- *
- * This file is part of the DCFabric SDN Controller. DCFabric SDN
- * Controller is a free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, , see <http://www.gnu.org/licenses/>.
- */
-
-/*
- * fabric_flows.c
- *
- *  Created on: Mar 27, 2015
- *  Author: BNC administrator
- *  E-mail: DCFabric-admin@bnc.org.cn
- *
- *  Modified on: May 19, 2015
- */
 #include "fabric_flows.h"
 #include "fabric_path.h"
 #include "../flow-mgr/flow-mgr.h"
@@ -39,6 +11,7 @@
 #include "fabric_impl.h"
 #include "../qos-mgr/qos-policy.h"
 #include "../qos-mgr/qos-meter.h"
+#include "../cluster-mgr/cluster-mgr.h"
 
 extern UINT4 g_reserve_ip;
 
@@ -51,6 +24,9 @@ gn_flow_t * install_add_fabric_impl_last_flow(gn_switch_t * sw,UINT4 tag);
 gn_flow_t * install_add_fabric_impl_first_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 gn_flow_t * install_add_fabric_impl_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag);
 
+void install_add_fabric_lldpmiss_controller_flow(gn_switch_t *sw);
+void install_add_fabric_toVm_controller_flow(gn_switch_t *sw);
+
 void install_delete_fabric_flow(gn_switch_t* sw);
 void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id);
 
@@ -59,7 +35,7 @@ void add_action_param_rear(action_param_t** action_param, INT4 type, void* param
 flow_param_t* init_flow_param();
 void clear_flow_param(flow_param_t* flow_param);
 
-void install_fabric_flows(gn_switch_t * sw,
+INT4 install_fabric_flows(gn_switch_t * sw,
 						  UINT2 idle_timeout,
 						  UINT2 hard_timeout,
 						  UINT2 priority,
@@ -76,7 +52,7 @@ void install_fabric_clear_stat_flows(gn_switch_t * sw,
 void set_security_match(gn_oxm_t* oxm, security_param_t* security_param);
 void set_qos_match(gn_switch_t* sw, flow_param_t* flow_param);
 
-
+extern BOOL initiative_check_if_external_and_install_flow(gn_switch_t* sw);
 // new ids for mem alloc
 //extern void *g_gnflow_mempool_id;
 //extern void *g_gninstruction_mempool_id;
@@ -116,7 +92,7 @@ void delete_fabric_flow_by_sw(gn_switch_t *sw){
 	return;
 };
 void delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id){
-	if(CONNECTED == sw->conn_state){
+	if(sw&&(CONNECTED == sw->conn_state)){
 		install_delete_fabric_impl_flow(sw,port_no,tag,table_id);
 	}
 	return;
@@ -127,14 +103,28 @@ void install_fabric_base_flows(gn_switch_t * sw)
 {
 	if (OFP10_VERSION == sw->ofp_version) 
 	{
+	 	install_add_fabric_controller_flow(sw);
 		install_add_fabric_ARP_miss_match_flow(sw);
 		install_add_fabric_miss_match_flow(sw);
+		install_add_fabric_lldpmiss_controller_flow(sw);
 	}
 	else if (OFP13_VERSION == sw->ofp_version) 
 	{
+		install_add_fabric_controller_flow(sw);
 		install_add_fabric_host_input_flow(sw);
 		install_add_fabric_ARP_miss_match_flow(sw);
-		install_add_fabric_miss_match_flow(sw);
+		//install_add_fabric_miss_match_flow(sw);
+		install_add_fabric_lldpmiss_controller_flow(sw);
+		
+		install_add_NATTable_default_flow(sw);
+		install_add_FloatingTable_default_flow(sw);
+		install_add_OtherTable_default_flow(sw);
+		install_add_FQInPostProcessTable_default_flow(sw);
+			
+		install_add_QOS_in_jump_default_flow(sw,FABRIC_QOS_IN_TABLE,FABRIC_OUTPUT_TABLE);
+		install_add_QOS_jump_default_flow(sw,FABRIC_QOS_OUT_TABLE,FABRIC_FQ_OUT_POST_PROCESS_TABLE);
+		install_add_FQ_out_PostProcessTable_default_flow(sw);
+		install_add_fabric_toVm_controller_flow(sw);
 	}
 	else 
 	{
@@ -149,7 +139,10 @@ void install_fabric_base_flows(gn_switch_t * sw)
 //by:yhy 对sw下载匹配vlan_vid=tag,然后执行pop_vlan并跳转至FABRIC_OUTPUT_TABLE的流表
 void install_fabric_last_flow(gn_switch_t * sw,UINT4 tag)
 {
-	install_add_fabric_impl_last_flow(sw,tag);
+	if(TRUE != initiative_check_if_external_and_install_flow(sw))
+	{
+		install_add_fabric_impl_last_flow(sw,tag);
+	}
 	return;
 };
 /*
@@ -170,8 +163,8 @@ void install_fabric_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag)
 	install_add_fabric_impl_middle_flow(sw,port,tag);
 	return;
 };
-/*markby:yhy why?流表格式/帧结构与此不同找不到对应关系
- * install fabric same switch flow
+/* 
+ * 同一交换机下
  */
 void install_fabric_same_switch_flow(gn_switch_t * sw,UINT1* mac, UINT4 port)
 {
@@ -186,58 +179,1067 @@ void install_fabric_same_switch_flow(gn_switch_t * sw,UINT1* mac, UINT4 port)
 						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
-
-	// printf("%s\n", FN);
-	// nat_show_ip(sw->sw_ip);
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-//    gn_action_output_t action;
-//
-//    memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
-//	flow.table_id = FABRIC_INPUT_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//	memcpy(flow.match.oxm_fields.eth_dst, mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//    instruction.type = OFPIT_APPLY_ACTIONS;
-//    instruction.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction;
-//
-//    memset(&action, 0, sizeof(gn_action_t));
-//    action.port = port;
-//    action.type = OFPAT13_OUTPUT;
-//    action.next = instruction.actions;
-//    action.max_len = 0xffff;
-//    instruction.actions = (gn_action_t *)&action;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-//	return;
 };
 
-void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4 port, security_param_p security_param)
+
+gn_flow_t * install_add_NATTable_default_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_FLOATING_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+	
+	install_fabric_flows(sw, FABRIC_NAT_TABLE_IDLE_TIME_OUT, FABRIC_NAT_TABLE_HARD_TIME_OUT,FABRIC_PRIORITY_NAT_TABLE_DEFAULT_FLOW,FABRIC_NAT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_FloatingTable_default_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_OTHER_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+	
+	install_fabric_flows(sw, FABRIC_FLOATING_TABLE_IDLE_TIME_OUT, FABRIC_FLOATING_TABLE_HARD_TIME_OUT,FABRIC_PRIORITY_FLOATING_TABLE_DEFAULT_FLOW,FABRIC_FLOATING_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+gn_flow_t * install_add_OtherTable_default_flow(gn_switch_t *sw)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT4 port = OFPP13_CONTROLLER;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+
+	install_fabric_flows(sw, FABRIC_OTHER_TABLE_IDLE_TIME_OUT, FABRIC_OTHER_TABLE_HARD_TIME_OUT, FABRIC_PRIORITY_OTHER_TABLE_DEFAULT_FLOW,
+						 FABRIC_OTHER_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+gn_flow_t * install_add_FQInPostProcessTable_default_flow(gn_switch_t *sw)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT4 port = OFPP13_CONTROLLER;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+
+	install_fabric_flows(sw, FABRIC_OTHER_TABLE_IDLE_TIME_OUT, FABRIC_OTHER_TABLE_HARD_TIME_OUT, FABRIC_PRIORITY_OTHER_TABLE_DEFAULT_FLOW,
+						 FABRIC_FQ_IN_POST_PROCESS_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 入口防火墙的全通
+ */
+gn_flow_t * install_add_FirewallIn_functionOff_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+	
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_IN_DEFAULT_FLOW,FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 出口防火墙的全通 
+ */
+gn_flow_t * install_add_FirewallOut_functionOff_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+	
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_OUT_DEFAULT_FLOW,FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 入口防火墙无匹配drop 
+ */
+gn_flow_t * install_remove_FirewallIn_defaultDrop_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);	//drop
+	
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_IN_DEFAULT_FLOW,FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 出口防火墙无匹配drop 
+ */
+gn_flow_t * install_remove_FirewallOut_defaultDrop_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);	//drop
+	
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_OUT_DEFAULT_FLOW,FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 删除入口防火墙的指定目标IP的通过流表 
+ */
+gn_flow_t * install_remove_FirewallIn_flow(gn_switch_t *sw,UINT4 DstIP)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(DstIP);
+
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_FIREWALL_IN_TABLE, OFPFC_DELETE, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 删除出口防火墙的指定源IP的通过流表
+ */
+gn_flow_t * install_remove_FirewallOut_flow(gn_switch_t *sw,UINT4 SrcIP)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_src = ntohl(SrcIP);
+
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_FIREWALL_OUT_TABLE, OFPFC_DELETE, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+gn_flow_t * install_add_FirewallIn_gotoController_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT4 SrcIPMask,UINT1 Protocol)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	LOG_PROC("INFO", "%s_%d",FN,LN);
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	UINT4 port = OFPP13_CONTROLLER;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+		flow_param->match_param->ipv4_src_prefix = ntohl(SrcIPMask);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+	}
+
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_IN_DEFAULT_FLOW,FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_FirewallOut_gotoController_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT4 DstIPMask,UINT1 Protocol)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	UINT4 port = OFPP13_CONTROLLER;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+		flow_param->match_param->ipv4_dst_prefix = ntohl(DstIPMask);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+	}
+	
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_OUT_DEFAULT_FLOW,FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_FirewallIn_spicificThrough_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT1 Protocol,UINT4 SrcPort,UINT4 DstPort)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+		if(Protocol==IPPROTO_TCP)
+		{
+			flow_param->match_param->tcp_src =SrcPort;
+			flow_param->match_param->tcp_dst =DstPort;
+		}
+		else if (Protocol==IPPROTO_UDP)
+		{
+			flow_param->match_param->udp_src =SrcPort;
+			flow_param->match_param->udp_dst =DstPort;
+		}
+		else if(Protocol==IPPROTO_ICMP)
+		{
+			flow_param->match_param->icmpv4_type =SrcPort;
+			flow_param->match_param->icmpv4_code =DstPort;
+		}
+	}
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_SPICIFIC_FLOW_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_SPICIFIC_FLOW_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_IN_SPICIFIC_FLOW,FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_FirewallOut_spicificThrough_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT1 Protocol,UINT4 SrcPort,UINT4 DstPort)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+		if(Protocol==IPPROTO_TCP)
+		{
+			flow_param->match_param->tcp_src =SrcPort;
+			flow_param->match_param->tcp_dst =DstPort;
+		}
+		else if (Protocol==IPPROTO_UDP)
+		{
+			flow_param->match_param->udp_src =SrcPort;
+			flow_param->match_param->udp_dst =DstPort;
+		}
+		else if(Protocol==IPPROTO_ICMP)
+		{
+			flow_param->match_param->icmpv4_type =SrcPort;
+			flow_param->match_param->icmpv4_code =DstPort;
+		}
+	}
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_SPICIFIC_FLOW_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_SPICIFIC_FLOW_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_OUT_SPICIFIC_FLOW,FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_FirewallIn_spicificDeny_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT1 Protocol,UINT4 SrcPort,UINT4 DstPort)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+		if(Protocol==IPPROTO_TCP)
+		{
+			flow_param->match_param->tcp_src =SrcPort;
+			flow_param->match_param->tcp_dst =DstPort;
+		}
+		else if (Protocol==IPPROTO_UDP)
+		{
+			flow_param->match_param->udp_src =SrcPort;
+			flow_param->match_param->udp_dst =DstPort;
+		}
+		else if(Protocol==IPPROTO_ICMP)
+		{
+			flow_param->match_param->icmpv4_type =SrcPort;
+			flow_param->match_param->icmpv4_code =DstPort;
+		}
+	}
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_SPICIFIC_FLOW_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_SPICIFIC_FLOW_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_IN_SPICIFIC_FLOW,FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_FirewallOut_spicificDeny_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT1 Protocol,UINT4 SrcPort,UINT4 DstPort)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+		if(Protocol==IPPROTO_TCP)
+		{
+			flow_param->match_param->tcp_src =SrcPort;
+			flow_param->match_param->tcp_dst =DstPort;
+		}
+		else if (Protocol==IPPROTO_UDP)
+		{
+			flow_param->match_param->udp_src =SrcPort;
+			flow_param->match_param->udp_dst =DstPort;
+		}
+		else if(Protocol==IPPROTO_ICMP)
+		{
+			flow_param->match_param->icmpv4_type =SrcPort;
+			flow_param->match_param->icmpv4_code =DstPort;
+		}
+	}
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_SPICIFIC_FLOW_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_SPICIFIC_FLOW_HARD_TIME_OUT,FABRIC_PRIORITY_FIREWALL_OUT_SPICIFIC_FLOW,FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+
+/* by:Hongyu Yang
+ * 在入口防火墙上下载通过流表
+ */
+gn_flow_t * install_add_FirewallIn_withPort_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT4 SrcIPMask,UINT1 Protocol,UINT4 SrcPort,UINT4 DstPort,UINT4 Priority)
+{
+	//LOG_PROC("INFO", "%s_%d_%ld",FN,LN,sw->sw_ip);
+	//LOG_PROC("INFO", "%s_%d_src:%ld_%ld_%d",FN,LN,SrcIP,DstIP,SrcIPMask);
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+		flow_param->match_param->ipv4_src_prefix = (SrcIPMask);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+		if(Protocol==IPPROTO_TCP)
+		{
+			flow_param->match_param->tcp_dst =DstPort;
+		}
+		else if (Protocol==IPPROTO_UDP)
+		{
+			flow_param->match_param->udp_dst =DstPort;
+		}
+		else if(Protocol==IPPROTO_ICMP)
+		{
+			flow_param->match_param->icmpv4_type =SrcPort;
+			flow_param->match_param->icmpv4_code =DstPort;
+		}
+	}
+	if(Priority >65500)
+	{
+		Priority=65500;
+	}
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_HARD_TIME_OUT,(FABRIC_PRIORITY_FIREWALL_IN_DEFAULT_FLOW+Priority),FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 在出口防火墙上下载通过流表
+ */
+gn_flow_t * install_add_FirewallOut_withPort_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT4 DstIPMask,UINT1 Protocol,UINT4 SrcPort,UINT4 DstPort,UINT4 Priority)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+		flow_param->match_param->ipv4_dst_prefix = (DstIPMask);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+		if(Protocol==IPPROTO_TCP)
+		{
+			flow_param->match_param->tcp_src =SrcPort;
+		}
+		else if (Protocol==IPPROTO_UDP)
+		{
+			flow_param->match_param->udp_src =SrcPort;
+		}
+		else if(Protocol==IPPROTO_ICMP)
+		{
+			flow_param->match_param->icmpv4_type =SrcPort;
+			flow_param->match_param->icmpv4_code =DstPort;
+		}
+	}
+	if(Priority >65500)
+	{
+		Priority=65500;
+	}
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_HARD_TIME_OUT,(FABRIC_PRIORITY_FIREWALL_OUT_DEFAULT_FLOW+Priority),FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 在入口防火墙上下载通过流表
+ */
+gn_flow_t * install_add_FirewallIn_withoutPort_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT4 SrcIPMask,UINT1 Protocol,UINT2 Priority)
+{
+	//LOG_PROC("INFO", "%s_%d_%ld",FN,LN,sw->sw_ip);
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		//LOG_PROC("INFO", "%s_%d",FN,LN);
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_IN_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+		flow_param->match_param->ipv4_src_prefix = ntohl(SrcIPMask);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+	}
+	if(Priority >65500)
+	{
+		Priority=65500;
+	}
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_IN_IDLE_TIME_OUT, FABRIC_FIREWALL_IN_HARD_TIME_OUT,(FABRIC_PRIORITY_FIREWALL_IN_DEFAULT_FLOW+Priority),FABRIC_FIREWALL_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	//LOG_PROC("INFO", "%s_%d",FN,LN);
+	return NULL;
+}
+
+/* by:Hongyu Yang
+ * 在出口防火墙上下载通过流表
+ */
+gn_flow_t * install_add_FirewallOut_withoutPort_flow(gn_switch_t *sw,UINT4 SrcIP,UINT4 DstIP,UINT4 DstIPMask,UINT1 Protocol,UINT4 Priority)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	UINT1 JumpToTable = FABRIC_QOS_OUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	if(SrcIP)
+	{
+		flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	}
+	if(DstIP)
+	{
+		flow_param->match_param->ipv4_dst = ntohl(DstIP);
+		flow_param->match_param->ipv4_dst_prefix = ntohl(DstIPMask);
+	}
+	if(Protocol)
+	{
+		flow_param->match_param->ip_proto = Protocol;
+	}
+	if(Priority >65500)
+	{
+		Priority=65500;
+	}
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&JumpToTable);
+
+	install_fabric_flows(sw, FABRIC_FIREWALL_OUT_IDLE_TIME_OUT, FABRIC_FIREWALL_OUT_HARD_TIME_OUT,(FABRIC_PRIORITY_FIREWALL_OUT_DEFAULT_FLOW+Priority),FABRIC_FIREWALL_OUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+gn_flow_t * install_modifine_ExternalSwitch_goto_FirewallInTable_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+	UINT1 table_id = FABRIC_FIREWALL_IN_TABLE;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->in_port = OFPP13_CONTROLLER;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_PRIORITY_INPUT_TABLE_PICA8_IP_FLOW,
+						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+gn_flow_t * install_modifine_ExternalSwitch_ExPort_goto_FirewallInTable_flow(gn_switch_t *sw, UINT4 inport)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+		{
+			return NULL;
+		}
+		flow_param_t* flow_param = init_flow_param();
+		UINT1 table_id = FABRIC_FIREWALL_IN_TABLE;
+	
+		flow_param->match_param->eth_type = ETHER_IP;
+		flow_param->match_param->in_port = inport;
+		
+		add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	
+		install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_PRIORITY_INPUT_TABLE_PICA8_IP_FLOW,
+							 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+	
+		clear_flow_param(flow_param);
+		return NULL;
+}
+
+gn_flow_t * install_remove_ExternalSwitch_ExPort_goto_FirewallInTable_flow(gn_switch_t *sw, UINT4 inport)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+		{
+			return NULL;
+		}
+		flow_param_t* flow_param = init_flow_param();
+		UINT1 table_id = FABRIC_FIREWALL_IN_TABLE;
+	
+		flow_param->match_param->eth_type = ETHER_IP;
+		flow_param->match_param->in_port = inport;
+		
+		add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	
+		install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_PRIORITY_INPUT_TABLE_PICA8_IP_FLOW,
+							 FABRIC_INPUT_TABLE, OFPFC_DELETE, flow_param);
+	
+		clear_flow_param(flow_param);
+		return NULL;
+}
+
+gn_flow_t * install_modifine_ExternalSwitch_QOS_in_goto_NATTable_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+	UINT1 table_id = FABRIC_FQ_IN_POST_PROCESS_NAT_TABLE;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+
+	install_fabric_flows(sw, FABRIC_QOS_IN_IDLE_TIME_OUT, FABRIC_QOS_IN_HARD_TIME_OUT, FABRIC_QOS_FIREWALL_IN_DEFAULT_FLOW,
+						 FABRIC_QOS_IN_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+/* by:yhy
+ * 修改external switch pop vlan的那条流表,跳转防火墙出表
+ */
+gn_flow_t * install_modifine_ExternalSwitch_goto_FirewallOutTable_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+	UINT1 table_id = FABRIC_FIREWALL_OUT_TABLE;
+
+	flow_param->match_param->vlan_vid = (UINT2)of131_fabric_impl_get_tag_sw(sw);
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	add_action_param(&flow_param->action_param, OFPAT13_POP_VLAN, NULL);
+
+	if (OFP13_VERSION == sw->ofp_version) 
+	{
+		install_fabric_flows(sw, 
+							 FABRIC_IMPL_IDLE_TIME_OUT, 
+							 FABRIC_IMPL_HARD_TIME_OUT, 
+							 FABRIC_PRIORITY_SWAPTAG_FLOW,
+							 FABRIC_INPUT_TABLE, 
+							 OFPFC_ADD, 
+							 flow_param);
+	}
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_remove_QOS_jump_flow(gn_switch_t *sw,UINT1 FlowTable,UINT4 SrcIP)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(SrcIP);
+
+	install_fabric_flows(sw, 0, 0, 0, FlowTable, OFPFC_DELETE, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_QOS_jump_with_meter_flow(gn_switch_t *sw,UINT1 FlowTable,UINT1 GotoTable,UINT4 SrcIP,UINT4 MeterID)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_METER, (void*)&MeterID);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+	
+	install_fabric_flows(sw, FABRIC_QOS_JUMP_IDLE_TIME_OUT, FABRIC_QOS_JUMP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_JUMP_FLOW,FlowTable, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_QOS_jump_without_meter_flow(gn_switch_t *sw,UINT1 FlowTable,UINT1 GotoTable,UINT4 SrcIP)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	/*
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+
+	install_fabric_flows(sw, FABRIC_QOS_JUMP_IDLE_TIME_OUT, FABRIC_QOS_JUMP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_JUMP_FLOW,FlowTable, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	*/
+	return NULL;
+}
+gn_flow_t * install_add_QOS_jump_with_queue_flow(gn_switch_t *sw,UINT1 FlowTable,UINT1 GotoTable,UINT4 SrcIP,UINT4 QueueID)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_QUEUE, (void*)&QueueID);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+	
+	install_fabric_flows(sw, FABRIC_QOS_JUMP_IDLE_TIME_OUT, FABRIC_QOS_JUMP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_JUMP_FLOW,FlowTable, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+gn_flow_t * install_add_QOS_jump_without_queue_flow(gn_switch_t *sw,UINT1 FlowTable,UINT1 GotoTable,UINT4 SrcIP)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->ipv4_src = ntohl(SrcIP);
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+	
+	install_fabric_flows(sw, FABRIC_QOS_JUMP_IDLE_TIME_OUT, FABRIC_QOS_JUMP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_JUMP_FLOW,FlowTable, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	
+	return NULL;
+}
+gn_flow_t * install_add_QOS_jump_default_flow(gn_switch_t *sw,UINT1 FlowTable,UINT1 GotoTable)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+	
+	install_fabric_flows(sw, FABRIC_QOS_JUMP_IDLE_TIME_OUT, FABRIC_QOS_JUMP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_DEFAULT_JUMP_FLOW,FlowTable, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+gn_flow_t * install_add_QOS_in_jump_default_flow(gn_switch_t *sw,UINT1 FlowTable,UINT1 GotoTable)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+	
+	install_fabric_flows(sw, FABRIC_QOS_JUMP_IDLE_TIME_OUT, FABRIC_QOS_JUMP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_DEFAULT_JUMP_FLOW,FlowTable, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+
+gn_flow_t * install_add_FQ_out_PostProcessTable_default_flow(gn_switch_t *sw)
+{
+	if (g_is_cluster_on && g_controller_role != OFPCR_ROLE_MASTER)
+	{
+		return NULL;
+	}
+	flow_param_t* flow_param = init_flow_param();
+	UINT1 TargetTable =FABRIC_SWAPTAG_TABLE;
+	flow_param->match_param->eth_type = ETHER_IP;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&TargetTable);
+	
+	install_fabric_flows(sw, FABRIC_FQ_OUT_POST_PROCESS_IDLE_TIME_OUT, FABRIC_FQ_OUT_POST_PROCESS_HARD_TIME_OUT, FABRIC_PRIORITY_FQ_OUT_POST_PROCESS_DEFAULT_FLOW,FABRIC_FQ_OUT_POST_PROCESS_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+	return NULL;
+}
+
+
+
+INT4 install_add_FloatingIP_ToFixIP_OutputToHost_flow(UINT4 floatingip)
+{
+	INT4 ret = 0;
+	UINT4 fixedip = 0;
+	UINT2 out_port = 0;
+	gn_switch_t* sw = NULL;
+	external_floating_ip_p efp = NULL;
+	p_fabric_host_node hostNode=NULL;
+	flow_param_t* flow_param = init_flow_param();
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	
+	efp =  find_external_fixed_ip_by_floating_ip(floatingip);
+	if(NULL == efp)
+	{
+		LOG_PROC("INFO"," %s_%d \n",FN,LN);
+		clear_flow_param(flow_param);
+		return 0;
+	}
+	
+	hostNode = get_fabric_host_from_list_by_ip(efp->fixed_ip);
+	if(NULL == hostNode)
+	{
+		LOG_PROC("INFO"," %s_%d \n",FN,LN);
+		clear_flow_param(flow_param);
+		return 0;
+	}
+	out_port = hostNode->port;
+	sw = hostNode->sw;
+	if((NULL == sw)||(0 == out_port))
+	{
+		LOG_PROC("INFO"," %s_%d \n",FN,LN);
+		clear_flow_param(flow_param);
+		return 0;
+	}
+	oxm.ipv4_dst = ntohl(efp->fixed_ip);
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(floatingip);
+
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+
+	  LOG_PROC("INFO"," %s_%d floatingip=0x%x\n",FN,LN,floatingip);
+	ret = install_fabric_flows(sw, FABRIC_OUTPUT_TABLE_FLOATING_TO_FIX_FLOW_IDLE_TIME_OUT, FABRIC_OUTPUT_TABLE_FLOATING_TO_FIX_FLOW_HARD_TIME_OUT, FABRIC_PRIORITY_OUTPUT_TABLE_FLOATING_TO_FIX_FLOW,FABRIC_OUTPUT_TABLE, OFPFC_ADD, flow_param);
+
+
+	clear_flow_param(flow_param);
+
+	return ((ret == GN_OK) ? 1:0);
+}
+
+gn_flow_t * install_remove_FloatingIP_ToFixIP_OutputToHost_flow(UINT4 floatingip)
+{
+	UINT4 fixedip = 0;
+	UINT2 out_port = 0;
+	gn_switch_t* sw = NULL;
+	external_floating_ip_p efp = NULL;
+	p_fabric_host_node hostNode=NULL;
+	flow_param_t* flow_param = init_flow_param();
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	
+	
+	efp =  find_external_fixed_ip_by_floating_ip(floatingip);
+	if(NULL == efp)
+	{
+		LOG_PROC("INFO"," %s_%d \n",FN,LN);
+		clear_flow_param(flow_param);
+		return NULL;
+	}
+	
+	hostNode = get_fabric_host_from_list_by_ip(efp->fixed_ip);
+	if(NULL == hostNode)
+	{
+		LOG_PROC("INFO"," %s_%d \n",FN,LN);
+		clear_flow_param(flow_param);
+		return NULL;
+	}
+	out_port = hostNode->port;
+	sw = hostNode->sw;
+	if((NULL == sw)||(0 == out_port))
+	{
+		LOG_PROC("INFO"," %s_%d \n",FN,LN);
+		clear_flow_param(flow_param);
+		return NULL;
+	}
+	oxm.ipv4_dst = ntohl(efp->fixed_ip);
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(floatingip);
+
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+
+	
+	LOG_PROC("INFO"," %s_%d floatingip=0x%x\n",FN,LN,floatingip);
+	install_fabric_flows(sw, FABRIC_OUTPUT_TABLE_FLOATING_TO_FIX_FLOW_IDLE_TIME_OUT, FABRIC_OUTPUT_TABLE_FLOATING_TO_FIX_FLOW_HARD_TIME_OUT, FABRIC_PRIORITY_OUTPUT_TABLE_FLOATING_TO_FIX_FLOW,FABRIC_OUTPUT_TABLE, OFPFC_DELETE, flow_param);
+
+
+	clear_flow_param(flow_param);
+
+	return NULL;
+}
+void install_fabric_same_switch_pregototable(gn_switch_t * sw,UINT1* mac, UINT2 flow_table_id, UINT2 goto_table_id)
 {
 	flow_param_t* flow_param = init_flow_param();
 
+	memcpy(flow_param->match_param->eth_dst, mac, 6);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&goto_table_id);
+
+	install_fabric_flows(sw, 
+						 FABRIC_IMPL_HARD_TIME_OUT, 
+						 FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 flow_table_id, 
+						 OFPFC_ADD, 
+						 flow_param);
+
+	clear_flow_param(flow_param);
+}
+
+
+void install_fabric_same_switch_security_before_OutFirewallQOS_flow(gn_switch_t * sw,UINT1* mac, UINT4 port, security_param_p security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT1 table_id = FABRIC_FIREWALL_OUT_TABLE;
 
 	memcpy(flow_param->match_param->eth_dst, mac, 6);
 	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
-	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
-	set_security_match(flow_param->match_param, security_param);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
 
 	install_fabric_flows(sw, 
 						 FABRIC_HOST_TO_HOST_UNDER_SAME_OVS_AND_SAME_SUBNET_IDLE_TIME_OUT, 
@@ -248,7 +1250,42 @@ void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4
 
 	clear_flow_param(flow_param);
 }
+void install_fabric_same_switch_security_flow(gn_switch_t * sw,UINT1* mac, UINT4 port, security_param_p security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT1 table_id = FABRIC_FIREWALL_IN_TABLE;
 
+	memcpy(flow_param->match_param->eth_dst, mac, 6);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+
+	install_fabric_flows(sw, 
+						 FABRIC_HOST_TO_HOST_UNDER_SAME_OVS_AND_SAME_SUBNET_IDLE_TIME_OUT, 
+						 FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 FABRIC_FQ_OUT_POST_PROCESS_TABLE, 
+						 OFPFC_ADD, 
+						 flow_param);
+
+	clear_flow_param(flow_param);
+}
+void install_fabric_same_switch_out_subnet_pregototable(gn_switch_t * sw,UINT1* gateway_mac,UINT4 dst_ip, UINT2 flow_table_id, UINT2 goto_table_id)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+
+	flow_param->match_param->ipv4_dst = ntohl(dst_ip);
+	flow_param->match_param->eth_type = ETHER_IP;
+	memcpy(flow_param->match_param->eth_dst, gateway_mac, 6);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&goto_table_id);
+
+
+	install_fabric_flows(sw, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 flow_table_id, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+
+}
 
 
 void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 port, security_param_p security_param)
@@ -273,60 +1310,6 @@ void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_
 
 	clear_flow_param(flow_param);
 
-//
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-//    gn_action_output_t action;
-//    gn_action_set_field_t act_set_field_mac;
-//    // printf("%s\n", FN);
-//    memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
-//	flow.table_id = FABRIC_INPUT_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//	flow.match.oxm_fields.ipv4_dst=ntohl(dst_ip);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//
-//	memcpy(flow.match.oxm_fields.eth_dst, gateway_mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//    instruction.type = OFPIT_APPLY_ACTIONS;
-//    instruction.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction;
-//
-//    memset(&action, 0, sizeof(gn_action_t));
-//    action.port = port;
-//    action.type = OFPAT13_OUTPUT;
-//    action.next = instruction.actions;
-//    action.max_len = 0xffff;
-//    instruction.actions = (gn_action_t *)&action;
-//
-//    memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
-//    act_set_field_mac.type = OFPAT13_SET_FIELD;
-//    memcpy(act_set_field_mac.oxm_fields.eth_dst, dst_mac, 6);
-//    act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//    act_set_field_mac.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_field_mac;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-//	return;
 };
 //by:yhy 依据输入参数装载fabric输出流表
 //表:  table=FABRIC_OUTPUT_TABLE
@@ -334,6 +1317,10 @@ void install_fabric_same_switch_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_
 //动作:output:port
 void install_fabric_output_flow(gn_switch_t * sw,UINT1* mac, UINT4 port)
 {
+	if(0 == port)
+	{
+		return ;
+	}
 	flow_param_t* flow_param = init_flow_param();
 
 	memcpy(flow_param->match_param->eth_dst, mac, 6);
@@ -350,51 +1337,10 @@ void install_fabric_output_flow(gn_switch_t * sw,UINT1* mac, UINT4 port)
 						 flow_param);
 
 	clear_flow_param(flow_param);
-//
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-//    gn_action_output_t action;
-//
-//    if ((NULL == sw) || (NULL == mac))
-//    	return ;
-//
-//    memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
-//	flow.table_id = FABRIC_OUTPUT_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//	memcpy(flow.match.oxm_fields.eth_dst, mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//    instruction.type = OFPIT_APPLY_ACTIONS;
-//    instruction.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction;
-//
-//    memset(&action, 0, sizeof(gn_action_t));
-//    action.port = port;
-//    action.type = OFPAT13_OUTPUT;
-//    action.next = instruction.actions;
-//    action.max_len = 0xffff;
-//    instruction.actions = (gn_action_t *)&action;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-//	return;
+
 };
 //by:yhy  why?具体没看懂
-void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
+void install_fabric_push_tag_portflow(gn_switch_t * sw,UINT1* mac, UINT4 tag, UINT4 out_port)
 {
     if (0 == tag)
     {
@@ -403,6 +1349,8 @@ void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
 
 	flow_param_t* flow_param = init_flow_param();
 
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_ARP_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
 	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
@@ -410,71 +1358,27 @@ void install_fabric_push_tag_flow(gn_switch_t * sw,UINT1* mac, UINT4 tag)
 
 	memcpy(flow_param->match_param->eth_dst, mac, 6);
 	// flow_param->match_param->mask |= (1 << OFPXMT_OFB_ETH_DST);
-	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
 	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
 	// set_security_match(flow_param->match_param, security_param);
+
+	if (0 == get_nat_physical_switch_flag()) 
+	{
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	}
+	else 
+	{
+		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+	}
 	if (OFP13_VERSION == sw->ofp_version) 
 	{
-		install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+		install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,flow_table_id, OFPFC_ADD, flow_param);
 	}
 
 	clear_flow_param(flow_param);
 	return ;
 
-
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction_act;
-//	gn_instruction_goto_table_t instruction_goto;
-//    gn_action_set_field_t act_set_field;
-//    gn_action_t act_pushVlan;
-//
-//    memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
-//	flow.table_id = FABRIC_PUSHTAG_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//	memcpy(flow.match.oxm_fields.eth_dst, mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//
-//	memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-//	instruction_goto.type = OFPIT_GOTO_TABLE;
-//	instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
-//	instruction_goto.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction_goto;
-//
-//	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-//	instruction_act.type = OFPIT_APPLY_ACTIONS;
-//	instruction_act.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction_act;
-//
-//    memset(&act_set_field, 0, sizeof(gn_action_set_field_t));
-//    act_set_field.type = OFPAT13_SET_FIELD;
-//    act_set_field.oxm_fields.vlan_vid = (UINT2)tag;
-//    act_set_field.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//    act_set_field.next = instruction_act.actions;
-//    instruction_act.actions = (gn_action_t *)&act_set_field;
-//
-//    memset(&act_pushVlan, 0, sizeof(gn_action_t));
-//    act_pushVlan.type = OFPAT13_PUSH_VLAN;
-//    act_pushVlan.next = instruction_act.actions;
-//    instruction_act.actions = (gn_action_t *)&act_pushVlan;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-//	return;
 };
 
 void install_fabric_push_tag_security_flow(gn_switch_t * sw,UINT4 dst_ip, UINT1* mac, UINT4 tag, security_param_p security_param)
@@ -496,15 +1400,67 @@ void install_fabric_push_tag_security_flow(gn_switch_t * sw,UINT4 dst_ip, UINT1*
 	set_security_match(flow_param->match_param, security_param);
 
 	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
-						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+						 FABRIC_OTHER_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
 }
+
+void install_fabric_push_tag_security_AddLocalDstIp_pregototable(gn_switch_t * sw,UINT4 dst_ip, UINT2 flow_table_id, UINT2 goto_table_id)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(dst_ip);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&goto_table_id);
+
+
+	install_fabric_flows(sw, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 flow_table_id, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+
+void install_fabric_push_tag_security_AddLocalSrcMAC_postgototable(gn_switch_t * sw,UINT4 dst_ip, UINT1* LocalSrcMAC, UINT2 flow_table_id, UINT2 goto_table_id)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+
+	memcpy(flow_param->match_param->eth_src, LocalSrcMAC, 6);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(dst_ip);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&goto_table_id);
+
+
+	install_fabric_flows(sw, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 flow_table_id, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+void install_fabric_push_tag_security_AddLocalSrc_postgototable(gn_switch_t * sw,UINT4 src_ip, UINT2 flow_table_id, UINT2 goto_table_id)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_src = ntohl(src_ip);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&goto_table_id);
+
+
+	install_fabric_flows(sw, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
+						 flow_table_id, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+
+//by:yhy 不同compute节点上的虚机通信
 void install_fabric_push_tag_security_flow_AddLocalSrcMAC(gn_switch_t * sw,UINT4 dst_ip, UINT1* LocalSrcMAC,UINT1* mac, UINT4 tag, security_param_p security_param)
 {
 	flow_param_t* flow_param = init_flow_param();
 
-	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	UINT2 table_id = FABRIC_FIREWALL_OUT_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
 	oxm.vlan_vid = (UINT2)tag;
@@ -519,10 +1475,11 @@ void install_fabric_push_tag_security_flow_AddLocalSrcMAC(gn_switch_t * sw,UINT4
 	set_security_match(flow_param->match_param, security_param);
 
 	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
-						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+						 FABRIC_OTHER_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
 }
+
 
 
 void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac,UINT1* dst_mac,UINT4 dst_ip,UINT4 tag, security_param_p security_param)
@@ -546,77 +1503,10 @@ void install_fabric_push_tag_out_subnet_flow(gn_switch_t * sw,UINT1* gateway_mac
 	set_security_match(flow_param->match_param, security_param);
 
 	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_ARP_FLOW,
-			FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+			FABRIC_OTHER_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
 
-	// printf("%s\n", FN);
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction_act;
-//	gn_instruction_goto_table_t instruction_goto;
-//    gn_action_set_field_t act_set_field;
-//    gn_action_set_field_t act_set_field_mac;
-//    gn_action_t act_pushVlan;
-//
-//    memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_ARP_FLOW;
-//	flow.table_id = FABRIC_PUSHTAG_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//	memcpy(flow.match.oxm_fields.eth_dst, gateway_mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//
-//	flow.match.oxm_fields.ipv4_dst=ntohl(dst_ip);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//
-//
-//	memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-//	instruction_goto.type = OFPIT_GOTO_TABLE;
-//	instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
-//	instruction_goto.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction_goto;
-//
-//	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-//	instruction_act.type = OFPIT_APPLY_ACTIONS;
-//	instruction_act.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction_act;
-//
-//    memset(&act_set_field, 0, sizeof(gn_action_set_field_t));
-//    act_set_field.type = OFPAT13_SET_FIELD;
-//    act_set_field.oxm_fields.vlan_vid = (UINT2)tag;
-//    act_set_field.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//    act_set_field.next = instruction_act.actions;
-//    instruction_act.actions = (gn_action_t *)&act_set_field;
-//
-//    memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
-//    act_set_field_mac.type = OFPAT13_SET_FIELD;
-//    memcpy(act_set_field_mac.oxm_fields.eth_dst, dst_mac, 6);
-//    act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//    act_set_field_mac.next = instruction_act.actions;
-//    instruction_act.actions = (gn_action_t *)&act_set_field_mac;
-//
-//    memset(&act_pushVlan, 0, sizeof(gn_action_t));
-//    act_pushVlan.type = OFPAT13_PUSH_VLAN;
-//    act_pushVlan.next = instruction_act.actions;
-//    instruction_act.actions = (gn_action_t *)&act_pushVlan;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-//	return;
 };
 
 UINT1 get_fabric_last_flow_table(){
@@ -656,39 +1546,6 @@ gn_flow_t * install_add_fabric_host_input_flow(gn_switch_t *sw)
 
 	clear_flow_param(flow_param);
 	return NULL;
-
-/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_goto_table_t instruction;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-    flow.create_time = g_cur_sys_time.tv_sec;
-    flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_IMPL_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_HOST_INPUT_FLOW;
-	flow.table_id = FABRIC_INPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-    flow.match.oxm_fields.eth_type = ETHER_IP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-    memset(&instruction, 0, sizeof(gn_instruction_goto_table_t));
-    instruction.type = OFPIT_GOTO_TABLE;
-    instruction.table_id = FABRIC_PUSHTAG_TABLE;
-    instruction.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction;
-
-    flow_mod_req.xid = 0;
-    flow_mod_req.buffer_id = 0xffffffff;
-    flow_mod_req.out_port = 0xffffffff;
-    flow_mod_req.out_group = 0xffffffff;
-    flow_mod_req.command = OFPFC_ADD;
-    flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-    flow_mod_req.flow = &flow;
-
-    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-    return NULL;
-    */
 }
 //add ip missmatch push tag flow
 //by:yhy 所有table:2中没有匹配到的IP包,上送控制器
@@ -715,45 +1572,6 @@ gn_flow_t * install_add_fabric_miss_match_flow(gn_switch_t *sw)
 
 	clear_flow_param(flow_param);
 	return NULL;
-	/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction;
-	gn_action_output_t action;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-    flow.create_time = g_cur_sys_time.tv_sec;
-    flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_IMPL_HARD_TIME_OUT;
-	flow.table_id = FABRIC_PUSHTAG_TABLE;
-	flow.priority = FABRIC_PRIORITY_MISSMATCH_PUSHTAG_FLOW;
-	flow.match.type = OFPMT_OXM;
-    flow.match.oxm_fields.eth_type = ETHER_IP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-    memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-    instruction.type = OFPIT_APPLY_ACTIONS;
-    instruction.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction;
-
-    memset(&action, 0, sizeof(gn_action_output_t));
-    action.port = OFPP13_CONTROLLER;
-    action.type = OFPAT13_OUTPUT;
-    action.next = instruction.actions;
-    action.max_len = 0xffff;
-    instruction.actions = (gn_action_t *)&action;
-
-    flow_mod_req.xid = 0;
-    flow_mod_req.buffer_id = 0xffffffff;
-    flow_mod_req.out_port = 0xffffffff;
-    flow_mod_req.out_group = 0xffffffff;
-    flow_mod_req.command = OFPFC_ADD;
-    flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-    flow_mod_req.flow = &flow;
-
-    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-    return NULL;
-	*/
 }
 //add arp missmatch push tag flow
 /* markby:yhy 
@@ -765,11 +1583,12 @@ gn_flow_t * install_add_fabric_miss_match_flow(gn_switch_t *sw)
  * hardtimeout: 0 (forever)
  */
 //by:yhy 下发流表(匹配IP为g_reserve_ip的包上送控制器)
-void install_add_fabric_controller_flow(gn_switch_t *sw)
+INT4 install_add_fabric_controller_flow(gn_switch_t *sw)
 {
+	INT4 ret = 0;
     if (0 == g_reserve_ip) 
 	{
-        return ;
+        return 0;
     }
 
 	flow_param_t* flow_param = init_flow_param();
@@ -781,8 +1600,41 @@ void install_add_fabric_controller_flow(gn_switch_t *sw)
 	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
 
-	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_PRIORITY_SWAPTAG_FLOW,
+	ret = install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, FABRIC_PRIORITY_SWAPTAG_FLOW,
 						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+	
+
+	clear_flow_param(flow_param);
+	return ((ret == GN_OK) ? 1:0);
+}
+
+void install_add_fabric_lldpmiss_controller_flow(gn_switch_t *sw)
+{
+
+	flow_param_t* flow_param = init_flow_param();
+	UINT4 port = OFPP13_CONTROLLER;
+
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, 0,
+						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+
+void install_add_fabric_toVm_controller_flow(gn_switch_t *sw)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT4 port = OFPP13_CONTROLLER;
+	flow_param->match_param->eth_type = ETHER_IP;
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_IMPL_HARD_TIME_OUT, 0,
+						 FABRIC_OUTPUT_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
 }
@@ -812,45 +1664,6 @@ gn_flow_t * install_add_fabric_ARP_miss_match_flow(gn_switch_t *sw)
 	clear_flow_param(flow_param);
 	return NULL;
 
-	/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction;
-	gn_action_output_t action;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-    flow.create_time = g_cur_sys_time.tv_sec;
-    flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_IMPL_HARD_TIME_OUT;
-	flow.table_id = FABRIC_INPUT_TABLE;
-	flow.priority = FABRIC_PRIORITY_ARP_MISSMATCH_INPUT_FLOW;
-	flow.match.type = OFPMT_OXM;
-    flow.match.oxm_fields.eth_type = ETHER_ARP;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-
-    memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-    instruction.type = OFPIT_APPLY_ACTIONS;
-    instruction.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction;
-
-    memset(&action, 0, sizeof(gn_action_output_t));
-    action.port = OFPP13_CONTROLLER;
-    action.type = OFPAT13_OUTPUT;
-    action.next = instruction.actions;
-    action.max_len = 0xffff;
-    instruction.actions = (gn_action_t *)&action;
-
-    flow_mod_req.xid = 0;
-    flow_mod_req.buffer_id = 0xffffffff;
-    flow_mod_req.out_port = 0xffffffff;
-    flow_mod_req.out_group = 0xffffffff;
-    flow_mod_req.command = OFPFC_ADD;
-    flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-    flow_mod_req.flow = &flow;
-
-    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-    return NULL;
-	*/
 }
 //add switch input flows
 /*
@@ -876,41 +1689,6 @@ gn_flow_t * install_add_fabric_switch_input_flow(gn_switch_t *sw,gn_port_t* sw_p
 
 	clear_flow_param(flow_param);
 	return NULL;
-
-/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_goto_table_t instruction;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-    flow.create_time = g_cur_sys_time.tv_sec;
-    flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_IMPL_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_SWITCH_INPUT_FLOW;
-	flow.table_id = FABRIC_INPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-	flow.match.oxm_fields.in_port = sw_port->port_no;
-    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IN_PORT);
-
-    memset(&instruction, 0, sizeof(gn_instruction_goto_table_t));
-    instruction.type = OFPIT_CLEAR_ACTIONS;
-    instruction.table_id = FABRIC_SWAPTAG_TABLE;
-    instruction.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction;
-
-    flow_mod_req.xid = 0;
-    flow_mod_req.buffer_id = 0xffffffff;
-    flow_mod_req.out_port = 0xffffffff;
-    flow_mod_req.out_group = 0xffffffff;
-    flow_mod_req.command = OFPFC_ADD;
-    flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-    flow_mod_req.flow = &flow;
-
-    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-    return NULL;
-    */
 }
 /*
  * delete fabric flow real
@@ -923,31 +1701,6 @@ void install_delete_fabric_flow(gn_switch_t* sw)
 	install_fabric_flows(sw, 0, 0, 0, 0, OFPFC_DELETE, flow_param);
 
 	clear_flow_param(flow_param);
-
-/*
-	gn_flow_t flow;
-	flow_mod_req_info_t flow_mod_req;
-
-	// install delete command
-	if(sw != NULL){
-		memset(&flow, 0, sizeof(gn_flow_t));
-		flow.idle_timeout = 0;
-		flow.hard_timeout = 0;
-		flow.priority = 0;
-		flow.match.type = OFPMT_OXM;
-		flow.table_id = 0xff;
-
-	    flow_mod_req.xid = 0;
-	    flow_mod_req.buffer_id = 0xffffffff;
-	    flow_mod_req.out_port = 0xffffffff;
-	    flow_mod_req.out_group = 0xffffffff;
-	    flow_mod_req.command = OFPFC_DELETE;
-	    flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	    flow_mod_req.flow = &flow;
-	    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-	}
-	return;
-	*/
 };
 
 void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UINT1 table_id)
@@ -966,46 +1719,12 @@ void install_delete_fabric_impl_flow(gn_switch_t *sw,UINT4 port_no,UINT4 tag,UIN
 
 	clear_flow_param(flow_param);
 
-	/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction_act;
-	gn_action_output_t act_output;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.table_id = table_id;
-	flow.match.type = OFPMT_OXM;
-	flow.match.oxm_fields.vlan_vid = (UINT2)tag;
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-
-	memset(&act_output, 0, sizeof(gn_action_output_t));
-	act_output.next = NULL;
-	act_output.type = OFPAT13_OUTPUT;
-	act_output.port = port_no;
-
-	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-    instruction_act.actions = (gn_action_t*)&act_output;
-    instruction_act.type = OFPIT_APPLY_ACTIONS;
-    instruction_act.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction_act;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_DELETE;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-	return;
-	*/
 };
 //by:yhy 对sw下载匹配vlan_vid=tag,然后执行pop_vlan并跳转至FABRIC_OUTPUT_TABLE的流表
 gn_flow_t * install_add_fabric_impl_last_flow(gn_switch_t * sw,UINT4 tag)
 {
 	flow_param_t* flow_param = init_flow_param();
-	UINT1 table_id = FABRIC_OUTPUT_TABLE;
+	UINT1 table_id = FABRIC_FIREWALL_IN_TABLE;
 
 	flow_param->match_param->vlan_vid = (UINT2)tag;
 	
@@ -1027,57 +1746,13 @@ gn_flow_t * install_add_fabric_impl_last_flow(gn_switch_t * sw,UINT4 tag)
 	clear_flow_param(flow_param);
 
 	return NULL;
-	/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_goto_table_t instruction_goto;
-	gn_instruction_actions_t instruction_act;
-	gn_action_t act_popVlan;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_IMPL_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_SWAPTAG_FLOW;
-	flow.table_id = FABRIC_INPUT_TABLE;
-	flow.match.type = OFPMT_OXM;
-	flow.match.oxm_fields.vlan_vid = (UINT2)tag;
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-
-	memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-	instruction_goto.type = OFPIT_GOTO_TABLE;
-	instruction_goto.table_id = FABRIC_OUTPUT_TABLE;
-	instruction_goto.next = flow.instructions;
-	flow.instructions = (gn_instruction_t *)&instruction_goto;
-
-	memset(&act_popVlan, 0, sizeof(gn_action_t));
-	act_popVlan.next = NULL;
-	act_popVlan.type = OFPAT13_POP_VLAN;
-
-	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-    instruction_act.actions = &act_popVlan;
-    instruction_act.type = OFPIT_APPLY_ACTIONS;
-    instruction_act.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction_act;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_ADD;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-	if (OFP13_VERSION == sw->ofp_version)
-		sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-	return NULL;
-	*/
 };
 //by:yhy 对switch匹配vlan_vid=tag的包跳转到FABRIC_SWAPTAG_TABLE,从port输出
 gn_flow_t * install_add_fabric_impl_first_flow(gn_switch_t * sw,UINT4 port,UINT4 tag)
 {
 	flow_param_t* flow_param = init_flow_param();
 	UINT1 table_id = (OFP10_VERSION == sw->ofp_version) ? FABRIC_INPUT_TABLE : FABRIC_SWAPTAG_TABLE;
+
 	UINT4 outport = port;
 
 	flow_param->match_param->vlan_vid = (UINT2)tag;
@@ -1097,44 +1772,6 @@ gn_flow_t * install_add_fabric_impl_first_flow(gn_switch_t * sw,UINT4 port,UINT4
 
 	return NULL;
 
-	/*
-	flow_mod_req_info_t flow_mod_req;
-	gn_flow_t flow;
-	gn_instruction_actions_t instruction_act;
-	gn_action_output_t act_output;
-
-	memset(&flow, 0, sizeof(gn_flow_t));
-	flow.create_time = g_cur_sys_time.tv_sec;
-	flow.idle_timeout = FABRIC_IMPL_IDLE_TIME_OUT;
-	flow.hard_timeout = FABRIC_IMPL_HARD_TIME_OUT;
-	flow.priority = FABRIC_PRIORITY_SWAPTAG_FLOW;
-	flow.table_id = (OFP10_VERSION == sw->ofp_version) ? FABRIC_INPUT_TABLE : FABRIC_SWAPTAG_TABLE;
-	flow.match.type = OFPMT_OXM;
-	flow.match.oxm_fields.vlan_vid = (UINT2)tag;
-	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-
-	memset(&act_output, 0, sizeof(gn_action_output_t));
-	act_output.next = NULL;
-	act_output.type = OFPAT13_OUTPUT;
-	act_output.port = port;
-
-	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-    instruction_act.actions = (gn_action_t*)&act_output;
-    instruction_act.type = OFPIT_APPLY_ACTIONS;
-    instruction_act.next = flow.instructions;
-    flow.instructions = (gn_instruction_t *)&instruction_act;
-
-	flow_mod_req.xid = 0;
-	flow_mod_req.buffer_id = 0xffffffff;
-	flow_mod_req.out_port = 0xffffffff;
-	flow_mod_req.out_group = 0xffffffff;
-	flow_mod_req.command = OFPFC_ADD;
-	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-	flow_mod_req.flow = &flow;
-
-    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-	return NULL;
-	*/
 };
 gn_flow_t * install_add_fabric_impl_middle_flow(gn_switch_t * sw,UINT4 port,UINT4 tag)
 {
@@ -1183,6 +1820,7 @@ void remove_fabric_openstack_external_output_flow(gn_switch_t * sw, UINT1* gatew
 	}
 
 	install_fabric_flows(sw, 0, 0, 0, flow_table_id, OFPFC_DELETE, flow_param);
+	clear_flow_param(flow_param);
 }
 
 //by:yhy 装载openstack对外输出流表
@@ -1227,7 +1865,7 @@ void install_fabric_openstack_floating_internal_subnet_flow(gn_switch_t* sw, INT
 {
 	flow_param_t* flow_param = init_flow_param();
 
-	UINT2 table_id = FABRIC_PUSHTAG_TABLE;
+	UINT2 table_id = FABRIC_OTHER_TABLE;//FABRIC_PUSHTAG_TABLE;
 	UINT1 action = 0;
 	if (1 == type) 
 	{
@@ -1239,6 +1877,7 @@ void install_fabric_openstack_floating_internal_subnet_flow(gn_switch_t* sw, INT
 	}
 	else 
 	{
+		clear_flow_param(flow_param);
 		return ;
 	}
 
@@ -1270,8 +1909,9 @@ void install_fabric_openstack_floating_internal_subnet_flow(gn_switch_t* sw, INT
 //匹配:ipv4_src=match_ip
 //动作:更改ipv4_src->mod_src_ip;eth_dst->mod_dst_mac;vlan_vid->vlan_id
 //    goto_table:FABRIC_SWAPTAG_TABLE
-void install_proactive_floating_host_to_external_flow(gn_switch_t* sw, INT4 type, UINT4 match_ip, UINT1* match_mac, UINT4 mod_src_ip, UINT1* mod_dst_mac, UINT4 vlan_id, security_param_t* security_param)
+INT4 install_proactive_floating_host_to_external_flow(gn_switch_t* sw, INT4 type, UINT4 match_ip, UINT1* match_mac, UINT4 mod_src_ip, UINT1* mod_dst_mac, UINT4 vlan_id, security_param_t* security_param)
 {
+	INT4 ret = 0;
 	flow_param_t* flow_param = init_flow_param();
 	UINT1 action = 0;
 	if (1 == type) 
@@ -1284,11 +1924,12 @@ void install_proactive_floating_host_to_external_flow(gn_switch_t* sw, INT4 type
 	}
 	else 
 	{
-		return ;
+		clear_flow_param(flow_param);
+		return 0;
 	}
 
 
-	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	UINT2 table_id = FABRIC_FIREWALL_OUT_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
 	oxm.ipv4_src = ntohl(mod_src_ip);
@@ -1304,15 +1945,16 @@ void install_proactive_floating_host_to_external_flow(gn_switch_t* sw, INT4 type
 	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
 
-	install_fabric_flows(sw, 
+	ret = install_fabric_flows(sw, 
 						 FABRIC_IMPL_HARD_TIME_OUT, 
 						 FABRIC_IMPL_IDLE_TIME_OUT, 
 						 FABRIC_PRIORITY_FLOATING_EXTERNAL_HOST_SUBNET_FLOW,
-						 FABRIC_INPUT_TABLE, 
+						 FABRIC_FLOATING_TABLE, 
 						 action, 
 						 flow_param);
 
 	clear_flow_param(flow_param);
+	return 1;
 }
 //by:yhy type(1添加2删除)  装载 对外浮动ip 操作 进入负载平衡组流表
 void install_proactive_floating_external_to_lbaas_group_flow(gn_switch_t* sw, INT4 type, UINT4 floatingip, UINT4 tcp_dst, UINT4 group_id)
@@ -1331,6 +1973,7 @@ void install_proactive_floating_external_to_lbaas_group_flow(gn_switch_t* sw, IN
     }
     else 
 	{
+		clear_flow_param(flow_param);
         return ;
     }
 
@@ -1363,6 +2006,7 @@ void install_proactive_floating_lbaas_to_external_flow(gn_switch_t* sw, INT4 typ
     }
     else 
 	{
+		clear_flow_param(flow_param);
       return ;
     }
 
@@ -1407,6 +2051,7 @@ void install_lbaas_member_to_listener_flow(gn_switch_t* sw, INT4 type, UINT4 lis
         action = OFPFC_DELETE;
     }
     else {
+		clear_flow_param(flow_param);
         return ;
     }
     
@@ -1432,7 +2077,7 @@ void fabric_openstack_floating_ip_install_set_vlan_out_flow(gn_switch_t * sw, UI
 {
 	flow_param_t* flow_param = init_flow_param();
 
-	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	UINT2 table_id = FABRIC_QOS_OUT_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
 	oxm.ipv4_src = ntohl(mod_src_ip);
@@ -1450,100 +2095,25 @@ void fabric_openstack_floating_ip_install_set_vlan_out_flow(gn_switch_t * sw, UI
 
 	set_security_match(flow_param->match_param, security_param);
 
-	install_fabric_flows(sw, FABRIC_FLOATING_FLOW_IDLE_TIME_OUT, FABRIC_FLOATING_FLOW_HARD_TIME_OUT, FABRIC_PRIORITY_FLOATING_FLOW,
-			FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+	install_fabric_flows(sw, FABRIC_FLOATING_FLOW_IDLE_TIME_OUT, FABRIC_FLOATING_FLOW_HARD_TIME_OUT, FABRIC_PRIORITY_FLOATING_FLOW,FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
-
-
-	//printf("%s : sw ip is %s; vlan_id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sw->sw_ip), vlan_id);
-//	flow_mod_req_info_t flow_mod_req;
-//	gn_flow_t flow;
-//	gn_instruction_actions_t instruction_act;
-//	gn_action_set_field_t act_set_field_mac;
-//	gn_action_set_field_t act_set_field_ip;
-//	gn_action_set_field_t act_set_field_vlan;
-//	gn_action_t act_pushVlan;
-//	gn_instruction_goto_table_t instruction_goto;
-//
-//	//match rule
-//	memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_FLOATING_FLOW;
-//	flow.table_id = FABRIC_PUSHTAG_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//	flow.match.oxm_fields.eth_type = ETHER_IP;
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//	flow.match.oxm_fields.ipv4_dst = ntohl(match_ip);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//	memcpy(flow.match.oxm_fields.eth_src, match_mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
-//
-//	//set go-to-table
-//	memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-//	instruction_goto.type = OFPIT_GOTO_TABLE;
-//	instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
-//	instruction_goto.next = flow.instructions;
-//	flow.instructions = (gn_instruction_t *)&instruction_goto;
-//
-//	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-//	instruction_act.type = OFPIT_APPLY_ACTIONS;
-//	instruction_act.next = flow.instructions;
-//	flow.instructions = (gn_instruction_t *)&instruction_act;
-//
-//	//set dest mac
-//	memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
-//	act_set_field_mac.type = OFPAT13_SET_FIELD;
-//	memcpy(act_set_field_mac.oxm_fields.eth_dst, mod_dst_mac, 6);
-//	act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//	act_set_field_mac.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_set_field_mac;
-//
-//	//set src ip
-//	memset(&act_set_field_ip, 0, sizeof(gn_action_set_field_t));
-//	act_set_field_ip.type = OFPAT13_SET_FIELD;
-//	act_set_field_ip.oxm_fields.ipv4_src = ntohl(mod_src_ip);
-//	act_set_field_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-//	act_set_field_ip.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_set_field_ip;
-//
-//	//set vlan
-//	memset(&act_set_field_vlan, 0, sizeof(gn_action_set_field_t));
-//	act_set_field_vlan.type = OFPAT13_SET_FIELD;
-//	act_set_field_vlan.oxm_fields.vlan_vid = vlan_id;
-//	act_set_field_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//	act_set_field_vlan.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_set_field_vlan;
-//
-//	memset(&act_pushVlan, 0, sizeof(gn_action_t));
-//	act_pushVlan.type = OFPAT13_PUSH_VLAN;
-//	act_pushVlan.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_pushVlan;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 }
 
 //by:yhy 下发浮动ip相关包添加vlan流表
+/* by:Hongyu Yang
+ * 在pica8 上下浮动ip进入后转换的流表
+ */
 void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
 {
 	flow_param_t* flow_param = init_flow_param();
-	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
-
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_FQ_IN_POST_PROCESS_FLOATING_TABLE;
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_FLOATING_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
 	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
 	memcpy(oxm.eth_dst, mod_dst_mac, 6);
-	oxm.ipv4_dst = ntohl(mod_dst_ip);
+	//oxm.ipv4_dst = ntohl(mod_dst_ip);
 	oxm.vlan_vid = vlan_id;
 
 	flow_param->match_param->eth_type = ETHER_IP;
@@ -1564,99 +2134,19 @@ void fabric_openstack_floating_ip_install_set_vlan_in_flow(gn_switch_t * sw, UIN
 	install_fabric_flows(sw, 
 						 FABRIC_IMPL_HARD_TIME_OUT, 
 						 FABRIC_IMPL_IDLE_TIME_OUT, 
-						 FABRIC_PRIORITY_FLOATING_FLOW,
+						 priority_level,
 						 flow_table_id, 
 						 OFPFC_ADD, 
 						 flow_param);
 
 	clear_flow_param(flow_param);
-
-	//printf("%s : sw ip is %s; vlan_id is %d \n", FN, inet_ntoa(*(struct in_addr*)&sw->sw_ip), vlan_id);
-//	flow_mod_req_info_t flow_mod_req;
-//	gn_flow_t flow;
-//	gn_instruction_actions_t instruction_act;
-//	gn_action_set_field_t act_set_field_mac;
-//	gn_action_set_field_t act_set_field_ip;
-//	gn_action_set_field_t act_set_field_vlan;
-//	gn_action_t act_pushVlan;
-//	gn_instruction_goto_table_t instruction_goto;
-//	gn_action_output_t output_action;
-//
-//	memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_FLOATING_FLOW;
-//	flow.table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//	flow.match.oxm_fields.eth_type = ETHER_IP;
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//	flow.match.oxm_fields.ipv4_dst = ntohl(match_ip);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//
-//
-//	memset(&instruction_act, 0, sizeof(gn_instruction_actions_t));
-//	instruction_act.type = OFPIT_APPLY_ACTIONS;
-//	instruction_act.next = flow.instructions;
-//	flow.instructions = (gn_instruction_t *)&instruction_act;
-//
-//	if (0 == get_nat_physical_switch_flag()) {
-//		memset(&instruction_goto, 0, sizeof(gn_instruction_goto_table_t));
-//		instruction_goto.type = OFPIT_GOTO_TABLE;
-//		instruction_goto.table_id = FABRIC_SWAPTAG_TABLE;
-//		instruction_goto.next = flow.instructions;
-//		flow.instructions = (gn_instruction_t *)&instruction_goto;
-//	}
-//	else {
-//		memset(&output_action, 0, sizeof(gn_action_output_t));
-//		output_action.port = out_port;
-//		output_action.type = OFPAT13_OUTPUT;
-//		output_action.max_len = 0xffff;
-//		output_action.next = instruction_act.actions;
-//		instruction_act.actions = (gn_action_t *)&output_action;
-//	}
-//
-//	memset(&act_set_field_mac, 0, sizeof(gn_action_set_field_t));
-//	act_set_field_mac.type = OFPAT13_SET_FIELD;
-//	memcpy(act_set_field_mac.oxm_fields.eth_dst, mod_dst_mac, 6);
-//	act_set_field_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//	act_set_field_mac.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_set_field_mac;
-//
-//	memset(&act_set_field_ip, 0, sizeof(gn_action_set_field_t));
-//	act_set_field_ip.type = OFPAT13_SET_FIELD;
-//	act_set_field_ip.oxm_fields.ipv4_dst = ntohl(mod_dst_ip);
-//	act_set_field_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//	act_set_field_ip.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_set_field_ip;
-//
-//	memset(&act_set_field_vlan, 0, sizeof(gn_action_set_field_t));
-//	act_set_field_vlan.type = OFPAT13_SET_FIELD;
-//	act_set_field_vlan.oxm_fields.vlan_vid = vlan_id;
-//	act_set_field_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//	act_set_field_vlan.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_set_field_vlan;
-//
-//	memset(&act_pushVlan, 0, sizeof(gn_action_t));
-//	act_pushVlan.type = OFPAT13_PUSH_VLAN;
-//	act_pushVlan.next = instruction_act.actions;
-//	instruction_act.actions = (gn_action_t *)&act_pushVlan;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
 }
 
 void fabric_openstack_floating_ip_clear_stat(gn_switch_t * sw, UINT4 match_ip, UINT4 mod_dst_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
 {
 	flow_param_t* flow_param = init_flow_param();
 	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_FLOATING_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
 	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
@@ -1674,7 +2164,7 @@ void fabric_openstack_floating_ip_clear_stat(gn_switch_t * sw, UINT4 match_ip, U
 	else {
 		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
 	}
-	install_fabric_clear_stat_flows(sw, FABRIC_FLOATING_FLOW_IDLE_TIME_OUT, FABRIC_FLOATING_FLOW_HARD_TIME_OUT, FABRIC_PRIORITY_FLOATING_FLOW,
+	install_fabric_clear_stat_flows(sw, FABRIC_FLOATING_FLOW_IDLE_TIME_OUT, FABRIC_FLOATING_FLOW_HARD_TIME_OUT, priority_level,
 			flow_table_id, OFPFC_ADD, flow_param);
 	clear_flow_param(flow_param);
 }
@@ -1689,13 +2179,29 @@ void fabric_openstack_portforward_ip_install_set_vlan_out_flow(gn_switch_t * sw,
 	memcpy(oxm.eth_dst, mod_dst_mac, 6);
 	oxm.vlan_vid = vlan_id;
 
-	oxm.tcp_src = mod_ip_src_port;//23;
+	if(PROTO_TCP== match_proto)
+	{
+		oxm.tcp_src = mod_ip_src_port;//23;
+	}
+	if(PROTO_UDP == match_proto)
+	{
+		oxm.udp_src = mod_ip_src_port;//23;
+	}
 
 	memcpy(flow_param->match_param->eth_src, match_mac, 6);
 	flow_param->match_param->eth_type = ETHER_IP;
 	flow_param->match_param->ipv4_dst = ntohl(match_ip);
 	flow_param->match_param->ip_proto =  match_proto; //IPPROTO_TCP;
-	flow_param->match_param->tcp_src = match_ip_src_port; //22;
+
+	if(PROTO_TCP== match_proto)
+	{
+		flow_param->match_param->tcp_src = match_ip_src_port; //22;
+	}
+	if(PROTO_UDP == match_proto)
+	{
+		flow_param->match_param->udp_src = match_ip_src_port; //22;
+	}	
+	
 	
 
 	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
@@ -1703,21 +2209,106 @@ void fabric_openstack_portforward_ip_install_set_vlan_out_flow(gn_switch_t * sw,
 	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
 
-	set_security_match(flow_param->match_param, security_param);
+	//set_security_match(flow_param->match_param, security_param);
 
 	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_PORTFORWARD_FLOW,
-			FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+			FABRIC_FQ_OUT_POST_PROCESS_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+void fabric_openstack_portforward_ip_install_set_vlan_out_before_OutFirewallQOS_flow(gn_switch_t * sw, UINT4 match_ip, UINT1 match_proto, UINT2 match_ip_src_port, UINT2 match_ip_dst_port, UINT1* match_mac, UINT4 mod_src_ip, UINT2 mod_ip_src_port,   UINT1* mod_dst_mac,UINT4 vlan_id, security_param_t* security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+	UINT2 table_id = FABRIC_FIREWALL_OUT_TABLE;
+
+	memcpy(flow_param->match_param->eth_src, match_mac, 6);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(match_ip);
+	flow_param->match_param->ip_proto =  match_proto; //IPPROTO_TCP;
+
+	if(PROTO_TCP== match_proto)
+	{
+		flow_param->match_param->tcp_src = match_ip_src_port; //22;
+		flow_param->match_param->tcp_dst = match_ip_dst_port;
+	}
+	if(PROTO_UDP== match_proto)
+	{
+		flow_param->match_param->udp_src = match_ip_src_port; //22;
+		flow_param->match_param->udp_dst = match_ip_dst_port;
+	}
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_PORTFORWARD_FLOW,
+						 FABRIC_FLOATING_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+}
+
+
+void fabric_openstack_portforward_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT1 match_proto, UINT2 match_ip_src_port,UINT2 match_ip_dst_port, UINT4 match_src_ip, UINT4 mod_dst_ip,  UINT2 mod_ip_dst_port, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_FQ_IN_POST_PROCESS_PORTFORD_TABLE;
+	
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_PORTFORWARD_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	memcpy(oxm.eth_dst, mod_dst_mac, 6);
+	oxm.ipv4_dst = ntohl(mod_dst_ip);
+	oxm.vlan_vid = vlan_id;
+	if(PROTO_TCP== match_proto)
+	{
+		oxm.tcp_dst = mod_ip_dst_port; //22;
+	}
+	if(PROTO_UDP == match_proto)
+	{
+		oxm.udp_dst = mod_ip_dst_port; //22;
+	}
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_src = ntohl(match_src_ip);
+	flow_param->match_param->ipv4_dst = ntohl(match_ip);
+	flow_param->match_param->ip_proto =  match_proto;//IPPROTO_TCP;
+
+	if(PROTO_TCP== match_proto)
+	{
+		flow_param->match_param->tcp_dst = match_ip_dst_port;//23;
+		flow_param->match_param->tcp_src = match_ip_src_port;
+	}
+	if(PROTO_UDP == match_proto)
+	{
+		flow_param->match_param->udp_dst = match_ip_dst_port;//23;
+		flow_param->match_param->udp_src = match_ip_src_port;
+	}
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	if (0 == get_nat_physical_switch_flag()) {
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	}
+	else {
+		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+	}
+
+	// set_security_match(flow_param->match_param, security_param);
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,
+			flow_table_id, OFPFC_ADD, flow_param);
+
 
 	clear_flow_param(flow_param);
 
 }
 
-
-void fabric_openstack_portforward_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT1 match_proto, UINT2 match_ip_dst_port, UINT4 mod_dst_ip, UINT2 mod_ip_dst_port, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
+gn_flow_t * install_add_PortForwardIP_ToFixIP_OutputToHost_flow(gn_switch_t * sw, UINT4 match_ip, UINT1 match_proto, UINT2 match_ip_dst_port, UINT4 mod_dst_ip, UINT2 mod_ip_dst_port, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
 {
 	flow_param_t* flow_param = init_flow_param();
-	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
-
+	UINT2 flow_table_id = FABRIC_PUSHTAG_TABLE;
+	
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_PORTFORWARD_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
 	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
@@ -1743,7 +2334,7 @@ void fabric_openstack_portforward_ip_install_set_vlan_in_flow(gn_switch_t * sw, 
 
 	// set_security_match(flow_param->match_param, security_param);
 
-	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_PORTFORWARD_FLOW,
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,
 			flow_table_id, OFPFC_ADD, flow_param);
 
 
@@ -1751,46 +2342,243 @@ void fabric_openstack_portforward_ip_install_set_vlan_in_flow(gn_switch_t * sw, 
 
 }
 
+//华云转发，匹配目的ip，修改mac地址
+void fabric_openstack_clbforward_ip_install_set_vlan_out_flow(gn_switch_t * sw, UINT4 match_ip, UINT1* match_mac, UINT1* mod_dst_mac,UINT4 vlan_id, security_param_t* security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
+
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	memcpy(oxm.eth_dst, mod_dst_mac, 6);
+	oxm.vlan_vid = vlan_id;
+
+	memcpy(flow_param->match_param->eth_src, match_mac, 6);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(match_ip);
+
+	
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+
+	set_security_match(flow_param->match_param, security_param);
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_CLBFORWARD_FLOW,
+			FABRIC_OTHER_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
+
+}
+//华云转发，匹配目的ip，修改mac地址
+void fabric_openstack_clbforward_ip_install_set_vlan_in_pregototable(gn_switch_t * sw, UINT4 match_ip, UINT2 flow_table_id, UINT2 goto_table_id)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 priority_level =FABRIC_PRIORITY_CLBFORWARD_FLOW;
+	
+	
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(match_ip);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&goto_table_id);
+	
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,
+			flow_table_id, OFPFC_ADD, flow_param);
+
+
+	clear_flow_param(flow_param);
+	
+}
+
+void fabric_openstack_clbforward_ip_install_set_vlan_in_flow(gn_switch_t * sw, UINT4 match_ip, UINT1* mod_dst_mac, UINT4 vlan_id, UINT4 out_port)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_FQ_IN_POST_PROCESS_PORTFORD_TABLE;
+	
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_CLBFORWARD_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	memcpy(oxm.eth_dst, mod_dst_mac, 6);
+	
+	oxm.vlan_vid = vlan_id;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(match_ip);
+	
+	LOG_PROC("INFO", "####### fabric_openstack_clbforward_ip_install_set_vlan_in_flow %s %d--fabric_openstack_clbforward_ip_install_set_vlan_in_flow ",FN,LN);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+	if (0 == get_nat_physical_switch_flag()) {
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	}
+	else {
+		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+	}
+
+	// set_security_match(flow_param->match_param, security_param);
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,
+			flow_table_id, OFPFC_ADD, flow_param);
+
+
+	clear_flow_param(flow_param);
+
+}
+
+//华云转发,组播
+void fabric_openstack_clbforward_multicastip_pregototable(gn_switch_t * sw, UINT1 *match_dst_mac, UINT2 flow_table_id, UINT2 goto_table_id)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 priority_level = FABRIC_PRIORITY_CLBFORWARD_FLOW;
+	if(NULL == sw)
+	{
+		clear_flow_param(flow_param);
+		return ;
+	}
+	flow_param->match_param->eth_type = ETHER_IP;
+	memcpy(flow_param->match_param->eth_dst, match_dst_mac, 6);	
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&goto_table_id);
+
+	install_fabric_flows(sw, FABRIC_IMPL_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,
+			flow_table_id, OFPFC_ADD, flow_param);
+
+
+	clear_flow_param(flow_param);
+	
+}
+
+void fabric_openstack_clbforward_multicastip_install_flow(gn_switch_t * src_sw,gn_switch_t * dst_sw, UINT4 match_src_ip, UINT4 match_dst_ip,UINT1 *mod_dst_mac, UINT1 match_proto, UINT4 vlan_id)
+{
+	UINT4 out_port = 0;
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
+	
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_CLBFORWARD_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
+	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
+
+	if((NULL == src_sw)||(NULL == mod_dst_mac))
+	{
+		clear_flow_param(flow_param);
+		return ;
+	}
+
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	memcpy(oxm.eth_dst, mod_dst_mac, 6);
+	
+	oxm.vlan_vid = vlan_id;
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_src = ntohl(match_src_ip);
+	flow_param->match_param->ipv4_dst = ntohl(match_dst_ip);
+	flow_param->match_param->ip_proto = match_proto;
+	
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_PUSH_VLAN, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
+
+	
+	if (0 == get_nat_physical_switch_flag()) {
+		add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+	}
+	else {
+		if((NULL == src_sw)||(NULL == dst_sw))
+		{
+			clear_flow_param(flow_param);
+			LOG_PROC("ERROR","%s %d there is not exist src_sw or dst_sw",FN,LN);
+			return ;
+		}
+		out_port = get_out_port_between_switch(src_sw->dpid, dst_sw->dpid);
+		if(0 == out_port)
+		{
+			clear_flow_param(flow_param);
+			LOG_PROC("ERROR","%s %d there is not exist outport between  src_sw and dst_sw",FN,LN);
+			return ;
+		}
+		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&out_port);
+	}
+
+
+	install_fabric_flows(src_sw, 100, FABRIC_ARP_HARD_TIME_OUT, priority_level,
+			flow_table_id, OFPFC_ADD, flow_param);
+
+
+	clear_flow_param(flow_param);
+}
+
+void remove_clbforward_multicast(gn_switch_t* sw, UINT4 srcip, UINT2 proto)
+{
+	flow_param_t* flow_param = init_flow_param();
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_src = ntohl(srcip);
+	flow_param->match_param->ip_proto = proto;
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_INPUT_TABLE, OFPFC_DELETE, flow_param);
+	clear_flow_param(flow_param);
+}
+	
+void remove_clbforward_flow_by_IpAndMac(gn_switch_t* sw, UINT1* mac,UINT4 ip)
+{
+	
+	UINT2 flow_table_id = FABRIC_PUSHTAG_TABLE;
+	//UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_CLBFORWARD_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
+	flow_param_t* flow_param = init_flow_param();
+	
+	//LOG_PROC("INFO", "%s -- --------------[%x:%x:%x:%x:%x:%x]%d",FN,mac[0],mac[1],mac[2],mac[3],mac[4],mac[5],ip);
+	
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(ip);
+	memcpy(flow_param->match_param->eth_src, mac, 6);	
+	
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_OTHER_TABLE, OFPFC_DELETE, flow_param);
+	clear_flow_param(flow_param);
+	
+	
+}
+void remove_clbforward_flow_by_vmMac(gn_switch_t* sw, UINT1* mac)
+{
+	flow_param_t* flow_param = init_flow_param();
+	
+	
+	//flow_param->match_param->eth_type = ETHER_IP;
+	memcpy(flow_param->match_param->eth_src, mac, 6);	
+	
+	install_fabric_flows(sw, 0, 0, 0, FABRIC_OUTPUT_TABLE, OFPFC_DELETE, flow_param);
+	clear_flow_param(flow_param);
+}
+
+void remove_clbforward_flow_by_SrcIp(gn_switch_t* sw, UINT4 ip)
+{
+	flow_param_t* flow_param = init_flow_param();
+	UINT2 flow_table_id = (0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_FQ_IN_POST_PROCESS_TABLE;
+	
+	UINT2 priority_level = (0 == get_nat_physical_switch_flag()) ? FABRIC_PRIORITY_CLBFORWARD_FLOW : FABRIC_PRIORITY_PICA8ZEROTABLE_FORWARD_FLOW;
+	
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(ip);
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, priority_level,
+			flow_table_id, OFPFC_DELETE, flow_param);
+
+
+	clear_flow_param(flow_param);
+}
 
 // 下发流表规则
+/* by:yhy
+ * host所在compute节点的OVS交换机上下发的nat出发流表
+ */
 void install_fabric_nat_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
 								UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
 								UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, security_param_t* security_param)
 {
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow !");
-	/*
-	 * Table 1
-	 *
-	 * Match:
-	 * SRC_MAC  = VM.MAC
-	 * DST_IP   = 外网IP
-	 * Proto    = VM.Proto
-	 * SRC_Port = VM.Port
-	 *
-	 * Action:
-	 * SRC_MAC   = External.MAC
-	 * SRC_IP    = External.IP
-	 * SRC_Port  = new-port
-	 * DST_MAC   = Gateway.MAC
-	 * Vlan		 = Gateway.Vlan
-	 *
-	 * Goto:
-	 * Table 2
-	 ********************************************
-	 * Table 1 (current switch is gateway switch)
-	 *
-	 * Match:
-	 * SRC_MAC  = VM.MAC
-	 * DST_IP   = 外网IP
-	 * Proto    = VM.Proto
-	 * SRC_Port = VM.Port
-	 *
-	 * Action:
-	 * SRC_MAC   = External.MAC
-	 * SRC_IP    = External.IP
-	 * SRC_Port  = new-port
-	 * output
-	 */
 	flow_param_t* flow_param = init_flow_param();
 
 	UINT2 table_id = FABRIC_SWAPTAG_TABLE;
@@ -1822,149 +2610,50 @@ void install_fabric_nat_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_d
 		add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&gateway_out_port);
 	}
 
-	set_security_match(flow_param->match_param, security_param);
+	//set_security_match(flow_param->match_param, security_param);
 	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_NAT_FLOW,
-						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
+						 FABRIC_FQ_OUT_POST_PROCESS_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
+}
+void install_fabric_nat_throughfirewall_from_inside_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
+		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
+		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, security_param_t* security_param)
+{
+	flow_param_t* flow_param = init_flow_param();
 
-	// This function is created to process NAT related flow table
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-//
-//    gn_action_set_field_t act_set_out_src_mac;
-//    gn_action_set_field_t act_set_out_src_ip;
-//    gn_action_set_field_t act_set_out_src_port;
-//    gn_action_set_field_t act_set_out_dst_mac;
-//    gn_action_set_field_t act_set_out_dst_vlan;
-//    gn_instruction_goto_table_t act_set_out_goto_table;
-//    gn_action_t act_out_push_vlan;
-//    gn_action_output_t act_out_output;
-//
-//    memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-//	flow.table_id = FABRIC_PUSHTAG_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//	memcpy(flow.match.oxm_fields.eth_src, packetin_src_mac, 6);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
-//
-//	flow.match.oxm_fields.ipv4_dst = ntohl(packetin_dst_ip);
-//	flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//
-//	if (IPPROTO_TCP == proto_type) {
-//		flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-//		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//		flow.match.oxm_fields.tcp_src = ntohs(packetin_src_port);
-//		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_SRC);
-//	}
-//	else if (IPPROTO_UDP == proto_type) {
-//		flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-//		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//		flow.match.oxm_fields.udp_src = ntohs(packetin_src_port);
-//		flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_SRC);
-//	}
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//    instruction.type = OFPIT_APPLY_ACTIONS;
-//    instruction.next = flow.instructions;
-//    flow.instructions = (gn_instruction_t *)&instruction;
-//
-//    memset(&act_set_out_src_mac, 0, sizeof(gn_action_set_field_t));
-//    act_set_out_src_mac.type = OFPAT13_SET_FIELD;
-//    memcpy(act_set_out_src_mac.oxm_fields.eth_src, external_mac, 6);
-//    act_set_out_src_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_SRC);
-//    act_set_out_src_mac.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_out_src_mac;
-//
-//    memset(&act_set_out_src_ip, 0, sizeof(gn_action_set_field_t));
-//    act_set_out_src_ip.type = OFPAT13_SET_FIELD;
-//    act_set_out_src_ip.oxm_fields.ipv4_src = ntohl(external_ip);
-//    act_set_out_src_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-//    act_set_out_src_ip.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_out_src_ip;
-//
-//    if (IPPROTO_TCP == proto_type) {
-//    	memset(&act_set_out_src_port, 0, sizeof(gn_action_set_field_t));
-//		act_set_out_src_port.type = OFPAT13_SET_FIELD;
-//		act_set_out_src_port.oxm_fields.tcp_src = external_port_no;
-//		act_set_out_src_port.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_SRC);
-//		act_set_out_src_port.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_out_src_port;
-//    }
-//    else if (IPPROTO_UDP == proto_type) {
-//    	memset(&act_set_out_src_port, 0, sizeof(gn_action_set_field_t));
-//		act_set_out_src_port.type = OFPAT13_SET_FIELD;
-//		act_set_out_src_port.oxm_fields.udp_src = external_port_no;
-//		act_set_out_src_port.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_SRC);
-//		act_set_out_src_port.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_out_src_port;
-//    }
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//    if (sw->dpid != gateway_sw->dpid) {
-//       	memset(&act_set_out_dst_vlan, 0, sizeof(gn_action_set_field_t));
-//       	act_set_out_dst_vlan.type = OFPAT13_SET_FIELD;
-//       	act_set_out_dst_vlan.oxm_fields.vlan_vid = (UINT2)gateway_vlan_vid;
-//       	act_set_out_dst_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//   		act_set_out_dst_vlan.next = instruction.actions;
-//   		instruction.actions = (gn_action_t *)&act_set_out_dst_vlan;
-//
-//   		memset(&act_out_push_vlan, 0, sizeof(gn_action_t));
-//   		act_out_push_vlan.type = OFPAT13_PUSH_VLAN;
-//   		act_out_push_vlan.next = instruction.actions;
-//   		instruction.actions = (gn_action_t *)&act_out_push_vlan;
-//
-//   		memset(&act_set_out_goto_table, 0, sizeof(gn_instruction_goto_table_t));
-//   		act_set_out_goto_table.type = OFPIT_GOTO_TABLE;
-//   		act_set_out_goto_table.table_id = FABRIC_SWAPTAG_TABLE;
-//   		act_set_out_goto_table.next = flow.instructions;
-//   		flow.instructions = (gn_instruction_t *)&act_set_out_goto_table;
-//       }
-//       else {
-//   		memset(&act_out_output, 0, sizeof(gn_action_output_t));
-//   		act_out_output.next = NULL;
-//   		act_out_output.type = OFPAT13_OUTPUT;
-//   		act_out_output.port = gateway_out_port;
-//   		act_out_output.next = instruction.actions;
-//   		act_out_output.max_len = 0xffff;
-//   		instruction.actions = (gn_action_t *)&act_out_output;
-//       }
-//
-//    memset(&act_set_out_dst_mac, 0, sizeof(gn_action_set_field_t));
-//    act_set_out_dst_mac.type = OFPAT13_SET_FIELD;
-//    memcpy(act_set_out_dst_mac.oxm_fields.eth_dst, gateway_mac, 6);
-//    act_set_out_dst_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//    act_set_out_dst_mac.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_out_dst_mac;
-//
-//	flow_mod_req.xid = 0;
-//	flow_mod_req.buffer_id = 0xffffffff;
-//	flow_mod_req.out_port = 0xffffffff;
-//	flow_mod_req.out_group = 0xffffffff;
-//	flow_mod_req.command = OFPFC_ADD;
-//	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//	flow_mod_req.flow = &flow;
-//
-//    sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
+	UINT2 table_id = FABRIC_FIREWALL_OUT_TABLE;
+	gn_oxm_t oxm;
+	memset(&oxm, 0 ,sizeof(gn_oxm_t));
+	memcpy(oxm.eth_src, external_mac, 6);
+	oxm.ipv4_src = ntohl(external_ip);
+	oxm.tcp_src = (IPPROTO_TCP == proto_type) ? external_port_no : 0;
+	oxm.udp_src = (IPPROTO_UDP == proto_type) ? external_port_no : 0;
+	oxm.vlan_vid = (sw->dpid != gateway_sw->dpid) ? (UINT2)gateway_vlan_vid : 0;
+	memcpy(oxm.eth_dst, gateway_mac, 6);
 
-    // LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from inside !");
+	memcpy(flow_param->match_param->eth_src, packetin_src_mac, 6);
+	flow_param->match_param->ipv4_dst = ntohl(packetin_dst_ip);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ip_proto = proto_type;
+	flow_param->match_param->tcp_src = (IPPROTO_TCP == proto_type) ? ntohs(packetin_src_port) : 0;
+	flow_param->match_param->udp_src = (IPPROTO_UDP == proto_type) ? ntohs(packetin_src_port) : 0;
+
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&table_id);
+
+
+
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_NAT_FLOW,
+						 FABRIC_NAT_TABLE, OFPFC_ADD, flow_param);
+
+	clear_flow_param(flow_param);
 }
 
 // 下发流表规则
+/* by:yhy
+ * 不使用物理出口交换机的情况下,出口交换机上下发的nat返回流表
+ */
 void install_fabric_nat_from_external_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
 		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
 		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw)
@@ -2005,161 +2694,13 @@ void install_fabric_nat_from_external_flow(UINT4 packetin_src_ip, UINT4 packetin
 						 FABRIC_PUSHTAG_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
-
-
-
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow from external!");
-	// This function is created to process NAT related flow table
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-
-    /*
-     * 匹配规则:
-     * SRC_IP 		= external.IP
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * DST_MAC		= VM.MAC
-     * DST_IP		= VM.IP
-     * DST_Port		= VM.Port
-     * Vlan			= VM.Vlan
-     *
-     * Goto:
-     * Table 2
-     *********************************************
-     * (Current switch is gateway switch)
-     *
-     * SRC_IP 		= external.IP
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * DST_MAC		= VM.MAC
-     * DST_IP		= VM.IP
-     * DST_Port		= VM.Port
-     * output
-     */
-//	memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-//	flow.table_id = FABRIC_PUSHTAG_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//    gn_action_set_field_t act_set_in_dst_mac;
-//    gn_action_set_field_t act_set_in_dst_ip;
-//    gn_action_set_field_t act_set_in_dst_port;
-//    gn_action_set_field_t act_set_in_dst_vlan;
-//    gn_instruction_goto_table_t act_set_in_goto_table;
-//    gn_action_t act_in_push_vlan;
-//    gn_action_output_t act_in_output;
-//
-//    flow.match.oxm_fields.ipv4_src = ntohl(packetin_dst_ip);
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//
-//	if (IPPROTO_TCP == proto_type) {
-//	    flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//	    flow.match.oxm_fields.tcp_dst = external_port_no;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-//	}
-//	else if (IPPROTO_UDP == proto_type) {
-//	    flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//	    flow.match.oxm_fields.udp_dst = external_port_no;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-//	}
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//	instruction.type = OFPIT_APPLY_ACTIONS;
-//	instruction.next = flow.instructions;
-//	flow.instructions = (gn_instruction_t *)&instruction;
-//
-//	if (sw->dpid != gateway_sw->dpid) {
-//		memset(&act_set_in_dst_vlan, 0, sizeof(gn_action_set_field_t));
-//		act_set_in_dst_vlan.type = OFPAT13_SET_FIELD;
-//		act_set_in_dst_vlan.oxm_fields.vlan_vid = (UINT2)src_vlan_vid;
-//		act_set_in_dst_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//		act_set_in_dst_vlan.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_in_dst_vlan;
-//
-//		memset(&act_in_push_vlan, 0, sizeof(gn_action_t));
-//		act_in_push_vlan.type = OFPAT13_PUSH_VLAN;
-//		act_in_push_vlan.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_in_push_vlan;
-//
-//		memset(&act_set_in_goto_table, 0, sizeof(gn_instruction_goto_table_t));
-//		act_set_in_goto_table.type = OFPIT_GOTO_TABLE;
-//		act_set_in_goto_table.table_id = FABRIC_SWAPTAG_TABLE;
-//		act_set_in_goto_table.next = flow.instructions;
-//		flow.instructions = (gn_instruction_t *)&act_set_in_goto_table;
-//	}
-//	else {
-//		memset(&act_in_output, 0, sizeof(gn_action_output_t));
-//		act_in_output.next = NULL;
-//		act_in_output.type = OFPAT13_OUTPUT;
-//		act_in_output.port = gateway_out_port;
-//		act_in_output.next = instruction.actions;
-//		act_in_output.max_len = 0xffff;
-//		instruction.actions = (gn_action_t *)&act_in_output;
-//	}
-//
-//    memset(&act_set_in_dst_mac, 0, sizeof(gn_action_set_field_t));
-//    act_set_in_dst_mac.type = OFPAT13_SET_FIELD;
-//    memcpy(act_set_in_dst_mac.oxm_fields.eth_dst, packetin_src_mac, 6);
-//    act_set_in_dst_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//    act_set_in_dst_mac.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_in_dst_mac;
-//
-//    memset(&act_set_in_dst_ip, 0, sizeof(gn_action_set_field_t));
-//    act_set_in_dst_ip.type = OFPAT13_SET_FIELD;
-//    act_set_in_dst_ip.oxm_fields.ipv4_dst = ntohl(packetin_src_ip);
-//    act_set_in_dst_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//    act_set_in_dst_ip.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_in_dst_ip;
-//
-//    if (IPPROTO_TCP == proto_type) {
-//    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-//		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-//		act_set_in_dst_port.oxm_fields.tcp_dst = ntohs(packetin_src_port);
-//		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-//		act_set_in_dst_port.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-//    }
-//    else if (IPPROTO_UDP == proto_type) {
-//    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-//		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-//		act_set_in_dst_port.oxm_fields.udp_dst = ntohs(packetin_src_port);
-//		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-//		act_set_in_dst_port.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-//    }
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//  	flow_mod_req.xid = 0;
-//  	flow_mod_req.buffer_id = 0xffffffff;
-//  	flow_mod_req.out_port = 0xffffffff;
-//  	flow_mod_req.out_group = 0xffffffff;
-//  	flow_mod_req.command = OFPFC_ADD;
-//  	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//  	flow_mod_req.flow = &flow;
-//
-//  	gateway_sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](gateway_sw, (UINT1 *)&flow_mod_req);
-
-    // LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from external !");
+	
 }
 
 // 下发流表规则
+/* by:yhy
+ * 使用物理出口交换机的情况下,出口交换机上下发的nat返回流表
+ */
 void install_fabric_nat_from_external_fabric_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
 		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
 		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw, UINT4 out_port)
@@ -2172,6 +2713,7 @@ void install_fabric_nat_from_external_fabric_flow(UINT4 packetin_src_ip, UINT4 p
 	oxm.vlan_vid = (UINT2)src_vlan_vid;
 
 	memcpy(flow_param->match_param->eth_dst, external_mac, 6);
+	flow_param->match_param->ipv4_src = ntohl(packetin_dst_ip);
 	flow_param->match_param->eth_type = ETHER_IP;
 	flow_param->match_param->ip_proto = proto_type;
 	flow_param->match_param->tcp_dst = (IPPROTO_TCP == proto_type) ? external_port_no : 0;
@@ -2184,108 +2726,24 @@ void install_fabric_nat_from_external_fabric_flow(UINT4 packetin_src_ip, UINT4 p
 
 	// set_security_match(flow_param->match_param, security_param);
 
-	install_fabric_flows(gateway_sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_NAT_FLOW,
-					     FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
+	install_fabric_flows(gateway_sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, 35,
+					     FABRIC_FQ_IN_POST_PROCESS_NAT_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
-
-
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow from external!");
-	// This function is created to process NAT related flow table
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-//    gn_action_output_t act_in_output;
-
-    /*
-     * 匹配规则:
-     * DST_MAC 		= external.MAC
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * Vlan			= VM.Vlan
-     *
-     * Goto:
-     * Table 2
-     */
-//	memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-//	flow.table_id = FABRIC_INPUT_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//    gn_action_set_field_t act_set_in_dst_vlan;
-//    gn_action_t act_in_push_vlan;
-//
-//    memcpy(flow.match.oxm_fields.eth_dst, external_mac, 6);
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//
-//	if (IPPROTO_TCP == proto_type) {
-//	    flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//	    flow.match.oxm_fields.tcp_dst = external_port_no;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-//	}
-//	else if (IPPROTO_UDP == proto_type) {
-//	    flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//	    flow.match.oxm_fields.udp_dst = external_port_no;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-//	}
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//	instruction.type = OFPIT_APPLY_ACTIONS;
-//	instruction.next = flow.instructions;
-//	flow.instructions = (gn_instruction_t *)&instruction;
-//
-//	memset(&act_in_output, 0, sizeof(gn_action_output_t));
-//	act_in_output.type = OFPAT13_OUTPUT;
-//	act_in_output.port = out_port;
-//	act_in_output.next = instruction.actions;
-//	act_in_output.max_len = 0xffff;
-//	instruction.actions = (gn_action_t *)&act_in_output;
-//
-//	memset(&act_set_in_dst_vlan, 0, sizeof(gn_action_set_field_t));
-//	act_set_in_dst_vlan.type = OFPAT13_SET_FIELD;
-//	act_set_in_dst_vlan.oxm_fields.vlan_vid = (UINT2)src_vlan_vid;
-//	act_set_in_dst_vlan.oxm_fields.mask |= (1 << OFPXMT_OFB_VLAN_VID);
-//	act_set_in_dst_vlan.next = instruction.actions;
-//	instruction.actions = (gn_action_t *)&act_set_in_dst_vlan;
-//
-//	memset(&act_in_push_vlan, 0, sizeof(gn_action_t));
-//	act_in_push_vlan.type = OFPAT13_PUSH_VLAN;
-//	act_in_push_vlan.next = instruction.actions;
-//	instruction.actions = (gn_action_t *)&act_in_push_vlan;
-//
-//  	flow_mod_req.xid = 0;
-//  	flow_mod_req.buffer_id = 0xffffffff;
-//  	flow_mod_req.out_port = 0xffffffff;
-//  	flow_mod_req.out_group = 0xffffffff;
-//  	flow_mod_req.command = OFPFC_ADD;
-//  	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//  	flow_mod_req.flow = &flow;
-//
-//  	gateway_sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](gateway_sw, (UINT1 *)&flow_mod_req);
-//
-//     LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from external !");
 }
 
 // 下发流表规则
+/* by:yhy
+ * 使用物理出口交换机的情况下,host主机所在ovs交换机上下发的nat返回流表输出至host所接端口
+ */
 void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UINT4 packetin_dst_ip, UINT2 packetin_src_port, UINT1 proto_type,
 		UINT1* packetin_src_mac, UINT4 external_ip, UINT1* gateway_mac, UINT1* external_mac, UINT2 external_port_no,
 		UINT4 gateway_vlan_vid, UINT4 src_vlan_vid, UINT2 gateway_out_port,	gn_switch_t* sw, gn_switch_t* gateway_sw)
 {
 	flow_param_t* flow_param = init_flow_param();
 
+	UINT1 GotoTable  =FABRIC_FIREWALL_IN_TABLE;
+	
 	gn_oxm_t oxm;
 	memset(&oxm, 0 ,sizeof(gn_oxm_t));
 	memcpy(oxm.eth_dst, packetin_src_mac, 6);
@@ -2293,6 +2751,8 @@ void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UI
 	oxm.tcp_dst = (IPPROTO_TCP == proto_type) ? ntohs(packetin_src_port) : 0;
 	oxm.udp_dst = (IPPROTO_UDP == proto_type) ? ntohs(packetin_src_port) : 0;
 
+	UINT2 tag =of131_fabric_impl_get_tag_sw(sw);
+	flow_param->match_param->vlan_vid = (UINT2)tag;
 	flow_param->match_param->ipv4_src = ntohl(packetin_dst_ip);
 	flow_param->match_param->eth_type = ETHER_IP;
 	flow_param->match_param->ip_proto = proto_type;
@@ -2300,128 +2760,19 @@ void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UI
 	flow_param->match_param->udp_dst = (IPPROTO_UDP == proto_type) ? external_port_no : 0;
 
 	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->instruction_param, OFPIT_GOTO_TABLE, (void*)&GotoTable);
+	add_action_param(&flow_param->action_param, OFPAT13_POP_VLAN, NULL);
 	add_action_param(&flow_param->action_param, OFPAT13_SET_FIELD, (void*)&oxm);
-	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&gateway_out_port);
-
+	
+	
+	
 	// set_security_match(flow_param->match_param, security_param);
 
-	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_NAT_FLOW,
-						 FABRIC_OUTPUT_TABLE, OFPFC_ADD, flow_param);
+	install_fabric_flows(sw, FABRIC_ARP_IDLE_TIME_OUT, FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_INPUT_TABLE_NAT_FLOW,
+						 FABRIC_INPUT_TABLE, OFPFC_ADD, flow_param);
 
 	clear_flow_param(flow_param);
 
-
-
-	// LOG_PROC("INFO", "NAT: Start install_fabric_nat_flow from external!");
-	// This function is created to process NAT related flow table
-//	flow_mod_req_info_t flow_mod_req;
-//    gn_flow_t flow;
-//    gn_instruction_actions_t instruction;
-
-    /*
-     * 匹配规则:
-     * SRC_IP 		= external.IP
-     * DST_Port 	= external.port_no
-     *
-     * Action:
-     * DST_MAC		= VM.MAC
-     * DST_IP		= VM.IP
-     * DST_Port		= VM.Port
-     * output
-     */
-//	memset(&flow, 0, sizeof(gn_flow_t));
-//	flow.create_time = g_cur_sys_time.tv_sec;
-//	flow.idle_timeout = FABRIC_ARP_IDLE_TIME_OUT;
-//	flow.hard_timeout = FABRIC_ARP_HARD_TIME_OUT;
-//	flow.priority = FABRIC_PRIORITY_NAT_FLOW;
-//	flow.table_id = FABRIC_OUTPUT_TABLE;
-//	flow.match.type = OFPMT_OXM;
-//
-//    gn_action_set_field_t act_set_in_dst_mac;
-//    gn_action_set_field_t act_set_in_dst_ip;
-//    gn_action_set_field_t act_set_in_dst_port;
-//    gn_action_output_t act_in_output;
-//
-//    flow.match.oxm_fields.ipv4_src = ntohl(packetin_dst_ip);
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_SRC);
-//    flow.match.oxm_fields.eth_type = ETHER_IP;
-//    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_TYPE);
-//
-//	if (IPPROTO_TCP == proto_type) {
-//	    flow.match.oxm_fields.ip_proto = IPPROTO_TCP;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//	    flow.match.oxm_fields.tcp_dst = external_port_no;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-//	}
-//	else if (IPPROTO_UDP == proto_type) {
-//	    flow.match.oxm_fields.ip_proto = IPPROTO_UDP;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_IP_PROTO);
-//	    flow.match.oxm_fields.udp_dst = external_port_no;
-//	    flow.match.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-//	}
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//	memset(&instruction, 0, sizeof(gn_instruction_actions_t));
-//	instruction.type = OFPIT_APPLY_ACTIONS;
-//	instruction.next = flow.instructions;
-//	flow.instructions = (gn_instruction_t *)&instruction;
-//
-//	memset(&act_in_output, 0, sizeof(gn_action_output_t));
-//	act_in_output.type = OFPAT13_OUTPUT;
-//	act_in_output.port = gateway_out_port;
-//	act_in_output.next = instruction.actions;
-//	act_in_output.max_len = 0xffff;
-//	instruction.actions = (gn_action_t *)&act_in_output;
-//
-//    memset(&act_set_in_dst_mac, 0, sizeof(gn_action_set_field_t));
-//    act_set_in_dst_mac.type = OFPAT13_SET_FIELD;
-//    memcpy(act_set_in_dst_mac.oxm_fields.eth_dst, packetin_src_mac, 6);
-//    act_set_in_dst_mac.oxm_fields.mask |= (1 << OFPXMT_OFB_ETH_DST);
-//    act_set_in_dst_mac.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_in_dst_mac;
-//
-//    memset(&act_set_in_dst_ip, 0, sizeof(gn_action_set_field_t));
-//    act_set_in_dst_ip.type = OFPAT13_SET_FIELD;
-//    act_set_in_dst_ip.oxm_fields.ipv4_dst = ntohl(packetin_src_ip);
-//    act_set_in_dst_ip.oxm_fields.mask |= (1 << OFPXMT_OFB_IPV4_DST);
-//    act_set_in_dst_ip.next = instruction.actions;
-//    instruction.actions = (gn_action_t *)&act_set_in_dst_ip;
-//
-//    if (IPPROTO_TCP == proto_type) {
-//    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-//		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-//		act_set_in_dst_port.oxm_fields.tcp_dst = ntohs(packetin_src_port);
-//		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_TCP_DST);
-//		act_set_in_dst_port.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-//    }
-//    else if (IPPROTO_UDP == proto_type) {
-//    	memset(&act_set_in_dst_port, 0, sizeof(gn_action_set_field_t));
-//		act_set_in_dst_port.type = OFPAT13_SET_FIELD;
-//		act_set_in_dst_port.oxm_fields.udp_dst = ntohs(packetin_src_port);
-//		act_set_in_dst_port.oxm_fields.mask |= (1 << OFPXMT_OFB_UDP_DST);
-//		act_set_in_dst_port.next = instruction.actions;
-//		instruction.actions = (gn_action_t *)&act_set_in_dst_port;
-//    }
-//	else {
-//		LOG_PROC("INFO","install_fabric_nat_flow: not TCP/UDP!");
-//		return ;
-//	}
-//
-//  	flow_mod_req.xid = 0;
-//  	flow_mod_req.buffer_id = 0xffffffff;
-//  	flow_mod_req.out_port = 0xffffffff;
-//  	flow_mod_req.out_group = 0xffffffff;
-//  	flow_mod_req.command = OFPFC_ADD;
-//  	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
-//  	flow_mod_req.flow = &flow;
-//
-//  	sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
-//
-//     LOG_PROC("INFO", "NAT: Success install_fabric_nat_flow from external !");
 }
 
 //by:yhy 根据输入参数删除fabric_input_flow
@@ -2429,7 +2780,7 @@ void install_fabric_nat_from_external_fabric_host_flow(UINT4 packetin_src_ip, UI
 void delete_fabric_input_flow_by_ip(gn_switch_t* sw, UINT4 ip)
 {
 	flow_param_t* flow_param = init_flow_param();
-	UINT2 flow_table_id = FABRIC_INPUT_TABLE;//(0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
+	UINT2 flow_table_id = FABRIC_FQ_IN_POST_PROCESS_TABLE; //FABRIC_INPUT_TABLE;//(0 == get_nat_physical_switch_flag()) ? FABRIC_PUSHTAG_TABLE : FABRIC_INPUT_TABLE;
 
 	flow_param->match_param->eth_type = ETHER_IP;
 	flow_param->match_param->ipv4_dst = ntohl(ip);
@@ -2613,12 +2964,23 @@ void remove_deny_flow_by_srcMAC(gn_switch_t* sw, UINT1* mac,UINT4 ip)
 	memcpy(flow_param->match_param->eth_dst, mac, 6);	
 	install_fabric_flows(sw, 0, 0, FABRIC_PRIORITY_DENY_FLOW, FABRIC_INPUT_TABLE, OFPFC_DELETE, flow_param);
 	clear_flow_param(flow_param);
+
+}
+
+
+void install_ip_controller_flow(gn_switch_t* sw,UINT4 ip)
+{
 	
+	UINT2 flow_table_id = FABRIC_OUTPUT_TABLE;
+	flow_param_t* flow_param = init_flow_param();
+	UINT4 port = OFPP13_CONTROLLER;
 	
-	//flow_param = init_flow_param();
-	//memcpy(flow_param->match_param->eth_src, mac, 6);
-	//install_fabric_flows(sw, 0, 0, FABRIC_PRIORITY_ARP_FLOW,  FABRIC_INPUT_TABLE, OFPFC_DELETE, flow_param);
-	//clear_flow_param(flow_param);
+	flow_param->match_param->eth_type = ETHER_IP;
+	flow_param->match_param->ipv4_dst = ntohl(ip);
+	add_action_param(&flow_param->instruction_param, OFPIT_APPLY_ACTIONS, NULL);
+	add_action_param(&flow_param->action_param, OFPAT13_OUTPUT, (void*)&port);
+	install_fabric_flows(sw, 5,FABRIC_ARP_HARD_TIME_OUT, FABRIC_PRIORITY_QOS_DEFAULT_JUMP_FLOW, flow_table_id, OFPFC_ADD, flow_param);
+	clear_flow_param(flow_param);
 }
 
 
@@ -3068,86 +3430,90 @@ void set_flow_action(gn_instruction_t* flow_instruction, action_param_t* action_
 
 void clear_flow_temp_data(gn_instruction_t* instruction)
 {
-	// printf("%s\n", FN);
 	gn_instruction_t* temp_instruction = NULL;
-	if (NULL != instruction) {
-		temp_instruction = instruction->next;
-	}
 
-	while (NULL != temp_instruction) {
-		if (OFPIT_APPLY_ACTIONS == instruction->type) {
-			gn_instruction_actions_t* action_instruction = (gn_instruction_actions_t*)instruction;
+	while (NULL != instruction) {
+		temp_instruction = instruction;
+		
+		if ((OFPIT_APPLY_ACTIONS == temp_instruction->type)||(OFPIT_WRITE_ACTIONS == temp_instruction->type)) {
+			gn_instruction_actions_t* action_instruction = (gn_instruction_actions_t*)temp_instruction;
 			gn_action_t* action_p = action_instruction->actions;
 			gn_action_t* temp_p = NULL;
-			if (NULL != action_p) {
-				temp_p = action_p->next;
-			}
-			while (NULL != temp_p) {
-				action_p = NULL;
-				gn_free((void**)&action_p);
-				action_p = temp_p;
-				temp_p = temp_p->next;
-			}
-			if (NULL != action_p) {
-				action_p = NULL;
-				gn_free((void**)&action_p);
+			
+			while(action_p)
+			{
+				temp_p = action_p;
+				action_p = action_p->next;
+				temp_p->next = NULL;
+				gn_free((void**)&temp_p);
+				
 			}
 		}
-		instruction = NULL;
-		gn_free((void**)&instruction);
-		instruction = temp_instruction;
-		temp_instruction = temp_instruction->next;
-	}
-	if (NULL != instruction) {
-		instruction = NULL;
-		gn_free((void**)&instruction);
+		instruction = instruction->next;
+		
+		temp_instruction->next = NULL;
+		gn_free((void**)&temp_instruction);
 	}
 }
-//by:yhy why?(应该是1.3与1.0的差异之处) 装载流表信息并下发流表执行具体的操作
+//by:yhy 在流表中配置QOS
 void set_qos_match(gn_switch_t* sw, flow_param_t* flow_param)
 {
-	if ((NULL == sw) || (QOS_TYPE_OFF == sw->qos_type)) {
+	if ((NULL == sw) || (QOS_TYPE_OFF == sw->qos_type)) 
+	{
 		return ;
 	}
 	gn_oxm_t* match_oxm = NULL;
 	gn_oxm_t* set_oxm = NULL;
 	qos_policy_p policy_p = NULL;
-	if (flow_param->match_param) {
+	if (flow_param->match_param) 
+	{
 		match_oxm = flow_param->match_param;
 	}
-	if ((match_oxm) && (match_oxm->ipv4_dst)) {
+	if ((match_oxm) && (match_oxm->ipv4_dst)) 
+	{
 		policy_p = find_qos_policy_by_sw_dstip(sw, ntohl(match_oxm->ipv4_dst));
 	}
-	if (NULL == policy_p) {
-		if (flow_param->action_param) {
+	if (NULL == policy_p) 
+	{
+		if (flow_param->action_param) 
+		{
 			action_param_t* action = flow_param->action_param;
-			while (action) {
-				if (OFPAT13_SET_FIELD == action->type) {
+			while (action) 
+			{
+				if (OFPAT13_SET_FIELD == action->type) 
+				{
 					set_oxm = (gn_oxm_t*)action->param;
 				}
 				action = action->next;
 			}
 		}
-		if ((set_oxm) && (0 != set_oxm->ipv4_dst)) {
+		if ((set_oxm) && (0 != set_oxm->ipv4_dst)) 
+		{
 			policy_p = find_qos_policy_by_sw_dstip(sw, ntohl(set_oxm->ipv4_dst));
 		}
 	}
-	if ((policy_p) && (policy_p->qos_service)){
-		if (QOS_TYPE_METER == sw->qos_type) {
+	if ((policy_p) && (policy_p->qos_service))
+	{
+		if (QOS_TYPE_METER == sw->qos_type) 
+		{
 			qos_meter_p meter_p = policy_p->qos_service;
 			add_action_param(&flow_param->instruction_param, OFPIT_METER, (void*)&meter_p->meter_id);
 		}
-		else if (QOS_TYPE_QUEUE== sw->qos_type) {
+		else if (QOS_TYPE_QUEUE== sw->qos_type) 
+		{
 			gn_queue_t* queue_p = policy_p->qos_service;
-			add_action_param_rear(&flow_param->action_param, OFPAT13_SET_QUEUE, (void*)&queue_p->queue_id);
+			
+			add_action_param(&flow_param->action_param, OFPAT13_SET_QUEUE, (void*)&queue_p->queue_id);
 		}
-		else {
+		else 
+		{
+			//do nothing
 		}
 	}
 }
 
 //by:yhy 对sw按照参数装载一条流表项
-void install_fabric_flows(gn_switch_t * sw,
+INT4 install_fabric_flows(gn_switch_t * sw,
 						  UINT2 idle_timeout,
 						  UINT2 hard_timeout,
 						  UINT2 priority,
@@ -3155,6 +3521,7 @@ void install_fabric_flows(gn_switch_t * sw,
 						  UINT1 command,
 						  flow_param_t* flow_param)
 {
+	INT4 ret = GN_ERR;
 	flow_mod_req_info_t flow_mod_req;
     gn_flow_t flow;
     memset(&flow, 0, sizeof(gn_flow_t));
@@ -3164,7 +3531,7 @@ void install_fabric_flows(gn_switch_t * sw,
 	flow.priority = priority;
 	flow.table_id = table_id;
 	flow.match.type = OFPMT_OXM;
-	set_qos_match(sw, flow_param);
+	//set_qos_match(sw, flow_param);
 	set_flow_match(&flow.match.oxm_fields, flow_param->match_param);
 	flow.instructions = set_flow_instruction(flow.instructions, flow_param->instruction_param);
 	set_flow_action(flow.instructions, flow_param->action_param, OFPIT_APPLY_ACTIONS);
@@ -3175,9 +3542,13 @@ void install_fabric_flows(gn_switch_t * sw,
 	flow_mod_req.command = command;
 	flow_mod_req.flags = OFPFF13_SEND_FLOW_REM;
 	flow_mod_req.flow = &flow;
-	if(CONNECTED == sw->conn_state)
+	if(sw&&(CONNECTED == sw->conn_state))
+	{
 		sw->msg_driver.msg_handler[OFPT13_FLOW_MOD](sw, (UINT1 *)&flow_mod_req);
+		ret = GN_OK;
+	}
 	clear_flow_temp_data(flow.instructions);
+	return ret;
 }
 
 
@@ -3237,31 +3608,17 @@ void add_action_param_rear(action_param_t** action_param, INT4 type, void* param
 	new_param->type = type;
 	new_param->param = param;
 	new_param->next = NULL;
-	action_param_t* list = *action_param;
-	while (list->next) {
-		list = list->next;
-	}
-	list->next = new_param;
+	*action_param = new_param;
 }
 
 void clear_action_param(action_param_t* action_param)
 {
 	action_param_t* temp = NULL;
-	if (NULL != action_param) {
-		temp = action_param->next;
-	}
-
-	while (NULL != temp) {
-		temp = action_param->next;
-		action_param = NULL;
-		gn_free((void**)&action_param);
-		action_param = temp;
-		temp = temp->next;
-	}
-
-	if (NULL != action_param) {
-		gn_free((void**)&action_param);
-		action_param = temp;
+	while (NULL != action_param) {
+		temp = action_param;
+		action_param = action_param->next;
+		
+		gn_free((void**)&temp);
 	}
 }
 //by:yhy 生成一flow_param,分配内存空间并初始化
@@ -3281,8 +3638,7 @@ flow_param_t* init_flow_param()
 //by:yhy 销毁一flow_param,资源回收
 void clear_flow_param(flow_param_t* flow_param)
 {
-	flow_param->match_param = NULL;
-	gn_free((void**)&flow_param->match_param);
+	gn_free((void**)&(flow_param->match_param));
 	clear_action_param(flow_param->instruction_param);
 	clear_action_param(flow_param->action_param);
 	clear_action_param(flow_param->write_action_param);
@@ -3508,11 +3864,13 @@ void fabric_openstack_install_fabric_floaing_vip_flows(p_fabric_host_node src_po
 		memcpy(dst_gateway_mac, vip_mac, 6);
 
 
-	if (src_port->sw == dst_port->sw) {
+	if (src_port->sw == dst_port->sw) 
+	{
 		src_outport = dst_port->port;
 		dst_outport = src_port->port;
 	}
-	else {
+	else 
+	{
 		src_tag = of131_fabric_impl_get_tag_sw(src_port->sw);
 		dst_tag = of131_fabric_impl_get_tag_sw(dst_port->sw);
 

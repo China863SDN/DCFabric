@@ -1,31 +1,3 @@
-/*
- * GNFlush SDN Controller GPL Source Code
- * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
- *
- * This file is part of the GNFlush SDN Controller. GNFlush SDN
- * Controller is a free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, , see <http://www.gnu.org/licenses/>.
- */
-
-/******************************************************************************
-*                                                                             *
-*   File Name   : qos-policy-file.c           *
-*   Author      : bnc Administrator           *
-*   Create Date : 2016-05-27           *
-*   Version     : 1.0           *
-*   Function    : .           *
-*                                                                             *
-******************************************************************************/
 #include "qos-policy-file.h"
 #include "../conn-svr/conn-svr.h"
 #include "qos-mgr.h"
@@ -35,30 +7,29 @@ ini_file_t* g_qos_file;
 #define QOS_FILE "./config/qos_policy.ini"
 
 
-/* function body */
-// initi qos policy file
+/* by:yhy
+ * 读取QOS策略
+ */
 void init_qos_policy_file()
 {
-	// get qos file 
 	g_qos_file = read_ini(QOS_FILE);
-
-	// if not exist
     if(NULL == g_qos_file)
     {
-    	// output log
         LOG_PROC("ERROR", "Get Qos file failed! Please check the QOS_FILE");  
     }
-	// if exist
-	else {
-		// get qos policy from local file
+	else 
+	{
 		read_qos_policy_from_file();
 	}
 }
 
-// save qos to file
+/* by:yhy
+ * 将QOS策略保存至配置文件
+ */
 INT4 save_qos_policy_to_file(qos_policy_p policy_p)
 {
-	if ((NULL != policy_p) && (NULL != policy_p->sw)) {
+	if ((NULL != policy_p) && (NULL != policy_p->sw)) 
+	{
 		INT1 title[48] = {0};
 		INT1 dpid_str[48] = {0};
 		INT1 id_str[48] = {0};
@@ -90,10 +61,11 @@ INT4 save_qos_policy_to_file(qos_policy_p policy_p)
 	return 0;
 }
 
-// remove qos from file
+
 INT4 remove_qos_policy_from_file(qos_policy_p policy_p)
 {
-	if ((NULL != policy_p) && (NULL != policy_p->sw)) {
+	if ((NULL != policy_p) && (NULL != policy_p->sw)) 
+	{
 		INT1 title[48] = {0};
 		sprintf(title, "[qos_id_%d]", policy_p->qos_policy_id);
 
@@ -105,12 +77,15 @@ INT4 remove_qos_policy_from_file(qos_policy_p policy_p)
 	return 0;
 }
 
-// read qos from file
+/* by:yhy
+ * 从QOS文件中读取策略至内存
+ */
 INT4 read_qos_policy_from_file()
 {
 	INT4 seq = 1;
 
-	for (; seq < QOS_POLICY_MAX_NUM; seq++) {
+	for (; seq < QOS_POLICY_MAX_NUM; seq++) 
+	{
 		INT1 title[48] = {0};
 
 		INT1 qos_policy_name[QOS_POLICY_NAME_LENGTH];
@@ -124,7 +99,8 @@ INT4 read_qos_policy_from_file()
 		
 		sprintf(title, "[qos_id_%d]", seq);
 		
-		if (NULL != get_selection_by_selection(g_qos_file, title)) {
+		if (NULL != get_selection_by_selection(g_qos_file, title)) 
+		{
 			
 			INT1 *value = NULL;
 			value = get_value(g_qos_file, title, "name");

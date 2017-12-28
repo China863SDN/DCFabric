@@ -178,6 +178,10 @@ void *mem_create(UINT4 block , UINT4 len)   //块大小,块数量
 void *mem_get(void *pool)
 {
     void *data;
+	if(NULL == pool)
+	{
+		return NULL;
+	}
     data = Queue_Out(pool);
     return data;
 }

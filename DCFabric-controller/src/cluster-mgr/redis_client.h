@@ -63,6 +63,13 @@
 #define MAX_PAD_LEN  64
 extern UINT4 MAX_FILED_NUM;
 extern UINT4 TABLE_DATA_LEN;
+extern INT4	g_iRedisSyncFd[2] ;
+
+enum NODE_SYNC_TYPE
+{
+	DATASYNC_TIMER = 0x01,
+	DATASYNC_TRIGGER = 0x02
+};
 
 //node type
 enum NODE_TYPE
@@ -108,7 +115,8 @@ enum HOST_LIST_FILED_TYPE
 //openstack external list filed type
 enum EXTERNAL_FILED_TYPE 
 {
-    EXTERNAL_NETWORK_ID = 0x21,
+    EXTERNAL_NETWORK_ID = 0x20,
+	EXTERNAL_SUBNETWORK_ID= 0X21,	
     EXTERNAL_GATEWAY_IP = 0x22,
     EXTERNAL_OUTER_INTERFACE_IP = 0x23,
     EXTERNAL_GATEWAY_MAC = 0x24,
@@ -157,6 +165,7 @@ typedef struct field_pad
 {
 	UINT1 type;
 	UINT1 len;
+	UINT1 rev[6];
 	INT1  pad[MAX_PAD_LEN];
 }field_pad_t;
 

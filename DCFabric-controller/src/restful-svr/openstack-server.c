@@ -27,7 +27,6 @@
  *  Modified on: sep 11, 2015
  */
 
-#include "openstack-server.h"
 #include <stdio.h>
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -48,15 +47,16 @@
 #include "fabric_openstack_external.h"
 #include "fabric_openstack_nat.h"
 #include "fabric_thread.h"
+#include "fabric_openstack_gateway.h"
 #include "openstack_lbaas_app.h"
 #include "timer.h"
 #include "openstack_routers.h"
+#include "openstack_qos_app.h"
 #include "../conn-svr/conn-svr.h"
 #include "event.h"
-
-void createPortFabric(char* jsonString,const char* stringType);
-
-void createPortForward(char* jsonString, port_forward_param_p forwardParam);
+#include "openstack-server.h"
+#include "openstack_clbaas_app.h"
+#include "openstack_dataparse.h"
 
 
 static char * g_openstack_server_name;
@@ -66,85 +66,125 @@ char g_openstack_ip[16] = {0};
 UINT4 g_openstack_on = 0;
 //by:yhy openstack特殊服务用保留IP,被初始化成169.254.169.254 此ip表示DHCP没有获得到ip,便分配成这个保留IP
 UINT4 g_openstack_fobidden_ip = 0;
-//by:yhy 未使用
-INT4 numm = 0;
 
-UINT1 FirstTime_GetSecurityInfo =1;
+
 
 //定时刷新
 void 	*g_reload_timer 	= NULL;
 void 	*g_reload_timerid 	= NULL;
-UINT4 	g_reload_interval 	= 30;
+UINT4 	 g_reload_interval 	= 30;
 
+UINT1 	Openstack_Info_Ready_flag =0;
 //端口转发列表
 static struct _openstack_port_forward *  local_openstack_forward_list = NULL;
-extern openstack_security_p g_openstack_security_list ;
-extern openstack_security_p g_openstack_security_list_temp ;
+
+
+
+
+
+
+stopenstack_parse  CreateOpenstackInfo[] =
+{
+	{"network", 				EOPENSTACK_GET_NORMAL, 			createOpenstackNetwork			},
+	{"router", 					EOPENSTACK_GET_NORMAL, 			createOpenstackRouter				},
+	{"subnet", 					EOPENSTACK_GET_NORMAL, 			createOpenstackSubnet				},
+	{"port",   					EOPENSTACK_GET_NORMAL, 			createOpenstackPort				},
+	{"floating",   				EOPENSTACK_GET_NORMAL, 			createOpenstackFloating			},
+	{"security-group-rules",   	EOPENSTACK_GET_NORMAL, 			createOpenstackSecurity			},
+		
+	{"pools",   				EOPENSTACK_GET_LOADBALANCE, 	createOpenstackLbaaspools		},
+	{"vips",   					EOPENSTACK_GET_LOADBALANCE, 	createOpenstackLbaasvips			},
+	{"lbmem",   				EOPENSTACK_GET_LOADBALANCE, 	createOpenstackLbaasmember		},
+	{"lblistener",   			EOPENSTACK_GET_LOADBALANCE, 	createOpenstackLbaaslistener		},
+
+	{"port_forward",   			EOPENSTACK_GET_PORTFORWARD, 	createOpenstackPortforward		},
+	{"clbpools",   				EOPENSTACK_GET_CLBLOADBALANCE, 	createOpenstackClbaaspools		},
+	{"clbvips",   				EOPENSTACK_GET_CLBLOADBALANCE, 	createOpenstackClbaasvips		},
+	{"clbloadbalancers",		EOPENSTACK_GET_CLBLOADBALANCE,  createOpenstackClbaasloadbalancer},
+	{"clbinterfaces",			EOPENSTACK_GET_CLBLOADBALANCE,	createOpenstackClbaasinterface	},
+	{"clblistener",   			EOPENSTACK_GET_CLBLOADBALANCE, 	createOpenstackClbaaslistener	},
+	{"clbbackends",   			EOPENSTACK_GET_CLBLOADBALANCE, 	createOpenstackClbaasbackend		},
+	{"clbbackendlisten",   		EOPENSTACK_GET_CLBLOADBALANCE, 	createOpenstackClbaasbackendListen}
+	
+
+};
+
 
 //by:yhy  从openstack的控制节点通过restfulAPI获取token id
 //操作成功返回"1"失败返回"0"
 int getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 {
-    int sockfd, ret, i, h, iErrno = 0;
-    int Length_BuffSended =0;
+    int sockfd = -1, ret, i, h, iErrno = 0;
+    int Length_BuffSended =0;	
+    INT4 sockopt = 1;
     struct sockaddr_in servaddr;
     char str1[4096], str2[4096], buf1[4096], buf2[819200], str[128];
     socklen_t len;
     fd_set   t_set1;
     struct timeval  tv;
 
-    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) 
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     {
         iErrno = errno; 
         LOG_PROC("ERROR", "%s -- socket error! Error code: %d",FN,iErrno);
         return 0;
     }
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (char *)&sockopt, sizeof(sockopt));
+    setsockopt(sockfd, SOL_SOCKET, SO_REUSEPORT, (char *)&sockopt, sizeof(sockopt));
+
     bzero(&servaddr, sizeof(servaddr));
     servaddr.sin_family = AF_INET;
     servaddr.sin_port = htons(35357);
-    if (inet_pton(AF_INET, ip, &servaddr.sin_addr) <= 0 )
+    if (inet_pton(AF_INET, ip, &servaddr.sin_addr) <= 0)
     {
         iErrno = errno; 
         LOG_PROC("ERROR", "%s -- net_pton error! Error code: %d",FN,iErrno);
+		close(sockfd);
         return 0;
     }
 
+    connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+#if 0
     if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
     {
         iErrno = errno; 
         LOG_PROC("ERROR", "%s -- connect error! Error code: %d",FN,iErrno);
         return 0;
     }
+#endif
 
     memset(str2, 0, 4096);
     strcat(str2, "{\"auth\": {\"tenantName\": \"");
-    strcat(str2,tenantName);
-    strcat(str2,"\",\"passwordCredentials\": {\"username\":\"");
-    strcat(str2,username);
-    strcat(str2,"\",\"password\":\"");
-    strcat(str2,password);
-    strcat(str2,"\"}}}");
+    strcat(str2, tenantName);
+    strcat(str2, "\",\"passwordCredentials\": {\"username\":\"");
+    strcat(str2, username);
+    strcat(str2, "\",\"password\":\"");
+    strcat(str2, password);
+    strcat(str2, "\"}}}");
     memset(str, 0, 128);
     len = strlen(str2);
     sprintf(str, "%d", len);
 
     memset(str1, 0, 4096);
-    strcat(str1, "POST /v2.0/tokens HTTP/1.0\n");
-    strcat(str1, "Content-Type: application/json\n");
+    strcat(str1, "POST /v2.0/tokens HTTP/1.0\r\n");
+    strcat(str1, "Content-Type: application/json\r\n");
     strcat(str1, "Content-Length: ");
     strcat(str1, str);
-    strcat(str1, "\n\n");
-
-    strcat(str1, str2);
     strcat(str1, "\r\n\r\n");
 
-    while(Length_BuffSended !=strlen(str1))
+    strncat(str1, str2, 4096-strlen(str1)-5);
+    strcat(str1, "\r\n\r\n");
+    //LOG_PROC("INFO", "%s %d:%s",FN,LN,str1);
+
+    Length_BuffSended = 0;
+    while (Length_BuffSended != strlen(str1))
     {
-        ret = send(sockfd,(str1+Length_BuffSended),(strlen(str1)-Length_BuffSended),0); 
-        if(ret <0)
+        ret = send(sockfd, (str1+Length_BuffSended), strlen(str1+Length_BuffSended), 0); 
+        if (ret < 0)
         {
             iErrno = errno;
-            if((EINTR== iErrno)||(EAGAIN ==iErrno))
+            if ((EINTR == iErrno) || (EAGAIN == iErrno))
             {
                 continue;
             }
@@ -162,58 +202,86 @@ int getNewTokenId(char *ip,char *tenantName,char *username,char *password)
     }
 
     memset(buf2, 0, 819200);
-    while(1)
+    while (1)
     {
         // usleep(1000000);
-        tv.tv_sec= 1;
-        tv.tv_usec= 0;
+        tv.tv_sec = 3; //wait 3s for peer's answer
+        tv.tv_usec = 0;
         FD_ZERO(&t_set1);
         FD_SET(sockfd, &t_set1);
-        h= 0;
-        h= select(sockfd +1, &t_set1, NULL, NULL, &tv);
+
+        h = select(sockfd +1, &t_set1, NULL, NULL, &tv);
         if (h > 0) 
         {
-            memset(buf1, 0, 4096);
-            i= read(sockfd, buf1, 4095);
-            if (i > 0)
+            while (1)
             {
-                strcat(buf2, buf1);
+                memset(buf1, 0, 4096);
+                i = read(sockfd, buf1, 4095);
+                if (i > 0)
+                {
+                    strcat(buf2, buf1);
+                }
+                else if (i < 0)
+                {
+                    iErrno = errno;
+                    if ((EAGAIN == iErrno) || (EINTR == iErrno))
+                    {
+                        //LOG_PROC("DEBUG", "%s %d:continue read",FN,LN);
+                        continue;
+                    }
+                    else
+                    {
+                        LOG_PROC("ERROR", "%s %d:read error code: %d",FN,LN,iErrno);
+                        close(sockfd);
+                        return 0;
+                    }
+                }
+                else
+                {
+                    //LOG_PROC("DEBUG", "%s %d:read finished",FN,LN);
+                    break;
+                }
             }
-            else if (0 == i)
-            {
-                break;
-            }
+
+            break; //after all data received, stop select.
         }
         else if (h < 0)
         {
             iErrno = errno;
-            if(EAGAIN == iErrno || EINTR== iErrno)
+            if ((EAGAIN == iErrno) || (EINTR == iErrno))
             {
+                LOG_PROC("DEBUG", "%s %d:continue select",FN,LN);
                 continue;
             }
             else
             {
-                LOG_PROC("ERROR", "%s,select error code: %d",FN,iErrno);
+                LOG_PROC("ERROR", "%s %d:select error code: %d",FN,LN,iErrno);
                 close(sockfd);
                 return 0;
             }
+        } else {
+            LOG_PROC("WARNING", "%s %d:select timeout within 3s",FN,LN);
+            break;
         }
     }
 
     close(sockfd);
+    sockfd = -1;
 
     const char *p = strstr(buf2,"\r\n\r\n");
-	if( NULL == p)
-	{
-		LOG_PROC("ERROR", "%s %d",FN,LN);
+    if (NULL == p)
+    {
+        LOG_PROC("ERROR", "%s %d buf2 = %s",FN,LN,buf2);
         return 0;
-	}
+    }
+
     INT4 parse_type = 0;
     json_t *json=NULL;
-
+	//LOG_PROC("INFO", "%s %d:%s",FN,LN,p);
     parse_type = json_parse_document(&json,p);
-    if (parse_type != JSON_OK)
+    if((parse_type != JSON_OK)||(NULL == json))
     {
+		LOG_PROC("ERROR", "%s %d:json_parse_document failed",FN,LN);
         return 0;
     }
     else
@@ -234,14 +302,21 @@ int getNewTokenId(char *ip,char *tenantName,char *username,char *password)
                         if(token_t)
                         {
                             json_t *token_id = json_find_first_label(token_t,"id");
-                            if(token_id)
+                            if(token_id&&token_id->child)
                             {
-                                g_openstack_server_name = token_id->child->text;
+                                //g_openstack_server_name = token_id->child->text;
+                                strcpy(g_openstack_server_name, token_id->child->text);
+								json_free_value(&token_id);
                             }
+							json_free_value(&token_t);
                         }
+						json_free_value(&token);
                     }
+					json_free_value(&access_t);
                 }
+				json_free_value(&access);
             }
+			json_free_value(&json);
         }
         else
         {
@@ -255,7 +330,7 @@ int getNewTokenId(char *ip,char *tenantName,char *username,char *password)
 //by:yhy 获得openstack北桥数据
 //这一部分restful与openstack控制节点
 //最终数据更新入g_openstack_host_network_list
-void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param, enum EOpenStack_GetType getType){
+INT4 getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param, enum EOpenStack_GetType getType){
 	char *string;
 	int sockfd, ret, i, h,iErrno = 0;
 	int Length_BuffSended =0;
@@ -264,29 +339,36 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
 	socklen_t len;
 	fd_set   t_set1;
 	struct timeval  tv;
+	int k = 0;
 
-	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0 ) 
+	if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
 	{
 		iErrno = errno;	
 		LOG_PROC("ERROR", "%s -- socket error! iErrno: %d",FN,iErrno);
-		return ;
-	};
+		return GN_ERR;
+	}
+    fcntl(sockfd, F_SETFL, O_NONBLOCK);
+
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
 	servaddr.sin_port = htons(port);
-	if (inet_pton(AF_INET, ip, &servaddr.sin_addr) <= 0 )
+	if (inet_pton(AF_INET, ip, &servaddr.sin_addr) <= 0)
 	{
 		iErrno = errno; 
 		LOG_PROC("ERROR", "%s -- net_pton error! iErrno: %d",FN,iErrno);
-		return ;
+		return GN_ERR;
 	};
+
 	//by:yhy 捆绑套接字
+	connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr));
+#if 0
 	if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
 	{
 		iErrno = errno;
 		LOG_PROC("ERROR", "%s -- connect error! iErrno: %d",FN,iErrno);
-		return ;
+		return GN_ERR;
 	}
+#endif
 
 	char str_tenantname[48] = {0};
 	char str_username[48] = {0};
@@ -300,13 +382,15 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
 
 	value = get_value(g_controller_configure, "[openvstack_conf]", "password");
 	NULL == value ? strncpy(str_password, "admin", 48 - 1) : strncpy(str_password, value, 48 - 1);
-	
+
+	memset(g_openstack_server_name, 0, 1024);
+	 
 	//by:yhy 获取token
-		
     if (0 == getNewTokenId(ip, str_tenantname, str_username, str_password))	
 	{
 		LOG_PROC("ERROR", "---%s %d  getNewTokenId",FN,LN);
-		return ;
+		close(sockfd);
+		return GN_ERR;
 	}
 
 	memset(str2, 0, 4096);
@@ -317,32 +401,32 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
 
 	memset(str1, 0, 4096);
     strcat(str1, "GET ");
-	strcat(str1,url);
+	strcat(str1, url);
 	strcat(str1, " HTTP/1.1\n");
 	strcat(str1, "Content-Type:application/json\n");
-	strcat(str1,"X-Auth-Token:");
+	strcat(str1, "X-Auth-Token:");
 	if (NULL == g_openstack_server_name) 
 	{
 		LOG_PROC("ERROR", "Openstack authentication failure! Please check the configuration.");
-
-        return ;
+        close(sockfd);
+        return GN_ERR;
 	}
-	strcat(str1,g_openstack_server_name);
-	strcat(str1,"\n\n");
+	strcat(str1, g_openstack_server_name);
+	strcat(str1, "\n\n");
 	strcat(str1, "Content-Length: ");
 	strcat(str1, str);
 	strcat(str1, "\n\n");
 	strcat(str1, str2);
 	strcat(str1, "\r\n\r\n");
 
-	
-	while(Length_BuffSended !=strlen(str1))
+    Length_BuffSended = 0;
+	while (Length_BuffSended != strlen(str1))
 	{
-		ret = send(sockfd,(str1+Length_BuffSended),(strlen(str1)-Length_BuffSended),0); 
-		if(ret <0)
+		ret = send(sockfd, (str1+Length_BuffSended), strlen(str1+Length_BuffSended), 0); 
+		if (ret <0)
 		{
 			iErrno = errno;
-			if((EINTR== iErrno)||(EAGAIN ==iErrno))
+			if ((EINTR == iErrno) || (EAGAIN == iErrno))
 			{
 				continue;
 			}
@@ -350,8 +434,7 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
 			{
 				LOG_PROC("ERROR", "%s,Send Error Code: %d",FN,iErrno);
 				close(sockfd);
-
-				return;
+				return GN_ERR;
 			}
 		}
 		else
@@ -359,57 +442,93 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
 			Length_BuffSended += ret;
 		}
 	}
+
 	memset(str3, 0, 819200);
-	while(1)
+	int t_start = time(NULL);
+	while (1)
 	{
 		// usleep(1000000);
+		tv.tv_sec = 5;
+		tv.tv_usec = 0;
         FD_ZERO(&t_set1);
         FD_SET(sockfd, &t_set1);
 
-		tv.tv_sec= 1;
-		tv.tv_usec= 0;
-		h= 0;
-		h= select(sockfd +1, &t_set1, NULL, NULL, &tv);
-
+		h = select(sockfd +1, &t_set1, NULL, NULL, &tv);
 		if (h > 0)
 		{
-			memset(buf, 0, 4096);
-			i= read(sockfd, buf, 4095);
-			strcat(str3,buf);
-			if (0 == i)
-			{
-				close(sockfd);
-				break;
-			}
+            while (1)
+            {
+    			memset(buf, 0, 4096);
+    			i = read(sockfd, buf, 4095);
+    			if (i > 0) 
+                {
+    			    strcat(str3, buf);
+                }
+                else if (i < 0)
+                {
+                    iErrno = errno;
+                    if ((EAGAIN == iErrno) || (EINTR == iErrno))
+                    {
+                        //LOG_PROC("DEBUG", "%s %d:continue read",FN,LN);
+                        continue;
+                    }
+                    else
+                    {
+                        LOG_PROC("ERROR", "%s %d:read error code: %d url=%s",FN,LN,iErrno,url);
+                        close(sockfd);
+                        return 0;
+                    }
+                }
+                else
+                {
+                    //LOG_PROC("DEBUG", "%s %d:read finished",FN,LN);
+                    break;
+                }
+            }
+            
+            break; //after all data received, stop select.
 		}
         else if (h < 0)
         {
 			iErrno = errno;
-			if(EAGAIN == iErrno || EINTR== iErrno)
+			if (EAGAIN == iErrno || EINTR == iErrno)
 			{
+                LOG_PROC("DEBUG", "%s %d:continue select url=%s",FN,LN,url);
 				continue;
 			}
 			else
 			{
-				LOG_PROC("ERROR", "%s,select error code: %d",FN,iErrno);
+				LOG_PROC("ERROR", "%s,select error code: %d url=%s",FN,iErrno,url);
 				close(sockfd);
-				return;
+				return GN_ERR;
 			}
+        } else {
+            LOG_PROC("WARNING", "%s %d:select timeout within %d s url=%s",FN,LN,tv.tv_sec,url);
+            break;
         }
 	}
+
 	close(sockfd);
+    sockfd = -1;
+	
+    int t_end = time(NULL);
+	if(t_end - t_start >= 3)
+	{
+		LOG_PROC("INFO", "%s %d:recv within %d s url=%s",FN,LN,t_end - t_start,url);
+	}
+	
 	char *p = strstr(str3,"\r\n\r\n");
 	if(NULL == p)
 	{
 		LOG_PROC("ERROR", "%s %d",FN,LN);
-		return;
+		return GN_ERR;
 	}
 	char *strend = "<head>";
     char *p1 = strstr(p,strend);
 	if(NULL == p1)
 	{
 		LOG_PROC("ERROR", "%s %d",FN,LN);
-		return;
+		return GN_ERR;
 	}
 	int endindex=p1-p;
 	if(endindex>0)  
@@ -419,27 +538,33 @@ void getOpenstackInfo(char *ip,char *url,int port,char *stringType, void* param,
         string[endindex-1]='\0';
     }
 
-	if(EOPENSTACK_GET_NORMAL == getType)
-	{	
-		createPortFabric(string,stringType);
-	}
-	else if(EOPENSTACK_GET_PORTFORWARD == getType)
+	if(EOPENSTACK_GET_QOS == getType)
 	{
-		LOG_PROC("INFO", "EOPENSTACK_GET_PORTFORWARD");
-		createPortForward(string, param); 
+		//LOG_PROC("INFO", "%s ", string);
+		openstack_qos_rule_ConventDataFromJSON(string);
+		
 	}
 
-
+	for (k=0; k < sizeof(CreateOpenstackInfo)/sizeof(stopenstack_parse); k++)
+	{
+		if((getType == CreateOpenstackInfo[k].eGetType)&&(0 == strcmp(stringType, CreateOpenstackInfo[k].stringType)))
+		{
+			//LOG_PROC("INFO", "%s \n", string);
+			CreateOpenstackInfo[k].callback_func(string, param );
+			break;
+		}
+	}
 	if(string != NULL)
 	{
 		free(string);
 	}
-
+	return GN_OK;
 }
 
 //by:yhy 更新openstack的浮动IP
-void updateOpenstackFloating()
+INT4 updateOpenstackFloating()
 {
+	INT4 iRet = GN_ERR;
 	// config
 	INT1 *value = NULL;
 
@@ -455,13 +580,15 @@ void updateOpenstackFloating()
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
 		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
 		//
-		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating" , NULL, EOPENSTACK_GET_NORMAL);
+		iRet = getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating" , NULL, EOPENSTACK_GET_NORMAL);
 		// LOG_PROC("INFO", "Openstack Floating Info Updated");
 	}
 	else
 	{
 		LOG_PROC("INFO", "Openstack Floating Info Update Failed");
+		iRet = GN_ERR;
 	}
+	return iRet;
 }
 
 void show_create_port_log(const char* stringType, INT4 totalNum)
@@ -480,1036 +607,14 @@ void remove_unchecked_port(char* stringType)
 {
 	// TBD
 }
-//by:yhy  根据stringtype提取jsonstring中的有效信息  并将有效信息构建成openstack_network_p更新入g_openstack_host_network_list
-void createPortFabric( char *jsonString,const char *stringType)
-{
-    const char *tempString = jsonString;
-	INT4 parse_type = 0;
-	INT4 totalNum = 0;
-	json_t *json=NULL,*temp=NULL;
-	char* networkType="network",*subnetType="subnet",*portType="port",*floatingType="floating", *routersType="routers";
-	char* securityType = "security-group-rules";
-	char* lbpools = "pools";
-	char* lbvips = "vips";
-	char* lbmembers = "lbmem";
-	char* lblistener = "lblistener";
-	char tenant_id[48] ={0};
-	char network_id[48] = {0};
-	char subnet_id[48] = {0};
-	char port_id[48] = {0};
-	char cidr[30] = {0};
-	char router_id[48]={0};
-	char security_group_id[48]={0};
-	char direction[48] = {0};
-	char ethertype[48] = {0};
-	char rule_id[48] = {0};
-	char port_range_max[48] = {0};
-	char port_range_min[48] = {0};
-	char protocol[48] = {0};
-	char remote_group_id[48] = {0};
-	char remote_ip_prefix[48] = {0};
-	char security_tenant_id[48] = {0};
-        char routers_id[128] = {0};
-        char routers_external_ip[48] = {0};
-	UINT2 security_num = 0;
-	UINT2 security_num_temp = 0;
-	UINT1* security_port_p = NULL;
-	UINT1* security_port_p_temp = NULL;
-	//LOG_PROC("INFO", "%s",FN);
-	parse_type = json_parse_document(&json,tempString);
-	if (parse_type != JSON_OK)
-	{
-		return;
-	}
-	else
-	{
-		if (json) 
-		{
-			if(strcmp(stringType,networkType)==0)
-			{
-				json_t *networks = json_find_first_label(json, "networks");
-			    UINT1 shared=0;
-				UINT1 external=0;
-				if(networks)
-				{
-					json_t *network  = networks->child->child;
-					while(network)
-					{
-						temp = json_find_first_label(network, "tenant_id");
-						if(temp)
-						{
-							strcpy(tenant_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(network, "id");
-						if(temp)
-						{
-							strcpy(network_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(network, "shared");
-						if(temp)
-						{
-							if(temp->child->type==JSON_TRUE)
-							{
-								shared=1;
-							}
-							else if(temp->child->type==JSON_FALSE)
-							{
-								shared=0;
-							}
-							else
-							{
-							}
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(network, "router:external");
-						if(temp)
-						{
-							if(temp->child->type==JSON_TRUE)
-							{
-								external=1;
-							}
-							else if(temp->child->type==JSON_FALSE)
-							{
-								external=0;
-							}
-							else
-							{
-							}
-							json_free_value(&temp);
-						}
-						openstack_network_p network_p = update_openstack_app_network(tenant_id,network_id,shared,external);
-						if ((network_p) && (is_check_status_changed(network_p->check_status))) 
-						{
-							totalNum ++;
-						}
-						network=network->next;
-					}
-					json_free_value(&networks);
-				}
-			}
-       		       else if(0 == strcmp(stringType, routersType))
-			{ 
-				json_t *routers = json_find_first_label(json, "routers");
-				if(routers)
-				{
-					json_t * pRouter  = routers->child->child;
-					while(pRouter)
-					{
-						memset(routers_id, 0, sizeof(routers_id));
-    
-						temp = json_find_first_label(pRouter, "id");
-						if(temp)
-						{
-							strcpy(routers_id,temp->child->text);
-							json_free_value(&temp);
-						}
 
-						update_openstack_router_list(&g_openstack_router_list, routers_id, routers_external_ip, network_id);
 
-						pRouter=pRouter->next;
-					}
-					json_free_value(&routers);
-				}
-			}
-			else if(strcmp(stringType,subnetType)==0)
-			{
-//				char *tenant_id,*network_id,*subnet_id,*cidr;
-				INT4 gateway_ip = 0, start_ip = 0, end_ip = 0;
-				UINT1 gateway_ipv6[16] = {0};
-				UINT1 start_ipv6[16] = {0};
-				UINT1 end_ipv6[16] = {0};
-				json_t *subnets = json_find_first_label(json, "subnets");
-				UINT4 longtemp = 0;
-				if(subnets)
-				{
-					json_t *subnet  = subnets->child->child;
-					while(subnet)
-					{
-						temp = json_find_first_label(subnet, "tenant_id");
-						if(temp)
-						{
-							strcpy(tenant_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(subnet, "network_id");
-						if(temp)
-						{
-							strcpy(network_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(subnet, "id");
-						if(temp)
-						{
-							strcpy(subnet_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(subnet, "cidr");
-						if(temp)
-						{
-							strcpy(cidr,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(subnet, "gateway_ip");
-						if(temp)
-						{
-							memset(gateway_ipv6, 0, 16);
-							gateway_ip = 0;
-							if(temp->child->text)
-							{
-								if (strchr(temp->child->text, ':')) 
-								{
-									ipv6_str_to_number(temp->child->text, gateway_ipv6);
-								}
-								else 
-								{
-									longtemp = inet_addr(temp->child->text) ;
-									gateway_ip = longtemp;
-								}
-							}
-							json_free_value(&temp);
-						}
-						json_t *allocations = json_find_first_label(subnet, "allocation_pools");
-						if(allocations)
-						{
-							json_t *allocation = allocations->child->child;
-							while(allocation)
-							{
-								temp = json_find_first_label(allocation, "start");
-								if(temp)
-								{
-									memset(start_ipv6, 0, 16);
-									start_ip = 0;
-									if(temp->child->text)
-									{
-										if (strchr(temp->child->text, ':')) 
-										{
-											ipv6_str_to_number(temp->child->text, start_ipv6);
-										}
-										else 
-										{
-											longtemp = inet_addr(temp->child->text) ;
-											start_ip = longtemp;
-										}
-									}
-									json_free_value(&temp);
-								}
-								temp = json_find_first_label(allocation, "end");
-								if(temp)
-								{
-									memset(end_ipv6, 0, 16);
-									end_ip = 0;
-									if(temp->child->text)
-									{
-										if (strchr(temp->child->text, ':')) 
-										{
-											ipv6_str_to_number(temp->child->text, end_ipv6);
-										}
-										else 
-										{
-											longtemp = inet_addr(temp->child->text) ;
-											end_ip = longtemp;
-										}
-									}
-									json_free_value(&temp);
-								}
-								allocation=allocation->next;
-							}
-							json_free_value(&allocations);
-						}
-						openstack_subnet_p subnet_p = update_openstack_app_subnet(tenant_id,network_id,subnet_id,
-							                                                      gateway_ip,start_ip,end_ip,	
-																				  gateway_ipv6, start_ipv6, end_ipv6, cidr);
-						if ((subnet_p) && (is_check_status_changed(subnet_p->check_status))) 
-						{
-							totalNum ++;
-						}
-						subnet=subnet->next;
-					}
-					json_free_value(&subnets);
-				}
 
-			}
-			else if(strcmp(stringType,portType)==0)
-			{
-				//char *tenant_id,*network_id,*subnet_id,*port_id;
-				char port_type[40] = {0};
-				char* computer="compute:nova";
-				char* computer_none="compute:None";
-				char* dhcp="network:dhcp";
-				char* floating = "network:floatingip";
-				INT4 ip = 0;
-				UINT1 ipv6[16] = {0};
-				UINT1 mac[6]={0};
-				UINT4 port_number = 0;
-				UINT1 type = 0;
-				json_t *ports = json_find_first_label(json, "ports");
-				if(ports){
-					json_t *port  = ports->child->child;
-					while(port){
-						temp = json_find_first_label(port, "tenant_id");
-						if(temp){
-							strcpy(tenant_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(port, "network_id");
-						if(temp){
-							strcpy(network_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(port, "id");
-						if(temp){
-							strcpy(port_id,temp->child->text);
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(port, "device_owner");
-						if(temp){
-							strcpy(port_type,temp->child->text);
-							type = get_openstack_port_type(port_type);
-							//port_type = temp->child->text;
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(port, "mac_address");
-						if(temp){
-							//printf("mac_address:%s \n",);
-							macstr2hex(temp->child->text,mac);
-							json_free_value(&temp);
-						}
-						json_t *fix_ips = json_find_first_label(port, "fixed_ips");
-						if(fix_ips){//ip = temp->child->text;
-							json_t *fix_ip = fix_ips->child->child;
-							while(fix_ip){
-								temp = json_find_first_label(fix_ip, "subnet_id");
-								if(temp){
-									strcpy(subnet_id,temp->child->text);
-									json_free_value(&temp);
-								}
-								temp = json_find_first_label(fix_ip, "ip_address");
-								if(temp){
-									memset(ipv6, 0, 16);
-									ip = 0;
-									if(temp->child->text)
-									{
-										if (strchr(temp->child->text, ':')) {
-											// printf("ipv6: %s\n", temp->child->text);
-											ipv6_str_to_number(temp->child->text, ipv6);
-											//nat_show_ipv6(ipv6);
-										}
-										else {
-											UINT4 longtemp = inet_addr(temp->child->text) ;
-											ip = longtemp;
-										}
-									}
-									json_free_value(&temp);
-								}
-								fix_ip=fix_ip->next;
-							}
-							json_free_value(&fix_ips);
-						}
 
-						json_t *security_groups = json_find_first_label(port, "security_groups");
-						// printf("security_groups\n");
-						if (security_groups) 
-						{
-							json_t *security_group = security_groups->child->child;
-							openstack_node_p head_p = NULL;
-							security_num = 0;
-							security_port_p = NULL;
-							
-							openstack_node_p head_p_temp = NULL;
-							security_num_temp = 0;
-							security_port_p_temp = NULL;
-							while (security_group) 
-							{
-								if(FirstTime_GetSecurityInfo)
-								{
-									openstack_security_p temp_p = update_openstack_security_group(security_group->text);
-									head_p = add_openstack_host_security_node((UINT1*)temp_p, head_p);
-									security_port_p = (UINT1*)head_p;
-									security_num++;	
-									//LOG_PROC("INFO","------333");
-								}
-								else
-								{
-									openstack_security_p temp_p_temp = update_openstack_security_group_temp(security_group->text);
-									head_p_temp = add_openstack_host_security_node((UINT1*)temp_p_temp, head_p_temp);
-									security_port_p_temp = (UINT1*)head_p_temp;
-									security_num_temp++;
-									//LOG_PROC("INFO","---------444");
-								}
-								security_group = security_group->next;
-							}
-							json_free_value(&security_groups);
-						}
-
-						p_fabric_host_node host_p = NULL;
-						if(strcmp(port_type,computer)==0|| strcmp(port_type,floating)==0 || strcmp(port_type,computer_none)==0)
-						{
-							//LOG_PROC("INFO","PORT UPDATE!");
-							if(FirstTime_GetSecurityInfo)
-							{
-								host_p = update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,security_num,security_port_p);
-							}
-							else
-							{
-								host_p = update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,security_num_temp,security_port_p_temp);
-							}
-						}
-						else if(strcmp(port_type,dhcp)==0)
-						{
-							//LOG_PROC("INFO","DHCP UPDATE!");
-							host_p = update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
-							clear_openstack_host_security_node(security_port_p);
-							clear_openstack_host_security_node(security_port_p_temp);
-						}
-						else
-						{
-							//LOG_PROC("INFO","GATEWAY UPDATE!");
-							host_p = update_openstack_app_gateway_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
-							clear_openstack_host_security_node(security_port_p);
-							clear_openstack_host_security_node(security_port_p_temp);
-						}
-
-						if ((host_p) && (is_check_status_changed(host_p->check_status))) 
-						{
-							totalNum++;
-						}
-						port=port->next;
-					}
-					json_free_value(&ports);
-				}
-			}
-			else if(strcmp(stringType,floatingType)==0)
-			{
-				json_t *floatings = json_find_first_label(json, "floatingips");
-				UINT4 fixed_ip;//inner ip
-				UINT4 floating_ip;//outer ip
-				if(floatings){
-					json_t *floating_ip_one  = floatings->child->child;
-					while(floating_ip_one){
-						fixed_ip = 0;
-						floating_ip = 0;
-						bzero(router_id, 48);
-						bzero(port_id, 48);
-						
-						temp = json_find_first_label(floating_ip_one, "router_id");
-						if(temp){
-							if(temp->child->text){
-								strcpy(router_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(floating_ip_one, "port_id");
-						if(temp){
-							if(temp->child->text){
-								strcpy(port_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(floating_ip_one, "fixed_ip_address");
-						if(temp){
-							if(temp->child->text){
-								fixed_ip = inet_addr(temp->child->text);
-							}
-							json_free_value(&temp);
-						}
-						temp = json_find_first_label(floating_ip_one, "floating_ip_address");
-						if(temp){
-							if(temp->child->text){
-								floating_ip = inet_addr(temp->child->text);
-							}
-							json_free_value(&temp);
-						}
-						external_floating_ip_p efp = create_floatting_ip_by_rest(fixed_ip,floating_ip,port_id,router_id);
-						if ((efp) && (is_check_status_changed(efp->check_status))) {
-							totalNum++;
-						}
-						floating_ip_one=floating_ip_one->next;
-						
-					}
-					json_free_value(&floatings);
-				}
-			}
-			else if(strcmp(stringType, securityType)==0) 
-			{
-				json_t *security_groups = json_find_first_label(json, "security_group_rules");
-				if(security_groups){
-					json_t *security_group  = security_groups->child->child;
-					while(security_group){
-						temp = json_find_first_label(security_group, "security_group_id");
-						if(temp){
-							if(temp->child->text){
-								strcpy(security_group_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(direction,"");
-						temp = json_find_first_label(security_group, "direction");
-						if(temp){
-							if(temp->child->text){
-								strcpy(direction,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(ethertype,"");
-						temp = json_find_first_label(security_group, "ethertype");
-						if(temp){
-							if(temp->child->text){
-								strcpy(ethertype,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(rule_id,"");
-						temp = json_find_first_label(security_group, "id");
-						if(temp){
-							if(temp->child->text){
-								strcpy(rule_id, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(port_range_max,"");
-						temp = json_find_first_label(security_group, "port_range_max");
-						if(temp){
-							if(temp->child->text){
-								strcpy(port_range_max, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(port_range_min,"");
-						temp = json_find_first_label(security_group, "port_range_min");
-						if(temp){
-							if(temp->child->text){
-								strcpy(port_range_min, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(protocol,"");
-						temp = json_find_first_label(security_group, "protocol");
-						if(temp){
-							if(temp->child->text){
-								strcpy(protocol, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(remote_group_id,"");
-						temp = json_find_first_label(security_group, "remote_group_id");
-						if(temp){
-							if(temp->child->text){
-								strcpy(remote_group_id, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(remote_ip_prefix,"");
-						temp = json_find_first_label(security_group, "remote_ip_prefix");
-						if(temp){
-							if(temp->child->text){
-								strcpy(remote_ip_prefix, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						strcpy(security_tenant_id,"");
-						temp = json_find_first_label(security_group, "tenant_id");
-						if(temp){
-							if(temp->child->text){
-								strcpy(security_tenant_id, temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						
-						
-						///TBD
-						if(FirstTime_GetSecurityInfo)
-						{
-							openstack_security_rule_p rule_p = update_security_rule(security_group_id,rule_id,direction,ethertype,
-															   port_range_max,port_range_min,protocol,remote_group_id,remote_ip_prefix,security_tenant_id);
-							if ((rule_p) && (is_check_status_changed(rule_p->check_status))) 
-							{
-								totalNum++;
-							}
-						}
-						else
-						{
-							update_security_rule_temp(security_group_id,rule_id,direction,ethertype,
-												 port_range_max,port_range_min,protocol,remote_group_id,remote_ip_prefix,security_tenant_id);
-						}
-						
-						security_group = security_group->next;
-					}
-					json_free_value(&security_groups);
-				}
-			}
-			else if(strcmp(stringType,lbpools)==0)
-			{
-				char lb_pool_id[48] = {0};
-				UINT1 lb_status=0;
-				UINT1 lb_protocol=0;
-				UINT1 lbaas_method=0;
-				json_t *lbaas_pools = json_find_first_label(json, "pools");
-				if(lbaas_pools){
-					json_t *lbaas_pool  = lbaas_pools->child->child;
-					while(lbaas_pool){
-						temp = json_find_first_label(lbaas_pool, "tenant_id");
-						strcpy(tenant_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(tenant_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "id");
-						strcpy(lb_pool_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(lb_pool_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "status");
-						if(temp){
-							if(temp->child->text && strcmp(temp->child->text,"ACTIVE")==0){
-								lb_status=LBAAS_OK;
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "protocol");
-						if(temp){
-							if(temp->child->text){
-								if(strcmp(temp->child->text,"HTTP")==0){
-									lb_protocol=LBAAS_PRO_HTTP;
-								}else if(strcmp(temp->child->text,"HTTPS")==0){
-									lb_protocol=LBAAS_PRO_HTTPS;
-								}else if(strcmp(temp->child->text,"TCP")==0){
-									lb_protocol=LBAAS_PRO_TCP;
-								}
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "lb_method");
-						if(temp){
-							if(temp->child->text){
-								if(strcmp(temp->child->text,"ROUNT_ROBIN")==0){
-									lbaas_method=LB_M_ROUNT_ROBIN;
-								}else if(strcmp(temp->child->text,"LEAST_CONNECTIONS")==0){
-									lbaas_method=LB_M_LEAST_CONNECTIONS;
-								}else if(strcmp(temp->child->text,"SOURCE_IP")==0){
-									lbaas_method=LB_M_SOURCE_IP;
-								}
-								json_free_value(&temp);
-							}
-						}
-						openstack_lbaas_pools_p pool_p = update_openstack_lbaas_pool_by_poolrest(
-								tenant_id,
-								lb_pool_id,
-								lb_status,
-								lb_protocol,
-								lbaas_method);
-						lbaas_pool = lbaas_pool->next;
-						if ((pool_p) && (is_check_status_changed(pool_p->check_status)))
-							totalNum++;
-					}
-					json_free_value(&lbaas_pools);
-				}
-			}
-			else if(strcmp(stringType,lbvips)==0)
-			{
-				char lb_pool_id[48] = {0};
-				UINT1 vip_status=0;
-				UINT4 vip_ip_adress=0;
-				UINT4 protocol_port=0;
-				UINT1 connect_limit=0;
-				UINT1 session_persistence=0;
-				json_t *lbaas_pools = json_find_first_label(json, "vips");
-				if(lbaas_pools){
-					json_t *lbaas_pool  = lbaas_pools->child->child;
-					while(lbaas_pool){
-						temp = json_find_first_label(lbaas_pool, "address");
-						if(temp){
-							if(temp->child->text){
-								vip_ip_adress= inet_addr(temp->child->text) ;
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "pool_id");
-						strcpy(lb_pool_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(lb_pool_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "status");
-						if(temp){
-							if(temp->child->text && strcmp(temp->child->text,"ACTIVE")==0){
-								vip_status=LBAAS_OK;
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "protocol_port");
-						if(temp){
-							if(temp->child->text){
-								protocol_port=atoll(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "connection_limit");
-						if(temp){
-							if(temp->child->text){
-								connect_limit=atoi(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_pool, "session_persistence");
-						if(temp){
-							json_t *temp2 = temp->child->child;
-							if(temp2){
-								// temp2 = json_find_first_label(temp2, "type");
-								if(temp2->child->text){
-									if(strcmp(temp2->child->text,"SOURCE_IP")==0){
-										session_persistence=SEPER_SOURCE_IP;
-									}else if(strcmp(temp2->child->text,"HTTP_COOKIE")==0){
-										session_persistence=SEPER_HTTP_COOKIE;
-									}else if(strcmp(temp2->child->text,"APP_COOKIE")==0){
-										session_persistence=SEPER_APP_COOKIE;
-									}else{
-										session_persistence= SEPER_NO_LIMIT;
-									}
-									json_free_value(&temp2);
-									json_free_value(&temp);
-								}
-							}
-						}
-						openstack_lbaas_pools_p pool_p = update_openstack_lbaas_pool_by_viprest(
-								lb_pool_id,
-								protocol_port,
-								vip_ip_adress,
-								connect_limit,
-								vip_status,session_persistence);
-						if ((pool_p) && is_check_status_changed(pool_p->check_status))
-							totalNum++;
-						lbaas_pool = lbaas_pool->next;
-					}
-					json_free_value(&lbaas_pools);
-				}
-			}
-			else if(strcmp(stringType,lbmembers)==0)
-			{
-				char lb_member_id[48] = {0};
-				char lb_pool_id[48] = {0};
-				char lb_tenant_id[48] = {0};
-				UINT1 mem_status=0;
-				UINT1 mem_weight=0;
-				UINT4 mem_protocol_port=0;
-				UINT4 mem_fixed_ip=0;
-				json_t *lbaas_members = json_find_first_label(json, "members");
-				if(lbaas_members){
-					json_t *lbaas_member  = lbaas_members->child->child;
-					while(lbaas_member){
-						temp = json_find_first_label(lbaas_member, "address");
-						if(temp){
-							if(temp->child->text){
-								mem_fixed_ip= inet_addr(temp->child->text) ;
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_member, "id");
-						strcpy(lb_member_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(lb_member_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_member, "pool_id");
-						strcpy(lb_pool_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(lb_pool_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_member, "tenant_id");
-						strcpy(lb_tenant_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(lb_tenant_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_member, "status");
-						if(temp){
-							if(temp->child->text && strcmp(temp->child->text,"ACTIVE")==0){
-								mem_status=LBAAS_OK;
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_member, "protocol_port");
-						if(temp){
-							if(temp->child->text){
-								mem_protocol_port=atoll(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_member, "weight");
-						if(temp){
-							if(temp->child->text){
-								mem_weight=atoi(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						openstack_lbaas_members_p member_p = update_openstack_lbaas_member_by_rest(
-								lb_member_id,
-								lb_tenant_id,
-								lb_pool_id,
-								mem_weight,
-								mem_protocol_port,
-								mem_status,
-								mem_fixed_ip);
-						if ((member_p) && is_check_status_changed(member_p->check_status)) 
-							totalNum++;
-						lbaas_member = lbaas_member->next;
-					}
-					json_free_value(&lbaas_members);
-				}
-			}
-			else if(strcmp(stringType,lblistener)==0)
-			{
-				char lb_listener_id[48] = {0};
-				UINT1 lb_listener_type=0;
-				UINT4 check_frequency=0;
-				UINT4 lb_lis_overtime=0;
-				UINT1 lb_lis_retries=0;
-				json_t *lbaas_listeners = json_find_first_label(json, "health_monitors");
-				if(lbaas_listeners){
-					json_t *lbaas_listener  = lbaas_listeners->child->child;
-					while(lbaas_listener){
-						temp = json_find_first_label(lbaas_listener, "id");
-						strcpy(lb_listener_id,"");
-						if(temp){
-							if(temp->child->text){
-								strcpy(lb_listener_id,temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_listener, "type");
-						if(temp){
-							if(temp->child->text && strcmp(temp->child->text,"PING")==0){
-								lb_listener_type=LBAAS_LISTENER_PING;
-								json_free_value(&temp);
-							}else if(temp->child->text && strcmp(temp->child->text,"TCP")==0){
-								lb_listener_type=LBAAS_LISTENER_TCP;
-								json_free_value(&temp);
-							}else if(temp->child->text && strcmp(temp->child->text,"HTTP")==0){
-								lb_listener_type=LBAAS_LISTENER_HTTP;
-								json_free_value(&temp);
-							}else if(temp->child->text && strcmp(temp->child->text,"HTTPS")==0){
-								lb_listener_type=LBAAS_LISTENER_HTTPS;
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_listener, "delay");
-						if(temp){
-							if(temp->child->text){
-								check_frequency=atoll(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_listener, "timeout");
-						if(temp){
-							if(temp->child->text){
-								lb_lis_overtime=atoll(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						temp = json_find_first_label(lbaas_listener, "max_retries");
-						if(temp){
-							if(temp->child->text){
-								lb_lis_retries=atoi(temp->child->text);
-								json_free_value(&temp);
-							}
-						}
-						openstack_lbaas_listener_p listener_p = update_openstack_lbaas_listener_by_rest(
-								lb_listener_id,
-								lb_listener_type,
-								check_frequency,
-								lb_lis_overtime,
-								lb_lis_retries);
-						if ((listener_p) && is_check_status_changed(listener_p->check_status))
-							totalNum++;
-						lbaas_listener = lbaas_listener->next;
-					}
-					json_free_value(&lbaas_listeners);
-				}
-			}
-		}
-	}
-
-	// show log
-	show_create_port_log(stringType, totalNum);
-}
-
-void createPortForward(char* jsonString, port_forward_param_p forwardParam)
-{
-	const char *tempString = jsonString;
-	INT4 parse_type = 0;
-	json_t *json=NULL,*temp=NULL;
-
-	char forward_status[48] = {0};
-	char forward_in_addr[48] = {0};
-	char forward_protol[48] = {0};
-	char forward_in_port[48] = {0};
-	char forward_outside_port[48] = {0};
-	char network_id[48] = {0};
-	char external_ip[48] = {0};
-
-	LOG_PROC("INFO", "%s ", jsonString);
-	
-    parse_type = json_parse_document(&json,tempString);
-	if (parse_type != JSON_OK)
-	{
-	    LOG_PROC("INFO", "createPortForward failed");
-		return;
-	}
-
-	if (json) 
-	{
-		json_t *port_forward = json_find_first_label(json, "routers");
-		if(port_forward)
-		{
-			if(port_forward->child&&port_forward->child)
-			{
-				json_t* portForwardObj = port_forward->child->child;
-                while(portForwardObj)
-                {
-                    json_t *  pGateWayInfo  = json_find_first_label(portForwardObj, "external_gateway_info");
-                    if(pGateWayInfo &&pGateWayInfo->child)
-                    {
-                        if(pGateWayInfo->child && JSON_OBJECT == pGateWayInfo->child->type)
-                        {
-                            temp = json_find_first_label(pGateWayInfo->child, "network_id");
-                            if(temp && temp->child && temp->child->text)
-                            {
-                                strcpy(network_id, temp->child->text);
-                                json_free_value(&temp);
-                            }
-
-                            temp = json_find_first_label(pGateWayInfo->child, "external_fixed_ips");
-                            if(temp && temp->child && temp->child->child)
-                            {
-                                json_t* extIpObj = json_find_first_label(temp->child->child, "ip_address");
-                                if(extIpObj)
-                                {
-                                    strcpy(external_ip, extIpObj->child->text);
-                                    json_free_value(&extIpObj);
-                                }
-
-                                json_free_value(&temp);
-                            }
-                        }
-                        json_free_value(&pGateWayInfo);
-                    }
-
-					json_t *  portforwardings  = json_find_first_label(portForwardObj, "portforwardings");
-					if(portforwardings && portforwardings->child && portforwardings->child->child )
-					{
-						json_t* pPortForwardObj = portforwardings->child->child; 
-
-						while(pPortForwardObj)
-						{
-							memset(forward_status, 0, sizeof(forward_status));
-							memset(forward_in_addr, 0, sizeof(forward_in_addr));
-							memset(forward_protol, 0, sizeof(forward_protol));
-							memset(forward_in_port, 0, sizeof(forward_in_port));
-							memset(forward_outside_port, 0, sizeof(forward_outside_port));
-
-							temp = json_find_first_label(pPortForwardObj, "status");
-							if(temp && temp->child && temp->child->text)
-							{
-								strcpy(forward_status, temp->child->text);
-								json_free_value(&temp);
-							}
-
-							temp = json_find_first_label(pPortForwardObj, "inside_addr");
-							if(temp && temp->child && temp->child->text)
-							{
-								strcpy(forward_in_addr, temp->child->text);
-								json_free_value(&temp);
-							}
-
-							temp = json_find_first_label(pPortForwardObj, "protocol");
-							if(temp&&temp->child && temp->child->text)
-							{
-								strcpy(forward_protol, temp->child->text);
-								json_free_value(&temp);
-							}
-
-							temp = json_find_first_label(pPortForwardObj, "inside_port");
-							if(temp && temp->child && temp->child->text)
-							{
-								strcpy(forward_in_port, temp->child->text);
-								json_free_value(&temp);
-							}
-
-							temp = json_find_first_label(pPortForwardObj, "outside_port");
-							if(temp && temp->child && temp->child->text)
-							{
-								strcpy(forward_outside_port, temp->child->text);
-								json_free_value(&temp);
-							}
-
-							update_opstack_portforward_list(&(forwardParam->list_header), forward_protol, forward_status, network_id,  external_ip, forward_in_addr,  forward_in_port, forward_outside_port);	
-
-							pPortForwardObj = pPortForwardObj->next;
-						}
-
-						json_free_value(&portforwardings);
-					}
-
-					portForwardObj = portForwardObj->next;
-				}
-			} 
-
-			json_free_value(&port_forward);
-		}
-
-	}
-}
-
-//by:yhy 刷新security_group 信息
-void reload_security_group_info()
-{
-	INT1 *value = NULL;
-
-	// config & check openstack 
-	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
-	g_openstack_on = (NULL == value)?0:atoll(value);
-	if( 1 == g_openstack_on)
-	{
-		// get openstack ip
-		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_ip");
-		(NULL == value)?strncpy(g_openstack_ip, "192.168.52.200", (16 - 1)) : strncpy(g_openstack_ip, value, (16 - 1));
-		// get port;
-		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
-		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
-
-		getOpenstackInfo(g_openstack_ip, "/v2.0/security-group-rules", g_openstack_port, "security-group-rules" , NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip, "/v2.0/ports", g_openstack_port, "port", NULL, EOPENSTACK_GET_NORMAL);
-		if(!FirstTime_GetSecurityInfo)
-		{
-			update_From_NewSecurityGroup_To_OldSecurityGroup(g_openstack_security_list_temp,g_openstack_security_list);
-			update_From_NewSecurityInfo_To_OldSecurityInfo(g_fabric_host_list.list);
-			Clear_g_openstack_security_list_temp();
-		}
-		else
-		{
-			FirstTime_GetSecurityInfo=0;
-		}
-	} 
-
-}
 //by:yhy 刷新openstack的net信息
-void reload_net_info()
+INT4 reload_net_info()
 {
+	INT4 iRet = GN_ERR;
 	INT1 *value = NULL;
 	// config & check openstack
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
@@ -1523,14 +628,16 @@ void reload_net_info()
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
 		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
 
-		getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet" , NULL, EOPENSTACK_GET_NORMAL);
+		iRet = getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network", NULL, EOPENSTACK_GET_NORMAL);
+		iRet += getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet" , NULL, EOPENSTACK_GET_NORMAL);
 	} 
+	return iRet ;
 
 }
 //by:yhy 此处因为reload
-void reoad_lbaas_info()
+INT4 reoad_lbaas_info()
 {
+	INT4 iRet = GN_ERR;
 	INT1 *value = NULL;
 
 	// config & check openstack
@@ -1544,36 +651,71 @@ void reoad_lbaas_info()
 		value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_port");
 		g_openstack_port = ((NULL == value) ? 9696 : atoll(value));
 
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem" , NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener", NULL, EOPENSTACK_GET_NORMAL);
-	} 
+		iRet = 	getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools", NULL, EOPENSTACK_GET_LOADBALANCE);
+		iRet += getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips", NULL, EOPENSTACK_GET_LOADBALANCE);
+		iRet += getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem" , NULL, EOPENSTACK_GET_LOADBALANCE);
+		iRet += getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener", NULL, EOPENSTACK_GET_LOADBALANCE);
+	}
+	return iRet ;
 }
 
 //by:yhy openstack中需定时刷新的服务
 void reload_tx_timer(void *para, void *tid)
 {
-	LOG_PROC("TIMER", "reload_tx_timer start");
+	LOG_PROC("INFO", "%s_%d-----------------------------------------------------------------------------------------------------------------",FN,LN);
+	
+	openstack_qos_ReloadRules();
 	reload_openstack_host_network();
-        reload_security_group_info();
+    reload_security_group_info();
 	reload_floating_ip();
 	reload_openstack_lbaas_info();
-        //reload_routers();
-        reload_port_forward();
-	LOG_PROC("TIMER", "reload_tx_timer stop");
+    reload_port_forward();
+	reload_clbs_info();
+	Openstack_Info_Ready_flag =1;
+	LOG_PROC("INFO", "%s_%d-----------------------------------------------------------------------------------------------------------------",FN,LN);
 }
 
+INT4 reload_clbs_info()
+{
+	INT4 iRet = GN_ERR;
+	if( 1 == g_openstack_on)
+	{
+		reset_openstack_clbaas_vipfloatingpoolflag();
+		iRet = 	 getOpenstackInfo(g_openstack_ip,"/v2.0/routers",g_openstack_port,"router", NULL, EOPENSTACK_GET_NORMAL);
+		iRet +=  getOpenstackInfo(g_openstack_ip,"/v2.0/clb/vips",g_openstack_port,"clbvips", NULL, EOPENSTACK_GET_CLBLOADBALANCE);
+		if(GN_OK == iRet)
+		{
+			remove_openstack_clbaas_vipfloatingpool_unchecked();	
+		}
+
+		
+		reset_openstack_clbaas_loadbalancerflag();
+		iRet =  getOpenstackInfo(g_openstack_ip,"/v2.0/clb/load_balancers",g_openstack_port,"clbloadbalancers", NULL, EOPENSTACK_GET_CLBLOADBALANCE);
+		iRet += getOpenstackInfo(g_openstack_ip,"/v2.0/clb/interfaces",g_openstack_port,"clbinterfaces", NULL, EOPENSTACK_GET_CLBLOADBALANCE);
+		if(GN_OK == iRet)
+		{
+			remove_openstack_clbaas_loadbalancer_unchecked();
+		}
+
+		reset_openstack_clbaas_backendflag();
+		iRet = getOpenstackInfo(g_openstack_ip,"/v2.0/clb/backends",g_openstack_port,"clbbackends", NULL, EOPENSTACK_GET_CLBLOADBALANCE);
+		if(GN_OK == iRet)
+		{
+			remove_openstack_clbaas_backend_unchecked();
+		}
+	}
+}
 void reload_routers()
 {
 	if( 1 == g_openstack_on)
 	{
-		getOpenstackInfo(g_openstack_ip,"/v2.0/routers",g_openstack_port,"routers", NULL, EOPENSTACK_GET_NORMAL);
+		getOpenstackInfo(g_openstack_ip,"/v2.0/routers",g_openstack_port,"router", NULL, EOPENSTACK_GET_NORMAL);
 	}
 }
 
 void reload_port_forward()
 {
+	INT4 iRet = GN_ERR;
     openstack_port_forward_p copy_list = NULL;
     openstack_port_forward_p old_list = NULL;
     openstack_port_forward_p new_list = NULL;
@@ -1585,8 +727,11 @@ void reload_port_forward()
         port_forward_param forwardParam;
         forwardParam.list_header = NULL;
 
-        getOpenstackInfo(g_openstack_ip,"/v2.0/routers",g_openstack_port,"port_forward", &forwardParam, EOPENSTACK_GET_PORTFORWARD);
-		
+        iRet = getOpenstackInfo(g_openstack_ip,"/v2.0/routers",g_openstack_port,"port_forward", &forwardParam, EOPENSTACK_GET_PORTFORWARD);
+		if(GN_OK != iRet)
+		{
+			return;
+		}
 
       /*char* pString="{\"routers\": [{\"status\": \"ACTIVE\", \"external_gateway_info\": {\"network_id\": \"6b8cc3ab-cb41-4f86-b645-a2d90dfdf41a\", \"enable_snat\": true, \"external_fixed_ips\": [{\"subnet_id\": \"3d2074dd-a2dd-477c-8a9a-04664fab9169\", \"ip_address\": \"172.16.49.103\"}]}, \"availability_zone_hints\": [], \"availability_zones\": [\"nova\"], \"portforwardings\": [{\"status\": \"ENABLE\", \"inside_addr\": \"10.10.10.100\", \"protocol\": \"tcp\", \"outside_port\": \"80\", \"inside_port\": \"80\"}], \"name\": \"hujin_test\", \"gw_port_id\": \"12a4a376-583e-42ab-a3f8-2ea0667c38ca\", \"admin_state_up\": true, \"tenant_id\": \"aeb30280fa7e4085877cc707f54e380b\", \"distributed\": false, \"routes\": [], \"ha\": false, \"id\": \"1925c0bb-5771-4aef-b11e-dd24d2f284b8\", \"vlan_id\": null, \"description\": \"\"}, {\"status\": \"ACTIVE\", \"external_gateway_info\": {\"network_id\": \"6b8cc3ab-cb41-4f86-b645-a2d90dfdf41a\", \"enable_snat\": true, \"external_fixed_ips\": [{\"subnet_id\": \"3d2074dd-a2dd-477c-8a9a-04664fab9169\", \"ip_address\": \"172.16.49.104\"}]}, \"availability_zone_hints\": [], \"availability_zones\": [\"nova\"], \"portforwardings\": [], \"name\": \"router\", \"gw_port_id\": \"ac8aaf5c-aa8c-4366-94a5-0307a32da7b9\", \"admin_state_up\": true, \"tenant_id\": \"aeb30280fa7e4085877cc707f54e380b\", \"distributed\": false, \"routes\": [], \"ha\": false, \"id\": \"01d88f75-1b15-4c22-ac5d-01bde9ff7ae9\", \"vlan_id\": null, \"description\": \"\"}, {\"status\": \"ACTIVE\", \"external_gateway_info\": {\"network_id\": \"6b8cc3ab-cb41-4f86-b645-a2d90dfdf41a\", \"enable_snat\": true, \"external_fixed_ips\": [{\"subnet_id\": \"3d2074dd-a2dd-477c-8a9a-04664fab9169\", \"ip_address\": \"172.16.49.108\"}]}, \"availability_zone_hints\": [], \"availability_zones\": [\"nova\"], \"portforwardings\": [], \"name\": \"liusu_router01\", \"gw_port_id\": \"1fd212f5-1fb9-4fbe-82ef-f8011ed687a8\", \"admin_state_up\": true, \"tenant_id\": \"aeb30280fa7e4085877cc707f54e380b\", \"distributed\": false, \"routes\": [], \"ha\": false, \"id\": \"159ab664-e87e-4e22-8b01-1d8600541dbd\", \"vlan_id\": null, \"description\": \"\"}, {\"status\": \"ACTIVE\", \"external_gateway_info\": null, \"availability_zone_hints\": [], \"availability_zones\": [\"nova\"], \"portforwardings\": [], \"name\": \"test\", \"gw_port_id\": null, \"admin_state_up\": true, \"tenant_id\": \"d2c7a47970024a269c79bf3ac6367fec\", \"distributed\": false, \"routes\": [], \"ha\": false, \"id\": \"96d94bc2-24c6-4449-90da-1cbf19c19e13\", \"vlan_id\": null, \"description\": \"\"}]}";
 */
@@ -1605,11 +750,13 @@ void reload_port_forward()
 
             while(newForwardNode)
             {
-                if( 0 == strcmp(oldForwardNode->src_ip, newForwardNode->src_ip) &&
-                        oldForwardNode->src_port == newForwardNode->src_port)
+                if((0 == strcmp(oldForwardNode->src_ip, newForwardNode->src_ip)) &&
+                   (oldForwardNode->src_port_start == newForwardNode->src_port_start) &&
+                   (oldForwardNode->src_port_end == newForwardNode->src_port_end))
                 {
-                    if(oldForwardNode->dst_port == newForwardNode->dst_port &&
-                            oldForwardNode->proto == newForwardNode->proto)
+                    if((oldForwardNode->dst_port_start == newForwardNode->dst_port_start) &&
+                       (oldForwardNode->dst_port_end == newForwardNode->dst_port_end) &&
+                       (oldForwardNode->proto == newForwardNode->proto))
                     {
                         bFind = true;
                     }
@@ -1653,11 +800,13 @@ void reload_port_forward()
             oldForwardNode =  local_openstack_forward_list;
             while(oldForwardNode)
             {
-                if( 0 == strcmp(oldForwardNode->src_ip, newForwardNode->src_ip) &&
-                        oldForwardNode->src_port == newForwardNode->src_port)
+                if((0 == strcmp(oldForwardNode->src_ip, newForwardNode->src_ip)) &&
+                   (oldForwardNode->src_port_start == newForwardNode->src_port_start) &&
+                   (oldForwardNode->src_port_end == newForwardNode->src_port_end))
                 {
-                    if(oldForwardNode->dst_port == newForwardNode->dst_port &&
-                            oldForwardNode->proto == newForwardNode->proto)
+                    if((oldForwardNode->dst_port_start == newForwardNode->dst_port_start) &&
+                       (oldForwardNode->dst_port_end == newForwardNode->dst_port_end) &&
+                       (oldForwardNode->proto == newForwardNode->proto))
                     {
                         bFind = true;
                     }
@@ -1710,8 +859,10 @@ void reload_port_forward()
         newsockmsgProc.uiUsedFlag = 1; 
         newsockmsgProc.param = forwardProc;
 
-        push_MsgSock_into_queue( &g_tProc_queue, pNode, &newsockmsgProc); 
-        Write_Event(EVENT_PROC);
+        if(GN_OK == push_MsgSock_into_queue( &g_tProc_queue, pNode, &newsockmsgProc))
+        {
+        	Write_Event(EVENT_PROC);
+        }
     }
 
     return;
@@ -1747,6 +898,9 @@ void init_openstack_reload()
 void initOpenstackFabric()
 {
 	INT1 *value = NULL;
+
+	g_openstack_server_name = gn_malloc(1024);
+	
 	//by:yhy config & check openstack
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
 	g_openstack_on = (NULL == value)?0:atoll(value);
@@ -1768,30 +922,35 @@ void initOpenstackFabric()
 		//by:yhy 初始化openstack_external用到的全局变量
 		init_openstack_external();
 		//by:yhy 读取(并更新和持久化)openstack外部端口配置
-		read_external_port_config();
+		//read_external_port_config();
 		//by:yhy 初始化NAT并分配内存
 		init_nat_mem_pool();
 		//by:yhy 创建nat_host头结点
 		init_nat_host();
 		//by:yhy 初始化openstack中负载均衡服务(lbaas)所需的相关全局变量并分配内存
 		init_openstack_lbaas();
+
+		init_openstack_clbaas(); //ycy 华云LB
+		init_openstack_router_gateway(); //ycy external outer interface
+		
 		//by:yhy 初始化openstack的刷新服务(即定时清空)
 		init_openstack_reload();
+		
 		//by:yhy 在上面清空操作后,从openstack控制节点读入信息
 		getOpenstackInfo(g_openstack_ip,"/v2.0/networks",g_openstack_port,"network", NULL, EOPENSTACK_GET_NORMAL);
 		getOpenstackInfo(g_openstack_ip,"/v2.0/subnets",g_openstack_port,"subnet", NULL, EOPENSTACK_GET_NORMAL);
 		getOpenstackInfo(g_openstack_ip,"/v2.0/floatingips",g_openstack_port,"floating", NULL, EOPENSTACK_GET_NORMAL);
 		getOpenstackInfo(g_openstack_ip,"/v2.0/security-group-rules",g_openstack_port,"security-group-rules", NULL, EOPENSTACK_GET_NORMAL);
 		getOpenstackInfo(g_openstack_ip,"/v2.0/ports",g_openstack_port,"port", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem", NULL, EOPENSTACK_GET_NORMAL);
-		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener", NULL, EOPENSTACK_GET_NORMAL);
-
-                reload_port_forward();
-
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/pools",g_openstack_port,"pools", NULL, EOPENSTACK_GET_LOADBALANCE);
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/vips",g_openstack_port,"vips", NULL, EOPENSTACK_GET_LOADBALANCE);
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/members",g_openstack_port,"lbmem", NULL, EOPENSTACK_GET_LOADBALANCE);
+		getOpenstackInfo(g_openstack_ip,"/v2.0/lb/health_monitors",g_openstack_port,"lblistener", NULL, EOPENSTACK_GET_LOADBALANCE);
 		
-		FirstTime_GetSecurityInfo=0;
+
+        reload_port_forward();
+		reload_clbs_info();
+
 		LOG_PROC("INFO", "Init Openstack service finished");
 	}
 	else

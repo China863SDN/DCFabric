@@ -26,35 +26,29 @@
  *
  */
 
-#include "openstack_host.h"
 #include "mem_pool.h"
 #include "fabric_openstack_arp.h"
 #include "timer.h"
 #include "openstack_app.h"
+#include "openflow-common.h"
 #include "../ovsdb/ovsdb.h"
 #include "../restful-svr/openstack-server.h"
+#include "../cluster-mgr/cluster-mgr.h"
 #include "fabric_floating_ip.h"
-
+#include "openstack_security_app.h"
+#include "openstack_host.h"
 extern t_fabric_host_list g_fabric_host_list;
 //by:yhy why?这些全局变量的具体用途存疑
 void *g_openstack_host_network_id 	= NULL;
 void *g_openstack_host_subnet_id 	= NULL;
 void *g_openstack_host_port_id 		= NULL;
 void *g_openstack_host_node_id 		= NULL;
-//by:yhy 每个虚机的安全组信息内存池
-void *g_openstack_host_security_id 	= NULL;
-//by:yhy group内存池
-void *g_openstack_security_group_id = NULL;
-void *g_openstack_security_group_id_temp = NULL;
-//by:yhy rule内存池
-void *g_openstack_security_rule_id = NULL;
+
 //by:yhy openstack中host_network列表
 openstack_node_p g_openstack_host_network_list = NULL;
 openstack_node_p g_openstack_host_subnet_list = NULL;
 openstack_node_p g_openstack_host_port_list = NULL;
-//by:yhy group链表
-openstack_security_p g_openstack_security_list = NULL;
-openstack_security_p g_openstack_security_list_temp = NULL;
+
 
 
 void *g_host_check_timerid = NULL;
@@ -79,18 +73,7 @@ void openstack_show_network(openstack_node_p node){
 
 };
 
-void openstack_show_security_rule(openstack_security_rule_p rule_p)
-{
-	printf("direction: %s\n", rule_p->direction);
-	printf("ethertype: %s\n", rule_p->ethertype);
-	printf("rule_id: %s\n", rule_p->rule_id);
-	printf("port_range_max: %u\n", rule_p->port_range_max);
-	printf("port_range_min: %u\n", rule_p->port_range_min);
-	printf("protocol: %s\n", rule_p->protocol);
-	printf("remote_group_id: %s\n", rule_p->remote_group_id);
-	printf("remote_ip_prefix: %s\n", rule_p->remote_ip_prefix);
-	printf("tenant_id: %s\n", rule_p->tenant_id);
-}
+
 
 
 void openstack_show_all_port_security()
@@ -128,19 +111,6 @@ void openstack_show_all_port_security()
 	}
 }
 
-void openstack_show_all_security_group()
-{
-	openstack_security_p temp_p = g_openstack_security_list;
-	while (NULL != temp_p) {
-		printf("security group id:%s\n", temp_p->security_group);
-		openstack_security_rule_p rule_p = temp_p->security_rule_p;
-		while (NULL != rule_p) {
-			openstack_show_security_rule(rule_p);
-			rule_p = rule_p->next;
-		}
-		temp_p = temp_p->next;
-	}
-}
 
 void show_all_fabric_host()
 {
@@ -217,70 +187,23 @@ void init_openstack_host(){
 		mem_destroy(g_openstack_security_group_id);
 	}
 	g_openstack_security_group_id = mem_create(sizeof(openstack_security), OPENSTACK_SECURITY_GROUP_MAX_NUM);
+	//LOG_PROC("INFO", "%s_%d:g_openstack_security_group_id  %p   %d",FN,LN,g_openstack_security_group_id,sizeof(openstack_security));
 
 	if (g_openstack_security_group_id_temp != NULL) {
 		mem_destroy(g_openstack_security_group_id_temp);
 	}
 	g_openstack_security_group_id_temp = mem_create(sizeof(openstack_security), OPENSTACK_SECURITY_GROUP_MAX_NUM);
 
+	if (g_openstack_security_rule_id != NULL) {
+		mem_destroy(g_openstack_security_rule_id);
+	}
+	g_openstack_security_rule_id = mem_create(sizeof(openstack_security_rule), OPENSTACK_SECURITY_RULE_MAX_NUM);
 	
 	if (g_openstack_host_security_id != NULL) {
 		mem_destroy(g_openstack_host_security_id);
 	}
 	g_openstack_host_security_id = mem_create(sizeof(openstack_node), OPENSTACK_HOST_SECURITY_MAX_NUM);
 	
-	if (g_openstack_security_rule_id != NULL) {
-		mem_destroy(g_openstack_security_rule_id);
-	}
-	g_openstack_security_rule_id = mem_create(sizeof(openstack_security_rule), OPENSTACK_SECURITY_RULE_MAX_NUM);
-
-	
-	g_openstack_host_network_list = NULL;
-	g_openstack_host_subnet_list = NULL;
-	g_openstack_host_port_list = NULL;
-	return;
-};
-
-void destory_openstack_host(){
-	if(g_openstack_host_network_id != NULL){
-		mem_destroy(g_openstack_host_network_id);
-		g_openstack_host_network_id = NULL;
-	}
-
-	if(g_openstack_host_subnet_id != NULL){
-		mem_destroy(g_openstack_host_subnet_id);
-		g_openstack_host_subnet_id = NULL;
-	}
-
-	if(g_openstack_host_port_id != NULL){
-		mem_destroy(g_openstack_host_port_id);
-		g_openstack_host_port_id = NULL;
-	}
-
-	if(g_openstack_host_node_id != NULL){
-		mem_destroy(g_openstack_host_node_id);
-		g_openstack_host_node_id = NULL;
-	}
-
-	if (g_openstack_security_group_id != NULL) {
-		mem_destroy(g_openstack_security_group_id);
-		g_openstack_security_list = NULL;
-	}
-	
-	if (g_openstack_security_group_id_temp != NULL) {
-		mem_destroy(g_openstack_security_group_id_temp);
-		g_openstack_security_group_id_temp = NULL;
-	}
-
-	if (g_openstack_host_security_id != NULL) {
-		mem_destroy(g_openstack_host_security_id);
-		g_openstack_host_security_id = NULL;
-	}
-	
-	if (g_openstack_security_rule_id != NULL) {
-		mem_destroy(g_openstack_security_rule_id);
-		g_openstack_security_rule_id = NULL;
-	}
 	
 
 	// clear
@@ -391,6 +314,8 @@ void remove_openstack_host_network_by_check_flag()
 		{
 			//by:yhy 删除该节点
 			prev_p->next = next_p->next;
+			
+			LOG_PROC("INFO", "%s %d network_id=%s",FN,LN,network_p->network_id);
 			remove_external_port_by_networkid(network_p->network_id);
 			mem_free(g_openstack_host_network_id, network_p);
 			mem_free(g_openstack_host_node_id, next_p);
@@ -407,6 +332,7 @@ void remove_openstack_host_network_by_check_flag()
 	{
 		//by:yhy 检查头结点是否删除
 		next_p = head_p->next;
+		LOG_PROC("INFO", "%s %d network_id=%s",FN,LN,network_p->network_id);
 		remove_external_port_by_networkid(network_p->network_id);
 		mem_free(g_openstack_host_network_id, head_p->data);
 		mem_free(g_openstack_host_node_id, head_p);
@@ -435,7 +361,7 @@ void remove_openstack_host_subnet_by_check_flag()
 		if ((subnet_p) && (subnet_p->check_status == CHECK_UNCHECKED)) 
 		{
 			prev_p->next = next_p->next;
-			remove_proactive_floating_internal_subnet_flow_by_subnet(subnet_p);
+			//remove_proactive_floating_internal_subnet_flow_by_subnet(subnet_p);
 			mem_free(g_openstack_host_subnet_id, subnet_p);
 			mem_free(g_openstack_host_node_id, next_p);
 		}
@@ -451,7 +377,7 @@ void remove_openstack_host_subnet_by_check_flag()
 	{
 		//by:yhy 判断是否是删除头结点
 		next_p = head_p->next;
-		remove_proactive_floating_internal_subnet_flow_by_subnet(subnet_p);
+		//remove_proactive_floating_internal_subnet_flow_by_subnet(subnet_p);
 		mem_free(g_openstack_host_subnet_id, head_p->data);
 		mem_free(g_openstack_host_node_id, head_p);
 		g_openstack_host_subnet_list= next_p;
@@ -461,11 +387,15 @@ void remove_openstack_host_subnet_by_check_flag()
 //by:yhy openstack中定时刷新的host_network相关
 void reload_openstack_host_network()
 {
+	INT4 iRet = GN_ERR;
 	reset_openstack_host_network_flag();
 	reset_openstack_host_subnet_flag();
-	reload_net_info();
-	remove_openstack_host_network_by_check_flag();
-	remove_openstack_host_subnet_by_check_flag();
+	iRet = reload_net_info();
+	if(GN_OK == iRet)
+	{
+		remove_openstack_host_network_by_check_flag();
+		remove_openstack_host_subnet_by_check_flag();
+	}
 }
 //by:yhy 将network添加到g_openstack_host_network_list中
 void add_openstack_host_network(openstack_network_p network){
@@ -1064,323 +994,13 @@ void destory_openstack_host_node(openstack_node_p node){
 	mem_free(g_openstack_host_node_id,node);
 	return;
 };
-//by:yhy 在g_openstack_security_list查找名为security_group的项,若找不到则新建;返回同名项的指针
-openstack_security_p update_openstack_security_group(char* security_group)
-{
-	openstack_security_p security_p = g_openstack_security_list;
-	while (security_p) 
-	{
-		if (0 == strcmp(security_p->security_group, security_group)) 
-		{
-			return security_p;
-		}
-		security_p = security_p->next;
-	}
-	// create
-	security_p = (openstack_security_p)mem_get(g_openstack_security_group_id);
-	if (NULL != security_p) 
-	{
-		memset(security_p->security_group, 0, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(security_p->security_group, security_group, OPENSTACK_SECURITY_GROUP_LEN);
-		security_p->next = g_openstack_security_list;
-		g_openstack_security_list = security_p;
-	}
-	else 
-	{
-		LOG_PROC("ERROR", "%s:Security: Get memeory fail!",FN);
-	}
-	return security_p;
-}
-
-
-openstack_security_p update_openstack_security_group_temp(char* security_group)
-{
-	openstack_security_p security_p = g_openstack_security_list_temp;
-	while (security_p) 
-	{
-		if (0 == strcmp(security_p->security_group, security_group)) 
-		{
-			return security_p;
-		}
-		security_p = security_p->next;
-	}
-	// create
-	security_p = (openstack_security_p)mem_get(g_openstack_security_group_id_temp);
-	if (NULL != security_p) 
-	{
-		memset(security_p->security_group, 0, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(security_p->security_group, security_group, OPENSTACK_SECURITY_GROUP_LEN);
-		security_p->next = g_openstack_security_list_temp;
-		g_openstack_security_list_temp = security_p;
-	}
-	else 
-	{
-		LOG_PROC("ERROR", "%s:Security: Get memory fail!",FN);
-	}
-	return security_p;
-}
-
-
-//by:yhy 把安全组对应到具体的openstack_host节点上
-//把data信息添加到head_p上
-openstack_node_p add_openstack_host_security_node(UINT1* data, openstack_node_p head_p)
-{
-	openstack_node_p node_p = head_p;
-	if (NULL == data) 
-	{
-		return head_p;
-	}
-	while (node_p) 
-	{//查找head_p为起始节点的链表中是否存在data
-		if (data == node_p->data) 
-		{
-			return head_p;
-		}
-		node_p = node_p->next;
-	}
-	openstack_node_p ret = NULL;
-	ret = (openstack_node_p)mem_get(g_openstack_host_security_id);
-	if (NULL == ret) 
-	{
-		LOG_PROC("ERROR", "%s:Security node: Get memeory fail!",FN);
-		return head_p;
-	}
-	memset(ret, 0, sizeof(openstack_node));
-	ret->data = data;
-	ret->next = head_p;
-	return ret;
-};
-//by:yhy 清空security_node
-void clear_openstack_host_security_node(UINT1* head_p)
-{
-	//LOG_PROC("INFO", "%s-----------------------Start",FN);
-	openstack_node_p node_p = (openstack_node_p)head_p;
-	if (NULL == node_p)
-	{
-		return;
-	}
-	openstack_node_p temp_p = node_p->next;
-
-	while (temp_p) 
-	{
-		mem_free(g_openstack_host_security_id, node_p);
-		node_p = temp_p;
-		temp_p = temp_p->next;
-	}
-	mem_free(g_openstack_host_security_id, node_p);
-	//LOG_PROC("INFO", "%s-----------------------Stop",FN);
-}
-
-void clear_all_security_group_info()
-{
-	if (g_openstack_security_group_id != NULL) {
-		mem_destroy(g_openstack_security_group_id);
-	}
-	g_openstack_security_group_id = mem_create(sizeof(openstack_security), OPENSTACK_SECURITY_GROUP_MAX_NUM);
-
-	if (g_openstack_security_group_id_temp != NULL) {
-		mem_destroy(g_openstack_security_group_id_temp);
-	}
-	g_openstack_security_group_id_temp = mem_create(sizeof(openstack_security), OPENSTACK_SECURITY_GROUP_MAX_NUM);
-
-	
-	if (g_openstack_host_security_id != NULL) {
-		mem_destroy(g_openstack_host_security_id);
-	}
-	g_openstack_host_security_id = mem_create(sizeof(openstack_node), OPENSTACK_HOST_SECURITY_MAX_NUM);
-	
-	
-	if (g_openstack_security_rule_id != NULL) {
-		mem_destroy(g_openstack_security_rule_id);
-	}
-	g_openstack_security_rule_id = mem_create(sizeof(openstack_security_rule), OPENSTACK_SECURITY_RULE_MAX_NUM);
-	
-	p_fabric_host_node list = g_fabric_host_list.list;
-	while (list) {
-		openstack_port_p port_p = (openstack_port_p)list->data;
-		if (NULL != port_p) {
-			port_p->security_data = NULL;
-		}
-		list = list->next;
-	}
-
-	g_openstack_security_list = NULL;
-}
-
-openstack_security_rule_p find_security_rule_by_rule_id(char* group_id, char* rule_id)
-{
-	openstack_security_p security_p = g_openstack_security_list;
-	while (NULL !=  security_p) 
-	{
-		if (0 == strcmp(group_id, security_p->security_group)) 
-		{
-			openstack_security_rule_p rule_p = security_p->security_rule_p;
-			while (rule_p) 
-			{
-				if (0 == strcmp(rule_p->rule_id, rule_id)) 
-				{
-					return rule_p;
-				}
-				rule_p = rule_p->next;
-			}
-		}
-		security_p = security_p->next;
-	}
-	
-	return NULL;
-}
-
-INT4 compare_security_rule(char* group_id, char* rule_id, char* direction, char* ethertype, char* port_range_max,
-		char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id, openstack_security_rule_p rule_p)
-{
-
-	UINT4 port_max = (0 == strcmp(port_range_max, "")) ? 0:atoi(port_range_max);
-	UINT4 port_min = (0 == strcmp(port_range_min, "")) ? 0:atoi(port_range_min);
-
-	if ((rule_p)
-		&& compare_str(group_id, rule_p->group_id)
-		&& compare_str(rule_id, rule_p->rule_id)
-		&& compare_str(direction, rule_p->direction)
-		&& compare_str(ethertype, rule_p->ethertype)
-		&& (port_max == rule_p->port_range_max)
-		&& (port_min == rule_p->port_range_min)
-		&& compare_str(protocol, rule_p->protocol)
-		&& compare_str(remote_group_id, rule_p->remote_group_id)
-		&& compare_str(remote_ip_prefix, rule_p->remote_ip_prefix)
-		&& compare_str(tenant_id, rule_p->tenant_id)) {
-		return 1;
-	}
-
-	return 0;
-}
-
-openstack_security_rule_p create_security_rule(char* group_id, char* rule_id, char* direction, char* ethertype, char* port_range_max,
-		char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id)
-{
-	openstack_security_rule_p rule_p = mem_get(g_openstack_security_rule_id);
-	if (NULL != rule_p) {
-		memcpy(rule_p->direction, direction, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->ethertype, ethertype, OPENSTACK_SECURITY_GROUP_LEN);
-		rule_p->port_range_max = (0 == strcmp(port_range_max, "")) ? 0:atoi(port_range_max);
-		rule_p->port_range_min = (0 == strcmp(port_range_min, "")) ? 0:atoi(port_range_min);
-		memcpy(rule_p->protocol, protocol, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->remote_group_id, remote_group_id, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->remote_ip_prefix, remote_ip_prefix, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->tenant_id, tenant_id, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->rule_id, rule_id, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->group_id, group_id, OPENSTACK_SECURITY_GROUP_LEN);
-	}
-
-	return rule_p;
-}
 
 
 
-openstack_security_p add_security_rule_into_group(char* group_id, openstack_security_rule_p rule_p)
-{
-	openstack_security_p security_p = g_openstack_security_list;
-	while (NULL !=	security_p) {
-		if (0 == strcmp(group_id, security_p->security_group))
-		{
-			rule_p->next = security_p->security_rule_p;
-			security_p->security_rule_p = rule_p;
-			return security_p;
-		}
-		security_p = security_p->next;
-	}
-
-	if (NULL == security_p) 
-	{
-		security_p = update_openstack_security_group(group_id);
-		if (security_p) 
-		{
-			rule_p->next = security_p->security_rule_p;
-			security_p->security_rule_p = rule_p;
-			return security_p;
-		}
-	}
-	
-	return NULL;
-}
-
-openstack_security_p add_security_rule_into_group_temp(char* group_id, openstack_security_rule_p rule_p)
-{
-	openstack_security_p security_p = g_openstack_security_list_temp;
-	while (NULL !=	security_p) 
-	{
-		if (0 == strcmp(group_id, security_p->security_group)) 
-		{
-			rule_p->next = security_p->security_rule_p;
-			security_p->security_rule_p = rule_p;
-			return security_p;
-		}
-		security_p = security_p->next;
-	}
-
-	if (NULL == security_p) 
-	{
-		security_p = update_openstack_security_group_temp(group_id);
-		if (security_p) 
-		{
-			rule_p->next = security_p->security_rule_p;
-			security_p->security_rule_p = rule_p;
-			return security_p;
-		}
-	}
-	
-	return NULL;
-}
-
-openstack_security_rule_p update_security_rule(char* group_id, char* rule_id, char* direction, char* ethertype, char* port_range_max,
-		char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id)
-{
-	openstack_security_rule_p rule_p = find_security_rule_by_rule_id(group_id, rule_id);
-	if (NULL == rule_p) 
-	{
-		rule_p = create_security_rule(group_id, rule_id, direction, ethertype, port_range_max, port_range_min, protocol,
-							 remote_group_id, remote_ip_prefix, tenant_id);
-		if (rule_p) 
-		{
-			rule_p->check_status = (UINT2)CHECK_CREATE;
-			add_security_rule_into_group(group_id, rule_p);
-		}
-	}
-	else if (compare_security_rule(group_id, rule_id, direction, ethertype, port_range_max, port_range_min, protocol,
-							 remote_group_id, remote_ip_prefix, tenant_id, rule_p)) 
-	{
-		rule_p->check_status = (UINT2)CHECK_LATEST;
-	}
-	else 
-	{
-		memcpy(rule_p->direction, direction, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->ethertype, ethertype, OPENSTACK_SECURITY_GROUP_LEN);
-		rule_p->port_range_max = (0 == strcmp(port_range_max, "")) ? 0:atoi(port_range_max);
-		rule_p->port_range_min = (0 == strcmp(port_range_min, "")) ? 0:atoi(port_range_min);
-		memcpy(rule_p->protocol, protocol, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->remote_group_id, remote_group_id, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->remote_ip_prefix, remote_ip_prefix, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->tenant_id, tenant_id, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->rule_id, rule_id, OPENSTACK_SECURITY_GROUP_LEN);
-		memcpy(rule_p->group_id, group_id, OPENSTACK_SECURITY_GROUP_LEN);
-		rule_p->check_status = (UINT2)CHECK_UPDATE;
-	}
-
-	return rule_p;
-}
 
 
-openstack_security_rule_p update_security_rule_temp(char* group_id, char* rule_id, char* direction, char* ethertype, char* port_range_max,
-		char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id)
-{
-	openstack_security_rule_p rule_p = create_security_rule(group_id, rule_id, direction, ethertype, port_range_max, port_range_min, protocol,
-								  remote_group_id, remote_ip_prefix, tenant_id);
-	if (rule_p) 
-	{
-		add_security_rule_into_group_temp(group_id, rule_p);
-	}
-	
-	return rule_p;
-}
+
+
 
 //by:yhy find_fabric_host_port_by_port_id
 p_fabric_host_node find_fabric_host_port_by_port_id(char* port_id)
@@ -1459,10 +1079,16 @@ p_fabric_host_node find_fabric_host_port_by_subnet_id(UINT4 ip, char* subnet_id)
 	return NULL;
 }
 //by:yhy 根据floating_ip在g_fabric_host_list.list查找与之对应的p_fabric_host_node节点,找到其network_id
-void find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id)
+INT4 find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id, char* subnet_id)
 {
 	p_fabric_host_node port = NULL;
 	port = g_fabric_host_list.list;
+
+	if((NULL == network_id)||(NULL == subnet_id))
+	{
+		return GN_ERR;
+	}
+	
 	while(port != NULL)
 	{
 		if(floating_ip == port->ip_list[0])
@@ -1471,7 +1097,8 @@ void find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id)
 			if (NULL != port_p) 
 			{
 				strcpy(network_id,port_p->network_id);
-				return;
+				strcpy(subnet_id ,port_p->subnet_id);
+				return GN_OK;
 			}
 		}
 		port = port->next;
@@ -1500,6 +1127,14 @@ UINT1 get_openstack_port_type(char* type_str)
 	else if (0 == strcmp("neutron:LOADBALANCER", type_str)) {
 		returnValue = OPENSTACK_PORT_TYPE_LOADBALANCER;
 	}
+	else if(0 == strcmp("network:LOADBALANCER_VIP", type_str))
+	{
+		returnValue =  OPENSTACK_PORT_TYPE_CLBLOADBALANCER;
+	}
+	else if(0 == strcmp("network:LOADBALANCER_HA", type_str))
+	{
+		returnValue = OPENSTACK_PORT_TYPE_CLBLOADBALANCER_HA;
+	}
 	else {
 		returnValue = OPENSTACK_PORT_TYPE_OTHER;
 	}
@@ -1511,6 +1146,8 @@ UINT1 get_openstack_port_type(char* type_str)
 //by:yhy 主机检查(更倾向于通过泛洪和检查ovsdb来定期刷新主机)
 void init_host_check_mgr()
 {
+	void *clbviphost_check_timer = NULL;
+	void *clbviphost_check_timerid = NULL;
 	INT1 *value = NULL;
 	value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
 	UINT4 flag_openstack_on = (NULL == value) ? 0: atoi(value);
@@ -1522,8 +1159,11 @@ void init_host_check_mgr()
 	if ((flag_openstack_on) && (flag_host_check_on) && (g_host_check_interval))
 	{
 		host_check_tx_timer(NULL, NULL);
+		clbviphost_check_tx_timer(NULL, NULL);
 		g_host_check_timerid = timer_init(1);
+		clbviphost_check_timerid = timer_init(1);
 		timer_creat(g_host_check_timerid, g_host_check_interval, NULL, &g_host_check_timer, host_check_tx_timer);
+		timer_creat(clbviphost_check_timerid, 10, NULL, &clbviphost_check_timer, clbviphost_check_tx_timer);
 	}
 }
 //by:yhy 定期检查host主机
@@ -1532,6 +1172,7 @@ void init_host_check_mgr()
 void host_check_tx_timer(void *para, void *tid)
 {
 	LOG_PROC("TIMER", "host_check_tx_timer - START");
+	UINT4 inside_vipIp = 0;
 	INT1 *value = NULL;
 	value = get_value(g_controller_configure, "[openvstack_conf]", "host_check_ovsdb");
 	UINT4 flag_ovsdb = (NULL == value) ? 0: atoi(value);
@@ -1541,12 +1182,17 @@ void host_check_tx_timer(void *para, void *tid)
 
 	p_fabric_host_node head = NULL;
 	p_fabric_host_node gateway_p = NULL;
+	p_fabric_host_node inside_viphost = NULL;
 
+	if (OFPCR_ROLE_SLAVE == g_controller_role) 
+    {
+         return ;
+    }
 	head = g_fabric_host_list.list;
 
 	while (head) 
 	{//by:yhy 遍历g_fabric_host_list.list
-		if (((OPENSTACK_PORT_TYPE_HOST == head->type) || (OPENSTACK_PORT_TYPE_DHCP == head->type))&& (NULL == head->sw) && (0 != head->ip_list[0]))
+		if (((OPENSTACK_PORT_TYPE_HOST == head->type) || (OPENSTACK_PORT_TYPE_DHCP == head->type))&& (NULL == head->sw)&& (0 != head->ip_list[0]))
 		{
 			if (flag_arp) 
 			{
@@ -1559,7 +1205,7 @@ void host_check_tx_timer(void *para, void *tid)
 				}
 				else 
 				{//by:yhy 若未找到网关,则在控制器的IP与MAC为源做洪泛
-					fabric_opnestack_create_arp_flood(g_reserve_ip, head->ip_list[0], g_reserve_mac);
+					fabric_opnestack_create_arp_flood(htonl(g_reserve_ip), head->ip_list[0], g_reserve_mac);
 				}
 			}
 
@@ -1568,10 +1214,102 @@ void host_check_tx_timer(void *para, void *tid)
 				search_host_in_ovsdb_by_mac(head->mac);
 			}			
 		}
+	
+			
 		head = head->next;
 	}
 	LOG_PROC("TIMER", "host_check_tx_timer - STOP");
+	fabric_firewall_RefreshSwitch();
 }
 
+void clbviphost_check_tx_timer(void *para, void *tid)
+{
+	UINT4 inside_vipIp = 0;
+	p_fabric_host_node head = NULL;
+	p_fabric_host_node inside_viphost = NULL;
+	external_port_p epp = NULL;
+	gn_switch_t * external_sw = NULL;
+	p_fabric_host_node gateway_p = NULL;
+	//openstack_clbass_vips_sw_list_p vips_sw_list_node = NULL;
+
+	if (OFPCR_ROLE_SLAVE == g_controller_role) 
+    {
+         return ;
+    }
+	head = g_fabric_host_list.list;
+	while (head) 
+	{
+
+		// add by ycy for 华云
+		if ((OPENSTACK_PORT_TYPE_CLBLOADBALANCER == head->type)&& (0 != head->ip_list[0])) //&& (NULL == head->sw) 
+		{
+			
+			inside_vipIp = find_openstack_clbaas_vipfloatingpool_insideip_by_extip(head->ip_list[0]);
+			if(inside_vipIp)
+			{
+				//LOG_PROC("INFO", "***************%s %d head->ip_list[0]=0x%x inside_vipIp=0x%x",FN,LN,head->ip_list[0], inside_vipIp);
+				inside_viphost =  get_fabric_host_from_list_by_ip(inside_vipIp);
+				if(inside_viphost)//&&inside_viphost->sw
+				{
+					#if 0
+					//vips_sw_list_node = find_openstack_vips_sw_list_byip(inside_vipIp);
+					if(head->sw&&(inside_viphost->sw != head->sw))
+					{
+						LOG_PROC("INFO", "%s %d #################HA####################inside_viphost->sw->sw_ip=0x%x head->sw->sw_ip=0x%x",FN,LN,inside_viphost->sw,head->sw->sw_ip);
+
+						vips_sw_list_node = update_openstack_vips_sw_list( inside_vipIp, inside_viphost->sw);
+						remove_openstack_clbaas_backend_internalflows_byMac(inside_viphost->sw, inside_viphost->mac);
+
+						remove_openstack_clbaas_backend_internalflows_byIp(inside_vipIp);
+						epp  = get_external_port_by_hostip(head->ip_list[0]);
+						if(epp)
+						{
+							external_sw = get_ext_sw_by_dpid(epp->external_dpid);
+							if(external_sw)
+							{
+								
+								LOG_PROC("INFO", "%s %d #################HA####################",FN,LN);
+								remove_clbforward_flow_by_SrcIp(external_sw, head->ip_list[0]);
+								
+							}
+						}
+						//head->sw = inside_viphost->sw;
+					}
+					#endif
+					
+					fabric_opnestack_create_icmp_flood_allsw( htonl(g_reserve_ip), head->ip_list[0], g_reserve_mac, head->mac);
+					
+					//LOG_PROC("INFO", "***************%s %d inside_vipIp=0x%x inside_viphost->sw->sw_ip=0x%x g_reserve_ip=0x%x",FN,LN, inside_vipIp,inside_viphost->sw->sw_ip,g_reserve_ip);
+					//icmp flood to sw
+					//fabric_opnestack_create_icmp_flood(inside_viphost->sw, htonl(g_reserve_ip), head->ip_list[0], g_reserve_mac, head->mac);
+					
+					gateway_p = find_openstack_app_gateway_by_host(inside_viphost);
+
+					if((NULL != gateway_p)&&head->sw&&(NULL==inside_viphost->sw))
+					{
+						
+						fabric_opnestack_create_clb_arpflood( head->sw, gateway_p->ip_list[0], inside_viphost->ip_list[0], gateway_p->mac, inside_viphost->mac);
+					}
+					
+				}
+			}
+		}
+	
+		if((OPENSTACK_PORT_TYPE_CLBLOADBALANCER_HA == head->type)&&(0 != head->ip_list[0])&&(NULL == head->sw))	
+		{
+				gateway_p = find_openstack_app_gateway_by_host( head);
+				if(NULL != gateway_p)
+				{
+					fabric_opnestack_create_icmp_flood_allsw( gateway_p->ip_list[0], head->ip_list[0], gateway_p->mac, head->mac);
+					
+					LOG_PROC("INFO","###############%s %d head->ip_list[0]=0x%x",FN,LN, head->ip_list[0]);
+				}
+				
+		}
+	
+		
+		head = head->next;
+	}
+}
 
 

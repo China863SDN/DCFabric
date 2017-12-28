@@ -38,6 +38,7 @@
 #include "../cluster-mgr/cluster-mgr.h"
 #include "../cluster-mgr/redis_sync.h"
 #include "openflow-common.h"
+#include "../conn-svr/conn-svr.h"
 #include "../qos-mgr/qos-mgr.h"
 
 
@@ -115,8 +116,8 @@ t_fabric_sw_list g_fabric_sw_list_total;
 //by:yhy 被删除的交换机节点临时存放此处,如果要新添交换机,则从此处取出一个节点用来存放
 t_fabric_sw_list g_fabric_sw_list_old_tag;
 //by:yhy vlan_id全局自增分配给各交换机
-UINT4 g_fabric_tag = 0;
-UINT4 vlan_start_tag = FABRIC_START_TAG;
+extern UINT4 g_fabric_tag ;
+extern UINT4 vlan_start_tag ;
 
 // fabric path list
 p_fabric_path_list g_fabric_path_list = NULL;
@@ -165,9 +166,11 @@ void of131_fabric_impl_setup()
 	value = get_value(g_controller_configure, "[topo_conf]", "path_once_inc");
 	g_path_once_inc = (NULL == value) ? 1 : strtoull(value, NULL, 10);
 
+	/*
 	value = get_value(g_controller_configure, "[controller]", "vlan_start_tag");
 	vlan_start_tag = (NULL == value) ? FABRIC_START_TAG: strtoull(value, NULL, 10);
-
+	*/
+	
 	// alloc memory from pool
 	init_fabric_path_mem();
 
@@ -311,12 +314,13 @@ void of131_fabric_impl_add_sws(gn_switch_t** swList, UINT4 num)
 			//by:yhy 取出一个回收的,又新建一个,赋同样的值(why?,分别分配给两个不同的list)
 			if(node == NULL)
 			{
-				node = create_fabric_sw_node(sw,g_fabric_tag);
-				g_fabric_tag++;
+				node = create_fabric_sw_node(sw,sw->vlan_tag);
+				//g_fabric_tag++;
 			}
 			else
 			{
 				node->sw = sw;
+				node->tag = sw->vlan_tag;
 			}
 			available_node = create_fabric_sw_node(node->sw,node->tag);
 			
@@ -327,7 +331,7 @@ void of131_fabric_impl_add_sws(gn_switch_t** swList, UINT4 num)
 		}
 		else
 		{
-			node = create_fabric_sw_node(sw,0);
+			node = create_fabric_sw_node(sw,sw->vlan_tag);
 		}   
 		
 		//by:yhy 将sw节点加入g_fabric_sw_list_total
@@ -353,7 +357,7 @@ void of131_fabric_impl_remove_sws(gn_switch_t** swList, UINT4 num)
 	p_fabric_sw_node node = NULL;
 
 	for(i = 0 ; i < num; i++)
-	{//by:yhy 遍历g_event_delete_switch_list下的每一个交换机
+	{
 		sw = swList[i];
 		//by:yhy 删除该交换机下的所有主机节点
 		delete_fabric_host_from_list_by_sw(sw);
@@ -1142,7 +1146,7 @@ void init_fabric_id()
 	gn_switch_t* sw = NULL;
 	UINT4 i=0;
 
-	g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
+	//g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
 	p_sentinel = &sentinel;
 	p_sentinel->next = NULL;
 
@@ -1151,8 +1155,8 @@ void init_fabric_id()
 		if (INITSTATE != g_server.switches[i].conn_state)
 		{
 			sw = &g_server.switches[i];
-			p_sentinel->next = create_fabric_sw_node(sw,g_fabric_tag);
-			g_fabric_tag++;
+			p_sentinel->next = create_fabric_sw_node(sw,sw->vlan_tag);
+			//g_fabric_tag++;
 			p_sentinel = p_sentinel->next;
 			g_fabric_sw_list.num++;
 		}
@@ -1174,7 +1178,7 @@ void init_fabric_id_by_dpids(UINT8* dpids,UINT4 len)
 	UINT4 i=0;
 
 	// initialize
-	g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
+	//g_fabric_tag = (0 == vlan_start_tag) ? FABRIC_START_TAG : vlan_start_tag;
 	p_sentinel = &sentinel;
 	p_sentinel->next = NULL;
 	p_total_sentinel = &total_sentinel;
@@ -1187,16 +1191,16 @@ void init_fabric_id_by_dpids(UINT8* dpids,UINT4 len)
 			sw = &g_server.switches[i];
 			if( 0 != check_dpid_avaliable(sw->dpid))
 			{
-				p_sentinel->next = create_fabric_sw_node(sw,g_fabric_tag);
-				p_total_sentinel->next = create_fabric_sw_node(sw,g_fabric_tag);
+				p_sentinel->next = create_fabric_sw_node(sw,sw->vlan_tag);
+				p_total_sentinel->next = create_fabric_sw_node(sw,sw->vlan_tag);
 				// increase tag value
-				g_fabric_tag++;
+				//g_fabric_tag++;
 				p_sentinel = p_sentinel->next;
 				g_fabric_sw_list.num++;
 			}
 			else
 			{
-				p_total_sentinel->next = create_fabric_sw_node(sw,0);
+				p_total_sentinel->next = create_fabric_sw_node(sw,sw->vlan_tag);
 			}
 			p_total_sentinel = p_total_sentinel->next;
 			g_fabric_sw_list_total.num++;
@@ -1259,7 +1263,7 @@ void clear_fabric_server()
 	{
 		p_sentinel = delete_fabric_sw_node(p_sentinel);
 	}
-	g_fabric_tag = 0;
+	//g_fabric_tag = 0;
 
 
 	// clear path
@@ -1479,24 +1483,23 @@ UINT4 get_out_port_between_switch(UINT8 src_dpid, UINT8 dst_dpid)
 	return path_node->port->port_no;
 }
 
-// this function is used to get port no between switch and host ip
+
+/* by:yhy
+ * 在华云环境适配时改动过.这里是找到sw交换机上浮动IP:dst_ip的出口的端口号
+ */
 UINT4 get_port_no_between_sw_ip(gn_switch_t* sw, UINT4 dst_ip)
 {
-	p_fabric_host_node host = get_fabric_host_from_list_by_ip(dst_ip);
-	
-	if ((NULL == host) || (NULL == host->sw)) {
-		return 0;
-	}
-
 	UINT4 port_no = 0;
+	external_port_p S_TargetExternalPort =find_openstack_external_by_floating_ip(dst_ip);
+	if(S_TargetExternalPort)
+	{
+		gn_switch_t * S_TargetExternalSwitch =find_sw_by_dpid(S_TargetExternalPort->external_dpid);
+		if(S_TargetExternalSwitch)
+		{
+			port_no = get_out_port_between_switch(sw->dpid, S_TargetExternalSwitch->dpid);
+		}
+	}
 	
-	if (sw == host->sw) {
-		// port_no = host->port;
-	}
-	else {
-		port_no = get_out_port_between_switch(sw->dpid, host->sw->dpid);
-	}
-
 	return port_no;
 }
 

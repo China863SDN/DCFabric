@@ -218,6 +218,7 @@ Frees the memory appointed to the value fed as the parameter, as well as all the
 @param value the root node of the tree being freed
 **/
 	void json_free_value (json_t ** value);
+	void json_free_value_all (json_t ** value);
 
 
 /**

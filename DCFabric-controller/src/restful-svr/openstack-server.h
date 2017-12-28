@@ -36,18 +36,30 @@
 enum EOpenStack_GetType
 {
   EOPENSTACK_GET_NORMAL,
+  EOPENSTACK_GET_LOADBALANCE,
   EOPENSTACK_GET_PORTFORWARD,
+  EOPENSTACK_GET_CLBLOADBALANCE,
+  EOPENSTACK_GET_QOS
 };
- 
+
+typedef INT4 (*openstack_dataparse_cb)(char *string, void* param);
+
+typedef struct openstack_parse
+{
+	char *stringType;
+	char eGetType;
+	openstack_dataparse_cb callback_func;
+}stopenstack_parse, *pstopenstack_parse;
+
 int getNewTokenId(char *ip,char *tenantName,char *username,char *password);
-void getNewTokenId2(char *ip,char *tenantName,char *username,char *password);
-void getOpenstackInfo(char *ip,char *url,int port,char *string, void* param, enum EOpenStack_GetType getType);
+INT4 getOpenstackInfo(char *ip,char *url,int port,char *string, void* param, enum EOpenStack_GetType getType);
 void initOpenstackFabric();
-void updateOpenstackFloating();
-void reload_security_group_info();
-void reoad_lbaas_info();
-void reload_net_info();
+INT4 updateOpenstackFloating();
+INT4 reload_security_group_info();
+INT4 reoad_lbaas_info();
+INT4 reload_net_info();
 void reload_routers();
+INT4 reload_clbs_info();
 void reload_port_forward();
 
 #endif

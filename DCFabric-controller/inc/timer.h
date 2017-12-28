@@ -32,6 +32,19 @@
 
 #include "mem_pool.h"
 
+
+//时间节点
+typedef struct _timer_node
+{
+    UINT1       is_used;								//by:yhy 该node是否启用
+    UINT4       timeout;            					//by:yhy 该node超时时间
+    UINT4       times;              					//by:yhy 该node剩余时间
+    void        *para;              					//by:yhy 参数
+    void        *timer_id;          					//by:yhy 参数
+    void        (*fun)(void *para,  void *timer_id);	//by:yhy 当times为零时执行的功能函数
+}Timer_Node;
+
+
 typedef int(*Fun)(void *data);
 extern struct timeval g_cur_sys_time;
 

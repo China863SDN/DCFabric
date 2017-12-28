@@ -120,7 +120,10 @@ static INT1 *proc_rest_msg(const INT1 *method, const INT1 *url, const INT1 *uplo
     {
         reply = proc_restful_request(HTTP_DELETE, url, root);
     }
-
+	if(NULL != root)
+	{
+		json_free_value_all(&root);
+	}
     return reply;
 }
 
@@ -157,8 +160,10 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
         *upload_data_size = 0;
         upload_data = NULL;
 
-        free(g_rest_reply);
-        g_rest_reply = NULL;
+        if (g_rest_reply)
+        {
+            gn_free((void **)&g_rest_reply);
+        }
         return ret;
     }
 
@@ -202,7 +207,15 @@ static int answer_to_connection(void *cls, struct MHD_Connection *connection,
 
             return MHD_YES;
         }
-        else
+        else if(0 == strcmp(method, "DELETE"))
+    	{
+    		LOG_PROC("INFO", "Restful[%s]: [%s] %s\n", method, url, upload_data);
+            g_rest_reply = proc_rest_msg(method, url, upload_data);
+
+            memset((char *) upload_data, 0x0, *upload_data_size);    
+            *upload_data_size = 0;
+    	}
+		else
         {
             ret = send_page(connection, g_rest_reply, MHD_HTTP_OK);
             memset((char *) upload_data, 0x0, *upload_data_size);
@@ -232,6 +245,7 @@ INT4 init_restful_svr()
     {
         g_restful_get_handles[i].used = 0;
         g_restful_post_handles[i].used = 0;
+		g_restful_put_handles[i].used = 0;
         g_restful_delete_handles[i].used = 0;
     }
 	

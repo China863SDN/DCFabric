@@ -275,21 +275,21 @@ typedef struct st_lldp
 {
     ether_t eth_head;
 
-    //9 Byte
+    //11 Bytes
     UINT2 chassis_tlv_type_and_len;   	//0x0209
     UINT1 chassis_tlv_subtype;       	//MAC             4
     UINT8 chassis_tlv_id;            	//dpid
 
-    //5 Byte
+    //5 Bytes
     UINT2 port_tlv_type_and_len;      	//0x0403
     UINT1 port_tlv_subtype;          	//local assigned    7
     UINT2 port_tlv_id;                	//send port
 
-    //4 Byte
+    //4 Bytes
     UINT2 ttl_tlv_type_and_len;      	//0x0602
     UINT2 ttl_tlv_ttl;               	//ttl 120
 
-    //2
+    //2 Bytes
     UINT2 endof_lldpdu_tlv_type_and_len;
 }lldp_t;
 

@@ -48,10 +48,7 @@
 #define OPENSTACK_PORT_ID_LEN 48
 #define OPENSTACK_PORT_MAX_NUM 10240
 
-// security group
-#define OPENSTACK_SECURITY_GROUP_LEN 48
-#define OPENSTACK_SECURITY_GROUP_MAX_NUM 128
-#define OPENSTACK_SECURITY_RULE_MAX_NUM 1024
+
 //firewall
 #define OPENSTACK_FIREWALL_LEN 48
 #define OPENSTACK_FIREWALL_MAX_NUM 128
@@ -116,47 +113,10 @@ typedef struct _openstack_node{
 	struct _openstack_node* next;
 }openstack_node,*openstack_node_p;
 
-typedef struct _openstack_security_rule {
-	char group_id[OPENSTACK_SECURITY_GROUP_LEN];
-	char direction[OPENSTACK_SECURITY_GROUP_LEN];
-	char ethertype[OPENSTACK_SECURITY_GROUP_LEN];
-	char rule_id[OPENSTACK_SECURITY_GROUP_LEN];
-	UINT4 port_range_max;
-	UINT4 port_range_min;
-	char protocol[OPENSTACK_SECURITY_GROUP_LEN];
-	char remote_group_id[OPENSTACK_SECURITY_GROUP_LEN];
-	char remote_ip_prefix[OPENSTACK_SECURITY_GROUP_LEN];
-	char tenant_id[OPENSTACK_SECURITY_GROUP_LEN];
-	UINT2 check_status;
-	struct _openstack_security_rule* next;
-} openstack_security_rule, *openstack_security_rule_p;
 
 
-typedef struct _openstack_firewall_rule {
-	char direction[OPENSTACK_FIREWALL_LEN];
-	char ethertype[OPENSTACK_FIREWALL_LEN];
-	char rule_id[OPENSTACK_FIREWALL_LEN];
-	UINT4 port_range_max;
-	UINT4 port_range_min;
-	char protocol[OPENSTACK_FIREWALL_LEN];
-	char remote_group_id[OPENSTACK_FIREWALL_LEN];
-	char remote_ip_prefix[OPENSTACK_FIREWALL_LEN];
-	char tenant_id[OPENSTACK_FIREWALL_LEN];
-	struct _openstack_firewall_rule* next;
-} openstack_firewall_rule, *openstack_firewall_rule_p;
-
-typedef struct _openstack_security {
-	char security_group[OPENSTACK_SECURITY_GROUP_LEN];
-	openstack_security_rule_p security_rule_p;
-	struct _openstack_security* next;
-} openstack_security, *openstack_security_p;
 
 
-typedef struct _openstack_firewall {
-	char firewall_fwaas[OPENSTACK_FIREWALL_LEN];
-	openstack_firewall_rule_p firewall_rule_p;
-	struct _openstack_firewall* next;
-} openstack_firewall, *openstack_firewall_p;
 ////////////////////////////////////////////////////////////////////////
 /*
  * [openstack/neutron.git] / neutron / common / constants.py
@@ -181,6 +141,8 @@ enum openstack_port_type
 	OPENSTACK_PORT_TYPE_FLOATINGIP,			// 4: "network:floatingip"
 	OPENSTACK_PORT_TYPE_DHCP,				// 5: "network:dhcp"
 	OPENSTACK_PORT_TYPE_LOADBALANCER,		// 6: "neutron:LOADBALANCER"
+	OPENSTACK_PORT_TYPE_CLBLOADBALANCER,  // 7 :network:LOADBALANCER_VIP
+	OPENSTACK_PORT_TYPE_CLBLOADBALANCER_HA  // 8 :network:LOADBALANCER_HA
 };
 
 UINT1 get_openstack_port_type(char* type_str);
@@ -190,7 +152,7 @@ UINT1 get_openstack_port_type(char* type_str);
 
 void init_openstack_host();
 void show_openstack_total();
-void destory_openstack_host();
+
 
 ////////////////////////////////////////////////////////////////////////
 openstack_network_p create_openstack_host_network(
@@ -264,12 +226,7 @@ void destory_openstack_host_port(openstack_port_p port);
 openstack_node_p create_openstack_host_node(UINT1* data);
 void destory_openstack_host_node(openstack_node_p node);
 
-openstack_security_p update_openstack_security_group(char* security_group);
-openstack_node_p add_openstack_host_security_node(UINT1* data, openstack_node_p head_p);
-void clear_openstack_host_security_node(UINT1* head_p);
-void clear_all_security_group_info();
-openstack_security_rule_p update_security_rule(char* security_group, char* rule_id, char* direction, char* ethertype, char* port_range_max,
-char* port_range_min, char* protocol, char* remote_group_id, char* remote_ip_prefix, char* tenant_id);
+
 
 
 
@@ -279,12 +236,14 @@ p_fabric_host_node find_fabric_host_port_by_network_id(UINT4 ip, char* network_i
 UINT4 find_fabric_host_ports_by_subnet_id(char* subnet_id,p_fabric_host_node* host_list);
 p_fabric_host_node find_fabric_host_port_by_subnet_id(UINT4 ip, char* subnet_id);
 p_fabric_host_node find_openstack_host_by_srcport_ip(p_fabric_host_node host_p, UINT4 ip);
-void find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id);
+INT4 find_fabric_network_by_floating_ip(UINT4 floating_ip,char* network_id, char* subnet_id);
 void update_openstack_host_port_by_mac(UINT1* mac, gn_switch_t* sw, UINT4 port);
 
 
 void init_host_check_mgr();
 void host_check_tx_timer(void *para, void *tid);
+void clbviphost_check_tx_timer(void *para, void *tid);
+
 
 #endif /* INC_OPENSTACK_OPENSTACK_HOST_H_ */
 

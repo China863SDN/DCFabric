@@ -32,7 +32,7 @@
 #ifndef INC_FABRIC_FABRIC_ARP_H_
 #define INC_FABRIC_FABRIC_ARP_H_
 
-p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 inport);
+p_fabric_host_node fabric_save_host_info(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 targetip, UINT4 inport);
 p_fabric_host_node fabric_find_dst_port(p_fabric_host_node src_node,UINT4 targetip);
 INT4 fabric_arp_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in);
 INT4 fabric_arp_reply(p_fabric_host_node src_port,p_fabric_host_node dst_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in);
@@ -40,9 +40,9 @@ INT4 fabric_arp_remove_ip_from_flood_list(UINT4 sendip);
 INT4 fabric_ip_p_flood(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,UINT1* srcmac,packet_in_info_t *packet_in);
 INT4 fabric_ip_p_install_flow(param_set_p param, INT4 forward_type);
 INT4 fabric_ip_packet_output(p_fabric_host_node src_port,p_fabric_host_node dst_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in);
-INT4 fabric_arp_reply_output(p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in);
+INT4 fabric_arp_reply_output(UINT8 external_dpid,p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in);
 //void fabric_arp_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
-INT4 fabric_ip_packet_check_access(p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set);
+INT4 fabric_ip_packet_check_access(gn_switch_t *sw,p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set);
 INT4 fabric_compute_src_dst_forward(p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set);
 void fabric_ip_handle(gn_switch_t *sw, packet_in_info_t *packet_in);
 void fabric_vlan_handle(gn_switch_t *sw, packet_in_info_t *packet_in);

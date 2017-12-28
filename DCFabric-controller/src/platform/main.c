@@ -28,7 +28,7 @@
 *                                                                             *
 ******************************************************************************/
 #ifndef VERSION
-#define VERSION 0x020000
+#define VERSION 0x020101
 #endif
 #define PRODUCT "DCFabric"
 
@@ -55,7 +55,9 @@
 #include "openstack_lbaas_app.h"
 #include "../overload-mgr/overload-mgr.h"
 #include "../qos-mgr/qos-mgr.h"
+#include "../fabric/fabric_thread.h"
 #include <sys/prctl.h>   
+#include "log.h"
 
 
 #define START_DATE __DATE__  // compile date.
@@ -78,7 +80,7 @@ void* auto_test_p = NULL;
 //by:yhy 全局主从备份标志
 UINT1 g_is_cluster_on = 0;
 
-UINT4 g_max_nofile = 65535;
+UINT4 g_max_nofile = 819200;
 
 void show_copy_right()
 {
@@ -148,24 +150,29 @@ void init_openstack_fabric_auto_start()
 	int return_value = 0;
 	value = get_value(g_controller_configure, "[openvstack_conf]", "auto_fabric");
 	return_value = (NULL == value) ? 0: atoi(value);
+
 	if (0 != return_value) 
 	{
 		if (0 == g_fabric_start_flag) 
 		{
-			LOG_PROC("INFO", "Setup fabric impl");
-			of131_fabric_impl_setup();
+			LOG_PROC("INFO", "Setup fabric impl start");
+			of131_fabric_impl_setup();	
+			LOG_PROC("INFO", "Setup fabric impl end");
 		}
 		g_fabric_start_flag = 1;
 	}
-
+	
+	
 	//by:yhy 对Pica8下发外联口相关的流表
 	init_external_flows();
 	//by:yhy 下发浮动IP相关流表(内部又重新启动一个定时器周期执行操作)
 	init_proactive_floating_check_mgr();
-	//by:yhy 定期刷新主机列表
-	init_host_check_mgr();
+	
+	reset_floating_flowinstall_flag();
 	//by:yhy 定期检查external(对外交换机,发送ARP请求)
 	init_external_mac_check_mgr();
+	//by:yhy 定期刷新主机列表
+	init_host_check_mgr();
 	// kill timer   why? 为什么干掉了?(目测init_openstack_fabric_auto_start函数内部调用的各功能都独自启动了单独的定时器)
     timer_kill(auto_test_p, &g_auto_timer);
 	//by:yhy 启动lbaas监听,定时刷新状态
@@ -184,7 +191,7 @@ void init_openstack_fabric_auto_start_delay()
 	g_auto_init_flag = 1;
 
 	void *g_auto_timerid = NULL;
-	UINT4 g_auto_interval = 10;
+	UINT4 g_auto_interval = 20;
 
 	// set the timer
     g_auto_timerid = timer_init(1);
@@ -194,7 +201,8 @@ void init_openstack_fabric_auto_start_delay()
 //get net card info
 INT4 get_controller_inet_info()
 {
-    INT1 if_name[10] = {0};
+	#define IFNETNAMELEN 	128
+    INT1 if_name[IFNETNAMELEN] = {0};
 	//linux socket struct
     struct sockaddr_in *b;
     int sock, ret;
@@ -203,7 +211,7 @@ INT4 get_controller_inet_info()
 
 	//get net card interface
     INT1* value = get_value(g_controller_configure, "[controller]", "manager_eth");
-    NULL == value ? strncpy(if_name, "eth0", 10 - 1) : strncpy(if_name, value, 10 - 1);
+    NULL == value ? strncpy(if_name, "eth0", IFNETNAMELEN - 1) : strncpy(if_name, value, IFNETNAMELEN - 1);
 	
 	//linux netlink
     sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -411,7 +419,7 @@ INT4 module_init()
     }*/
 	
 	//Group
-    /*ret = init_group_mgr();
+    ret = init_group_mgr();
     if(GN_OK != ret)
     {
         LOG_PROC("ERROR", "Init group manager failed");
@@ -420,7 +428,7 @@ INT4 module_init()
     else
     {
         LOG_PROC("INFO", "Init group manager finished");
-    }*/
+    }
 
 	//绿网
 	/*Need to be deleted
@@ -448,17 +456,7 @@ INT4 module_init()
         LOG_PROC("INFO", "Init flow manager finished");
     }
 
-	//by:yhy open vswitch 
-    ret = init_ovsdb();
-    if(GN_OK != ret)
-    {
-        LOG_PROC("ERROR", "Init ovsdb manager failed");
-        return GN_ERR;
-    }
-    else
-    {
-        LOG_PROC("INFO", "Init ovsdb manager finished");
-    }
+
 
 	//by:yhy 初始化交换机信息
     ret = init_conn_svr();
@@ -472,6 +470,18 @@ INT4 module_init()
         LOG_PROC("INFO", "Init controller service finished");
     }
 
+	//by:yhy open vswitch 
+    ret = init_ovsdb();
+    if(GN_OK != ret)
+    {
+        LOG_PROC("ERROR", "Init ovsdb manager failed");
+        return GN_ERR;
+    }
+    else
+    {
+        LOG_PROC("INFO", "Init ovsdb manager finished");
+    }
+	
 	//绿网无用
 	/*Need to be deleted
     if(GN_OK != init_mac_user())
@@ -578,6 +588,8 @@ INT4 module_init()
     {
         LOG_PROC("INFO", "Init timer task finished");
     }
+	openstack_qos_Init();
+	start_qos_mgr();
 
     //by:yhy 目测为无效函数app_init(gnflush_init)中的gnflush为空函数
     mod_initcalls();
@@ -635,17 +647,40 @@ INT4 check_nofile()
         LOG_PROC("ERROR", "system nofile must not less %d", g_max_nofile);
         return GN_ERR;
     }
+	
+    return GN_OK;
+}
 
+INT4 set_fileandcore()
+{
+    //设置进程允许打开最大文件数
+    struct rlimit rt;
+	struct rlimit rlim;
+    rt.rlim_max = rt.rlim_cur = g_max_nofile;
+    if (setrlimit(RLIMIT_NOFILE, &rt) < 0) 
+    {
+        LOG_PROC("ERROR", "setrlimit file error");
+        return GN_ERR;
+    }
+	rt.rlim_cur = rt.rlim_max = RLIM_INFINITY;
+	if (setrlimit(RLIMIT_CORE, &rt)< 0) 
+	{
+		LOG_PROC("ERROR", "setrlimit core error");
+        return GN_ERR;
+    }
     return GN_OK;
 }
 
 int main(int argc, char **argv)
 {
     INT4 ret = 0;
+
+    init_log_task();
+
 	//by:yhy   show copyright
     show_copy_right();
 
-    //ret = check_nofile();
+    ret = set_fileandcore();
 
     if(GN_OK != ret)
     {
@@ -673,7 +708,7 @@ int main(int argc, char **argv)
     {
         LOG_PROC("INFO", "***** All modules initialized succeed *****\n");
     }
-
+	init_forward_param_list();
     init_handler();
     //by:yhy <obscure>
     thread_topo_change_start();
@@ -683,7 +718,7 @@ int main(int argc, char **argv)
     {
         goto EXIT;
     }
-
+	
     
     wait_exit();
 EXIT:

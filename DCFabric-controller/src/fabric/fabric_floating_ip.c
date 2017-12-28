@@ -45,6 +45,8 @@
 #include "openstack_lbaas_app.h"
 #include "../group-mgr/group-mgr.h"
 #include "../cluster-mgr/cluster-mgr.h"
+#include "openstack_clbaas_app.h"
+
 
 void *g_floating_check_timerid = NULL;
 UINT4 g_floating_check_interval = 5;
@@ -304,6 +306,7 @@ INT4 create_proactive_floating_internal_subnet_flow_by_subnet(openstack_subnet_p
 //by:yhy 移除subnet
 INT4 remove_proactive_floating_internal_subnet_flow_by_subnet(openstack_subnet_p subnet)
 {
+	LOG_PROC("INFO","######################################%s %d",FN,LN);
 	return process_floating_internal_subnet_flow_by_subnet(subnet, 2);
 }
 
@@ -337,6 +340,8 @@ INT4 create_proactive_internal_subnet_flow_by_fixed_port(p_fabric_host_node fixe
 //by:yhy 根据fixed_port删除内部子网流表
 INT4 remove_proactive_internal_subnet_flow_by_fixed_port(p_fabric_host_node fixed_port)
 {
+	
+	LOG_PROC("INFO","######################################%s %d",FN,LN);
 	return process_proactive_internal_subnet_flow_by_fixed_port(fixed_port, 2);
 }
 
@@ -626,8 +631,10 @@ INT4 remove_proactive_floating_with_lbaas_group_flows(gn_switch_t* ext_sw, p_fab
 //by:yhy 预下发与host主机浮动IP相关的流表(固定的流表,而不是针对网络流的流表)
 INT4 create_proactive_floating_with_host_flows(p_fabric_host_node fixed_port, gn_switch_t* ext_sw, external_port_p ext_port, UINT4 floatingip)
 {
+	INT4 ret = 0;
     if ((NULL == fixed_port) || (NULL == ext_sw) || (NULL == ext_port)) 
 	{
+		LOG_PROC("ERROR"," %s %d \n",FN,LN);
         return 0;
     }
 
@@ -636,6 +643,8 @@ INT4 create_proactive_floating_with_host_flows(p_fabric_host_node fixed_port, gn
 		
 		//by:yhy 查找fixed_port对应的gateway节点
         p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(fixed_port);
+		
+        LOG_PROC("INFO"," %s %d gateway_p=0x%x  g_reserve_ip=0x%x fixed_port->ip_list[0]=0x%x\n",FN,LN, gateway_p,g_reserve_ip, fixed_port->ip_list[0]);
 				
 		if (NULL != gateway_p) 
 		{//by:yhy 存在网关sw则以它为源进行arp洪泛
@@ -645,7 +654,6 @@ INT4 create_proactive_floating_with_host_flows(p_fabric_host_node fixed_port, gn
 		{//by:yhy 不存在网关sw则以控制器为源进行arp洪泛
 			fabric_opnestack_create_arp_flood(g_reserve_ip, fixed_port->ip_list[0], g_reserve_mac);
 		}
-        
         return 0;
     }
 
@@ -654,6 +662,7 @@ INT4 create_proactive_floating_with_host_flows(p_fabric_host_node fixed_port, gn
 
     if ((0 == fixed_vlan_id) || (0 == ext_vlan_id)) 
 	{//by:yhy why? 为何vlan为0就退出了
+	  LOG_PROC("INFO"," %s %d fixed_vlan_id=%d  ext_vlan_id=%d \n",FN,LN,fixed_vlan_id, ext_vlan_id);
        return 0;
     }
 	
@@ -662,16 +671,32 @@ INT4 create_proactive_floating_with_host_flows(p_fabric_host_node fixed_port, gn
 
     if (0 == outport) 
 	{
+		LOG_PROC("INFO"," %s %d \n",FN,LN);
         return 0;
     }
 	//by:yhy (why?目测未调用,找不到相应流表)
-    create_proactive_internal_subnet_flow_by_fixed_port(fixed_port);
+    if( 0== create_proactive_internal_subnet_flow_by_fixed_port(fixed_port))
+	{
+		LOG_PROC("INFO"," %s %d ",FN,LN);
+        return 0;
+	}
 	//by:yhy (why?目测未调用,找不到相应流表)
     install_proactive_floating_host_to_external_flow(fixed_port->sw, 1, fixed_port->ip_list[0], fixed_port->mac, floatingip, ext_port->external_gateway_mac, ext_vlan_id, NULL);
+
 	//by:yhy 下发流表(匹配IP为g_reserve_ip的包上送控制器)
-    install_add_fabric_controller_flow(fixed_port->sw);
+    if( 0== install_add_fabric_controller_flow(fixed_port->sw))
+	{
+		LOG_PROC("INFO"," %s %d ",FN,LN);
+        return 0;
+	}	
+	
 	//by:yhy 下发浮动ip相关包添加vlan流表(此处是对pica8下达)
     fabric_openstack_floating_ip_install_set_vlan_in_flow(ext_sw, floatingip, fixed_port->ip_list[0], fixed_port->mac, fixed_vlan_id, outport);
+	if( 0== install_add_FloatingIP_ToFixIP_OutputToHost_flow(floatingip))
+	{
+		LOG_PROC("INFO"," %s %d ",FN,LN);
+        return 0;
+	}
 	//by:yhy 在fixed_port所在交换机上下发匹配fixed_port的mac的转发至对应port的流表
     install_fabric_output_flow(fixed_port->sw, fixed_port->mac, fixed_port->port);
 
@@ -694,18 +719,23 @@ INT4 create_proactive_floating_flows_by_floating(external_floating_ip_p fip)
 	ext_port = get_external_port_by_floatip(fip->floating_ip);
 	if (NULL == ext_port) 
 	{
+		LOG_PROC("INFO"," %s %d NULL == ext_port fip->floating_ip=0x%x",FN,LN,fip->floating_ip);
 		return 0;
 	}
 	//by:yhy 查找外联口对应的交换机
 	ext_sw = find_sw_by_dpid(ext_port->external_dpid);
     if (NULL == ext_sw) 
 	{
+		
+		LOG_PROC("INFO"," %s %d NULL == ext_sw ext_port->external_dpid=0x%x",FN,LN,ext_port->external_dpid);
         return 0;
     }
     //by:yhy 根据固定内网Ip查找对应的Host主机
 	fixed_port = get_fabric_host_from_list_by_ip(fip->fixed_ip);
 	if (NULL == fixed_port) 
 	{
+		
+		LOG_PROC("INFO"," %s %d NULL == fixed_port fip->fixed_ip=0x%x",FN,LN,fip->fixed_ip);
         return 0;
     }
 
@@ -736,7 +766,7 @@ INT4 remove_proactive_floating_flows_by_floating(external_floating_ip_p fip)
 	{
         return 0;
     }
-    
+    LOG_PROC("INFO"," %s_%d \n",FN,LN);
 	external_port_p ext_port = NULL;
 	gn_switch_t* ext_sw = NULL;
 	p_fabric_host_node fixed_port = NULL;
@@ -757,12 +787,14 @@ INT4 remove_proactive_floating_flows_by_floating(external_floating_ip_p fip)
     
     if (NULL == fixed_port) 
 	{
+	    LOG_PROC("INFO"," %s_%d can't find fix ip by floating ip fip->floating_ip=0x%x fip->fixed_ip=0x%x\n",FN,LN,fip->floating_ip,fip->fixed_ip);
         return 0;
     }
 	if ((OPENSTACK_PORT_TYPE_HOST == fixed_port->type) && (fixed_port->sw)) 
 	{
 		UINT1 zero_mac[6] = {0};
 		install_proactive_floating_host_to_external_flow(fixed_port->sw, 2, fixed_port->ip_list[0], fixed_port->mac, fip->floating_ip, zero_mac, 0, NULL);
+		install_remove_FloatingIP_ToFixIP_OutputToHost_flow(fip->floating_ip);
 	}
     else if (OPENSTACK_PORT_TYPE_LOADBALANCER == fixed_port->type) 
 	{
@@ -795,8 +827,9 @@ void proactive_floating_check_tx_timer(void *para, void *tid)
 	{
 		efp = (external_floating_ip_p)node_p->data;
 		
-		if ((efp->fixed_ip) && (efp->floating_ip) && (strlen(efp->port_id)) && (strlen(efp->router_id)) && (0 == efp->flow_installed)) 
+		if ((efp->fixed_ip) && (efp->floating_ip) && (strlen(efp->port_id)) && (strlen(efp->router_id))&& (0 == efp->flow_installed)) 
 		{
+			
 			efp->flow_installed = create_proactive_floating_flows_by_floating(efp);
 		}
 		node_p = node_p->next;

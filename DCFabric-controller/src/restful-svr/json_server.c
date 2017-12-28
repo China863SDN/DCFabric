@@ -120,7 +120,7 @@ INT1 *json_to_reply(json_t *obj, INT4 code)
     json_insert_child(obj, key);
 
     json_tree_to_string(obj, &reply);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
 
     //LOG_PROC("INFO", "Reply: %s", reply);
     return reply;
@@ -372,6 +372,8 @@ static INT1 *get_topo_link(const const INT1 *url, json_t *root)
                 json_insert_child(link_array, link_obj);
 
                 ulli64_to_uc8(sw->dpid, dpid);
+				//LOG_PROC("INFO","--------------------swicth index: %d----------------------------",i);
+				//LOG_PROC("INFO","%s-tag1-|%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x|",FN,dpid[0],dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6],dpid[7]);
                 sprintf(json_temp, "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", dpid[0],
                         dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6],
                         dpid[7]);
@@ -395,6 +397,7 @@ static INT1 *get_topo_link(const const INT1 *url, json_t *root)
                         json_insert_child(neighbor_array, neighbor_obj);
 
                         key = json_new_string("srcPort");
+						//LOG_PROC("INFO","%s-tag2-srcPort:|%d|",FN, sw->ports[port].port_no);
                         sprintf(json_temp, "%d", sw->ports[port].port_no);
                         value = json_new_number(json_temp);
                         json_insert_child(key, value);
@@ -404,6 +407,7 @@ static INT1 *get_topo_link(const const INT1 *url, json_t *root)
                         if (sw->neighbor[port]->sw)
                         {
                             ulli64_to_uc8(sw->neighbor[port]->sw->dpid, dpid);
+							//LOG_PROC("INFO","%s-tag2-dstDPID:|%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x|",FN,dpid[0],dpid[1], dpid[2], dpid[3], dpid[4], dpid[5], dpid[6],dpid[7]);
                             sprintf(json_temp,
                                     "%02x:%02x:%02x:%02x:%02x:%02x:%02x:%02x", dpid[0],
                                     dpid[1], dpid[2], dpid[3], dpid[4], dpid[5],
@@ -418,6 +422,7 @@ static INT1 *get_topo_link(const const INT1 *url, json_t *root)
                         key = json_new_string("dstPort");
                         if (sw->neighbor[port]->port)
                         {
+							//LOG_PROC("INFO","%s-tag2-dstPort:|%d|",FN, sw->neighbor[port]->port->port_no);
                             sprintf(json_temp, "%d",
                                     sw->neighbor[port]->port->port_no);
                             value = json_new_number(json_temp);
@@ -623,7 +628,6 @@ static INT1 *del_l3_subnet(const INT1 *url, json_t *root)
     item_masked_ip = json_find_first_label(root, "subnet");
     if (NULL == item_masked_ip)
     {
-        json_free_value(&item_name);
         return json_to_reply(NULL, GN_ERR);
     }
 
@@ -1320,7 +1324,8 @@ static INT1 *del_flow_entries_all(const INT1 *url, json_t *root)
 
     item = json_find_first_label(root, "DPID");
     mac_str_to_bin(item->child->text, dpid);
-
+	json_free_value(&item );
+	
     sw = find_sw_by_dpid(uc8_to_ulli64(dpid, &_dpid));
     if (NULL == sw)
     {
@@ -1333,8 +1338,8 @@ static INT1 *del_flow_entries_all(const INT1 *url, json_t *root)
 
 static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
 {
-    json_t *item = NULL;
-
+    json_t *item = NULL;	
+	json_t *itemEthType = NULL;
     oxm_fields->mask = 0;
     item = json_find_first_label(obj, "inport");
     if (item)
@@ -1376,10 +1381,10 @@ static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
         json_free_value(&item);
     }
 
-    item = json_find_first_label(obj, "ethType");
-    if (item)
+    itemEthType = json_find_first_label(obj, "ethType");
+    if (itemEthType)
     {
-        if (0 == strncmp(item->child->text, "ARP", 3))
+        if (0 == strncmp(itemEthType->child->text, "ARP", 3))
         {
             oxm_fields->eth_type = ETHER_ARP;
             json_free_value(&item);
@@ -1432,29 +1437,28 @@ static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
                 json_free_value(&item);
             }
         }
-        else if (0 == strncmp(item->child->text, "IPV4", 4))
+        else if (0 == strncmp(itemEthType->child->text, "IPV4", 4))
         {
             oxm_fields->eth_type = ETHER_IP;
-            json_free_value(&item);
         }
-        else if (0 == strncmp(item->child->text, "IPV6", 4))
+        else if (0 == strncmp(itemEthType->child->text, "IPV6", 4))
         {
             oxm_fields->eth_type = ETHER_IPV6;
-            json_free_value(&item);
         }
-        else if (0 == strncmp(item->child->text, "MPLS", 4))
+        else if (0 == strncmp(itemEthType->child->text, "MPLS", 4))
         {
             oxm_fields->eth_type = ETHER_MPLS;
             json_free_value(&item);
 
             item = json_find_first_label(obj, "mplsLabel");
+			if(item)
             {
                 oxm_fields->mpls_label = atoll(item->child->text);
                 oxm_fields->mask |= (MASK_SET << OFPXMT_OFB_MPLS_LABEL);
                 json_free_value(&item);
             }
         }
-        else if (0 == strncmp(item->child->text, "VLAN", 3))
+        else if (0 == strncmp(itemEthType->child->text, "VLAN", 3))
         {
             oxm_fields->eth_type = ETHER_VLAN;
             json_free_value(&item);
@@ -1464,10 +1468,10 @@ static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
 			//by:yhy add 201701051407
 			LOG_PROC("ERROR", "json_parse_oxm_fields -- strncmp(item->child->text,  return GN_ERR");
 			
-            json_free_value(&item);
+            json_free_value(&itemEthType);
             return GN_ERR;
         }
-
+		json_free_value(&itemEthType);
         oxm_fields->mask |= (MASK_SET << OFPXMT_OFB_ETH_TYPE);
     }
 
@@ -1509,17 +1513,14 @@ static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
         if (0 == strncmp(item->child->text, "TCP", 3))
         {
             oxm_fields->ip_proto = IPPROTO_TCP;
-            json_free_value(&item);
         }
         else if (0 == strncmp(item->child->text, "UDP", 3))
         {
             oxm_fields->ip_proto = IPPROTO_UDP;
-            json_free_value(&item);
         }
         else if (0 == strncmp(item->child->text, "ICMP", 3))
         {
             oxm_fields->ip_proto = IPPROTO_ICMP;
-            json_free_value(&item);
         }
         else
         {
@@ -1529,7 +1530,8 @@ static INT4 json_parse_oxm_fields(json_t *obj, gn_oxm_t *oxm_fields)
 			LOG_PROC("ERROR", "json_parse_oxm_fields -- strncmp(item->child->text,  return GN_ERR");
             return GN_ERR;
         }
-
+		
+		json_free_value(&item);
         oxm_fields->mask |= (MASK_SET << OFPXMT_OFB_IP_PROTO);
     }
 
@@ -4155,50 +4157,57 @@ static INT1 *set_all_config_info(const INT1 *url, json_t *root){
 	if(item){
 		if(item->child->text){
 			ipflow =  atoi(item->child->text);
-			json_free_value(&item);
+		
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "fabricon");
 	if(item){
 		if(item->child->text){
 			fabricon =  atoi(item->child->text);
-			json_free_value(&item);
+		
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "openstackon");
 	if(item){
 		if(item->child->text){
 			openstackon =  atoi(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "physupport");
 	if(item){
 		if(item->child->text){
 			physupport =  atoi(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "maxlength");
 	if(item){
 		if(item->child->text){
 			maxlength =  atoll(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "maxswitch");
 	if(item){
 		if(item->child->text){
 			maxswitch =  atoll(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "maxbuff");
 	if(item){
 		if(item->child->text){
 			maxbuff =  atoll(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	set_value_int(g_controller_configure, "[openvstack_conf]", "ip_match_flows",ipflow);
 	set_value_int(g_controller_configure, "[openvstack_conf]", "auto_fabric",fabricon);
@@ -4218,59 +4227,77 @@ static INT1 *setup_fabric_external(const INT1 *url, json_t *root){
 	UINT8 dpid = 0;
 	UINT4 port=0;
 	char network_id[48] = {0};
+	char subnet_id[48] = {0};
 	json_t *item = NULL;
+	LOG_PROC("INFO", "------------%s",FN);
+	
 	item = json_find_first_label(root, "bandDpid");
 	if(item){
 	    if(item->child->text){
 	    	UINT1 dpid_tmp[8] = { 0 };
 			mac_str_to_bin(item->child->text, dpid_tmp);
 			uc8_to_ulli64 (dpid_tmp,&dpid);
-			json_free_value(&item);
+			
 	    }
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "bandPort");
 	if(item){
 		if(item->child->text){
 			port =  atoll(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "gatwayip");
 	if(item){
 		if(item->child->text){
 			gatwayip = inet_addr(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "outer_interface_ip");
 	if(item){
 		if(item->child->text){
 			outip = inet_addr(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "gatewaymac");
 	if(item){
 		if(item->child->text){
 			macstr2hex(item->child->text,gateway_mac);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "mac");
 	if(item){
 		if(item->child->text){
 			macstr2hex(item->child->text,outer_mac);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 	item = json_find_first_label(root, "networkid");
 		if(item){
 			if(item->child->text){
 				strcpy(network_id,item->child->text);
-				json_free_value(&item);
+				
 			}
+			json_free_value(&item);
 		}
-	create_external_port_by_rest(gatwayip,gateway_mac,outip,outer_mac,dpid,port,network_id);
+	item = json_find_first_label(root, "subnet_id");
+		if(item){
+			if(item->child->text){
+				strcpy(subnet_id,item->child->text);
+				
+			}
+			json_free_value(&item);
+		}
+	create_external_port_by_rest(gatwayip,gateway_mac,outip,outer_mac,dpid,port,network_id, subnet_id);
     return json_to_reply(NULL, GN_OK);
 }
 static INT1  *update_fabric_external(const INT1 *url, json_t *root)
@@ -4355,14 +4382,18 @@ static INT1* get_fabric_path(const INT1 *url, json_t *root)
     item = json_find_first_label(root, "srcDPID");
     if(item){
     	src_dpid = strtoull(item->child->text, NULL, 10);
+		json_free_value(&item);
     }else{
+    	json_free_value(&item);
     	return json_to_reply(NULL, EC_RESTFUL_REQUIRE_SRCDPID);
     }
 
     item = json_find_first_label(root, "dstDPID");
 	if(item){
 		dst_dpid = strtoull(item->child->text, NULL, 10);
+		json_free_value(&item);
 	}else{
+		json_free_value(&item);
 		return json_to_reply(NULL, EC_RESTFUL_REQUIRE_DSTDPID);
 	}
     //end
@@ -4448,7 +4479,7 @@ INT1 *json_to_reply_desc(json_t *obj, INT4 code, const INT1 *desc)
     }
 
     json_tree_to_string(obj, &reply);
-    json_free_value(&obj);
+    json_free_value_all(&obj);
 
     //LOG_PROC("INFO", "Reply: %s", reply);
     return reply;
@@ -4500,6 +4531,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != in_port_json)
     {
         oxm_match->in_port = (UINT4)strtoul(in_port_json->child->text, NULL, 10);
+		json_free_value(&in_port_json);
     }
 
     //in_phy_port
@@ -4507,6 +4539,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != in_phy_port_json)
     {
         oxm_match->in_phy_port = (UINT4)strtoul(in_phy_port_json->child->text, NULL, 10);
+		json_free_value(&in_phy_port_json);
     }
     
     //metadata
@@ -4514,6 +4547,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != metadata_json)
     {
         oxm_match->metadata = strtoull(metadata_json->child->text, NULL, 10);
+		json_free_value(&metadata_json);
     }
     
     //eth_dst
@@ -4521,6 +4555,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != eth_dst_json)
     {
         macstr2hex(eth_dst_json->child->text, oxm_match->eth_dst);
+		json_free_value(&eth_dst_json);
     }
     
     //eth_src
@@ -4528,6 +4563,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != eth_src_json)
     {
         macstr2hex(eth_src_json->child->text, oxm_match->eth_src);
+		json_free_value(&eth_src_json);
     }
 
     //eth_type
@@ -4535,6 +4571,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != eth_type_json)
     {
         oxm_match->eth_type = (UINT2)strtoul(eth_type_json->child->text, NULL, 10);
+		json_free_value(&eth_type_json);
     }
     
     //vlan_vid
@@ -4542,6 +4579,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != vlan_vid_json)
     {
         oxm_match->vlan_vid = (UINT2)strtoul(vlan_vid_json->child->text, NULL, 10);
+		json_free_value(&vlan_vid_json);
     }
     
     //vlan_pcp
@@ -4549,6 +4587,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != vlan_pcp_json)
     {
         oxm_match->vlan_pcp = (UINT1)strtoul(vlan_pcp_json->child->text, NULL, 10);
+		json_free_value(&vlan_pcp_json);
     }
     
     //ip_dscp
@@ -4556,6 +4595,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ip_dscp_json)
     {
         oxm_match->ip_dscp = (UINT1)strtoul(ip_dscp_json->child->text, NULL, 10);
+		json_free_value(&ip_dscp_json);
     }
     
     //ip_ecn
@@ -4563,6 +4603,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ip_ecn_json)
     {
         oxm_match->ip_ecn = (UINT1)strtoul(ip_ecn_json->child->text, NULL, 10);
+		json_free_value(&ip_ecn_json);
     }
     
     //ip_proto
@@ -4570,6 +4611,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ip_proto_json)
     {
         oxm_match->ip_proto = (UINT1)strtoul(ip_proto_json->child->text, NULL, 10);
+		json_free_value(&ip_proto_json);
     }
     
     //ipv4_src
@@ -4577,6 +4619,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ipv4_src_json)
     {
         oxm_match->ipv4_src = ntohl(ip2number(ipv4_src_json->child->text));
+		json_free_value(&ipv4_src_json);
     }
     
     //ipv4_dst
@@ -4584,6 +4627,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ipv4_dst_json)
     {
         oxm_match->ipv4_dst = ntohl(ip2number(ipv4_dst_json->child->text));
+		json_free_value(&ipv4_dst_json);
     }
     
     //tcp_src
@@ -4591,6 +4635,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != tcp_src_json)
     {
         oxm_match->tcp_src = (UINT2)strtoul(tcp_src_json->child->text, NULL, 10);
+		json_free_value(&tcp_src_json);
     }
     
     //tcp_dst
@@ -4598,6 +4643,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != tcp_dst_json)
     {
         oxm_match->tcp_dst = (UINT2)strtoul(tcp_dst_json->child->text, NULL, 10);
+		json_free_value(&tcp_dst_json);
     }
     
     //udp_src
@@ -4605,6 +4651,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != udp_src_json)
     {
         oxm_match->udp_src = (UINT2)strtoul(udp_src_json->child->text, NULL, 10);
+		json_free_value(&udp_src_json);
     }
     
     //udp_dst
@@ -4612,6 +4659,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != udp_dst_json)
     {
         oxm_match->udp_dst = (UINT2)strtoul(udp_dst_json->child->text, NULL, 10);
+		json_free_value(&udp_dst_json);
     }
     
     //sctp_src
@@ -4633,6 +4681,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != icmpv4_type_json)
     {
         oxm_match->icmpv4_type = (UINT1)strtoul(icmpv4_type_json->child->text, NULL, 10);
+		json_free_value(&icmpv4_type_json);
     }
     
     //icmpv4_code
@@ -4640,6 +4689,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != icmpv4_code_json)
     {
         oxm_match->icmpv4_code = (UINT1)strtoul(icmpv4_code_json->child->text, NULL, 10);
+		json_free_value(&icmpv4_code_json);
     }
     
     //arp_op
@@ -4647,6 +4697,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != arp_op_json)
     {
         oxm_match->arp_op = (UINT1)strtoul(arp_op_json->child->text, NULL, 10);
+		json_free_value(&arp_op_json);
     }
     
     //arp_spa
@@ -4654,6 +4705,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != arp_spa_json)
     {
         oxm_match->arp_spa = (UINT4)strtoul(arp_spa_json->child->text, NULL, 10);
+		json_free_value(&arp_spa_json);
     }
     
     //arp_tpa
@@ -4661,6 +4713,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != arp_tpa_json)
     {
         oxm_match->arp_tpa = (UINT4)strtoul(arp_tpa_json->child->text, NULL, 10);
+		json_free_value(&arp_tpa_json);
     }
     
     //arp_sha
@@ -4668,6 +4721,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != arp_sha_json)
     {
         memcpy(oxm_match->arp_sha, arp_sha_json->child->text, 6);
+		json_free_value(&arp_sha_json);
     }
     
     //arp_tha
@@ -4675,6 +4729,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != arp_tha_json)
     {
         memcpy(oxm_match->arp_tha, arp_tha_json->child->text, 6);
+		json_free_value(&arp_tha_json);
     }
     
     //ipv6_src
@@ -4682,6 +4737,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ipv6_src_json)
     {
         ipv6_str_to_number(ipv6_src_json->child->text, oxm_match->ipv6_src);
+		json_free_value(&ipv6_src_json);
     }
 
     //ipv6_dst
@@ -4689,6 +4745,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != ipv6_dst_json)
     {
         ipv6_str_to_number(ipv6_dst_json->child->text, oxm_match->ipv6_dst);
+		json_free_value(&ipv6_dst_json);
     }
 
     //ipv6_flabel
@@ -4738,6 +4795,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != mpls_label_json)
     {
         oxm_match->mpls_label = (UINT4)strtoul(mpls_label_json->child->text, NULL, 10);
+		json_free_value(&mpls_label_json);
     }
     
     //mpls_tc
@@ -4766,6 +4824,7 @@ static gn_oxm_t *json_fabric_parse_oxm(const json_t *match)
     if (NULL != tunnel_id_json)
     {
         oxm_match->tunnel_id = (UINT4)strtoul(tunnel_id_json->child->text, NULL, 10);
+		json_free_value(&tunnel_id_json);
     }
     
     //ipv6_exthdr
@@ -5612,6 +5671,7 @@ static INT1 *get_fabric_switch_info(const INT1 *url, json_t *root)
  ****************************************************/
 static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
 {   
+	char name_json_str[128] = {0};
     json_t *obj = json_new_object();
     
     json_t *flowconfig = json_find_first_label(root, "flowConfig");
@@ -5623,8 +5683,10 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     json_t *flow_entry = flowconfig->child;
 	if (NULL == flow_entry)
 	{
+		json_free_value(&flowconfig);
 		return json_to_reply_desc(obj, GN_ERR, "[ERROR]:empty flowConfig!");
 	}
+	
     //installInHw
     json_t *installInHw_json = json_find_first_label(flow_entry, "installInHw");
     if (NULL != installInHw_json)
@@ -5632,8 +5694,12 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
         if (0 != strcmp("true", installInHw_json->child->text) 
             && 0 != strcmp("TRUE", installInHw_json->child->text))
         {
+        	
+			json_free_value(&flowconfig);
             return json_to_reply_desc(obj, GN_OK, "[WARN]:installInHw is not true or TRUE, just drop it");
         }
+		json_free_value(&installInHw_json);
+		
     }
 
     //name
@@ -5645,13 +5711,19 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     INT4 len = strlen(name_json->child->text);
     if (len >= REST_MAX_PARAM_LEN)
     {
+    	
+		json_free_value(&name_json);
+		json_free_value(&flowconfig);
         return json_to_reply_desc(obj, GN_ERR, "[ERROR]:name is too long!");
     }
-    
+    strcpy(name_json_str, name_json->child->text);
+	json_free_value(&name_json);
     //dpid
     json_t *node = json_find_first_label(flow_entry, "node");
     if (NULL == node)
     {
+    	json_free_value(&name_json);
+		json_free_value(&flowconfig);
         return json_to_reply_desc(obj, GN_ERR, "[ERROR]:there is no node label in flowConfig!");
 
     }
@@ -5659,16 +5731,24 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     json_t *id = json_find_first_label(node->child, "id");
     if (NULL == id)
     {
+    	json_free_value(&node);
+		json_free_value(&flowconfig);
         return json_to_reply_desc(obj, GN_ERR, "[ERROR]:there is no id label in node!");
     }
 
     UINT8 dpid = 0;
     if (-1 == dpidStr2Uint8(id->child->text, &dpid))
     {
+    	json_free_value(&id);
+    	json_free_value(&node);
+		json_free_value(&flowconfig);
         return json_to_reply_desc(obj, GN_ERR, "[ERROR]:invalid id in node!");
 
     }
-
+	
+	json_free_value(&id);
+	json_free_value(&node);
+	
     //find the switch by nodeid
     INT4 i = 0;
     gn_switch_t *sw = NULL;
@@ -5684,12 +5764,13 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     //if not exist
     if (i >= g_server.max_switch)
     {
+		json_free_value(&flowconfig);
         return json_to_reply_desc(obj, GN_ERR, "[ERROR]:can't find the switch!");
     }
 
     //check if same flow has been installed by sw and name
     INT1 *desc = NULL;
-    if (clear_fabric_flow_entries(name_json->child->text, sw))
+    if (clear_fabric_flow_entries(name_json_str, sw))
     {
         desc = "[WARN]:same flow has been installed, overwrite it.";
     }
@@ -5700,6 +5781,8 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     if (NULL != priority_json)
     {
         priority = (UINT2)strtoul(priority_json->child->text, NULL, 10);
+		
+    	json_free_value(&priority_json);
     }
 
     //idle_timeout
@@ -5708,6 +5791,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     if (NULL != idle_json)
     {
         idle_timeout = (UINT2)strtoul(idle_json->child->text, NULL, 10);
+		json_free_value(&idle_json);
     }
 
     //hard_timeout
@@ -5716,6 +5800,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     if (NULL != hard_json)
     {
         hard_timeout = (UINT2)strtoul(hard_json->child->text, NULL, 10);
+		json_free_value(&hard_timeout);
     }
 
     //table_id
@@ -5724,6 +5809,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
     if (NULL != table_id_json)
     {
         table_id = (UINT1)strtoul(table_id_json->child->text, NULL, 10);
+		json_free_value(&table_id_json);
     }
 
     //prepare flow_param
@@ -5756,6 +5842,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
                 continue;
             }
             UINT2 type = (UINT2)strtoul(type_json->child->text, NULL, 10);
+			json_free_value(&type_json);
             UINT8 value = 0;
             json_t *value_json = json_find_first_label(instruction_json, "value");
             if (NULL == value_json)
@@ -5772,6 +5859,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
             else
             {
                 value = strtoull(value_json->child->text, NULL, 10);
+				json_free_value(&value_json);
             }
             
             switch (type)
@@ -5796,7 +5884,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
                     value_index++;
                     value_list[value_index] = strtoull(metadata_mask_json->child->text, NULL, 10);
                     value_index++;
-                    
+                    json_free_value(&metadata_mask_json);
                     break;
                 }
                 case OFPIT_METER:
@@ -5834,7 +5922,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
                             continue;
                         }
                         UINT2 action_type = (UINT2)strtoul(action_type_json->child->text, NULL, 10);
-
+						json_free_value(&action_type_json);
                         json_t *action_value_json = json_find_first_label(action_json, "value");
                         UINT8 action_value = 0;
                         if (NULL == action_value_json)
@@ -5848,6 +5936,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
                         else
                         {
                             action_value = strtoull(action_value_json->child->text, NULL, 10);
+							json_free_value(&action_value_json);
                         }
 
                         switch (action_type)
@@ -5884,6 +5973,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
                                 if (NULL != field_json)
                                 {
                                     field = json_fabric_parse_oxm(field_json);
+									json_free_value(&field_json);
                                 }
 
                                 if (NULL != field)
@@ -5906,7 +5996,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
                         
                         action_json = action_json->next;
                     }
-                    
+                     json_free_value(&action_json);
                     add_action_param(&flow_param->instruction_param, type, NULL);
                     break;
                 }
@@ -5916,12 +6006,13 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
 
             instruction_json = instruction_json->next;
         }
+		json_free_value(&instructions_json);
     }
     
     //one flow_entry_json_t
     flow_entry_json_t *flow_entry_son = (flow_entry_json_t*)gn_malloc(sizeof(flow_entry_json_t));
     flow_entry_son->flow_name = (INT1 *)gn_malloc(sizeof(len + 1));
-    memcpy(flow_entry_son->flow_name, name_json->child->text, len + 1);
+    memcpy(flow_entry_son->flow_name, name_json_str, len + 1);
     flow_entry_son->sw = sw;
     flow_entry_son->hard_timeout = hard_timeout;
     flow_entry_son->idle_timeout = idle_timeout;
@@ -5934,7 +6025,7 @@ static INT1 *put_fabric_flow_entries(const INT1 *url, json_t *root)
 	install_fabric_flows(flow_entry_son->sw, flow_entry_son->idle_timeout, flow_entry_son->hard_timeout, flow_entry_son->priority,
 					 flow_entry_son->table_id, OFPFC_ADD, flow_entry_son->flow_param);
     
-
+	clear_flow_param(flow_param);
     //install flow success, save flow json to g_flow_entry_json_list
     flow_entry_son->next = g_flow_entry_json_list->next;
     flow_entry_son->pre = g_flow_entry_json_list;
@@ -6359,8 +6450,9 @@ static INT1 *set_stats_frequency_config(const INT1 *url, json_t *root){
 	if(item){
 		if(item->child->text){
 			frequency =  atoi(item->child->text);
-			json_free_value(&item);
+			
 		}
+		json_free_value(&item);
 	}
 
 	if(g_stats_mgr_interval != frequency)
@@ -6567,6 +6659,11 @@ static INT1 *post_neutron_network(const INT1 *url, json_t *root)
 	char network_id[48] = {0};
 	UINT1 shared=0;
 	UINT1 external=0;
+	
+	char* toStrText = NULL;
+	
+	json_tree_to_string(root, &toStrText);
+	LOG_PROC("INFO", "###########################################%s %d toStrText=%s",FN, LN,toStrText);
 	networks = json_find_first_label(root, "network");
 	if(networks){
 		json_t *network  = networks->child;
@@ -6608,6 +6705,7 @@ static INT1 *post_neutron_network(const INT1 *url, json_t *root)
 			}
 			json_free_value(&network);
 		}
+		json_free_value(&networks);
 	}
     update_openstack_app_network(tenant_id,network_id,shared,external);
     INT1 *reply = (char *)gn_malloc(25);
@@ -6626,6 +6724,11 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 	UINT1 gateway_ipv6[16] = {0};
 	UINT1 start_ipv6[16] = {0};
 	UINT1 end_ipv6[16] = {0};
+
+	char* toStrText = NULL;
+	
+	json_tree_to_string(root, &toStrText);
+	LOG_PROC("INFO", "###########################################%s %d toStrText=%s",FN, LN,toStrText);
 	subnets = json_find_first_label(root, "subnet");
 	UINT4 longtemp=0;
 	if(subnets){
@@ -6716,6 +6819,7 @@ static INT1 *post_neutron_subnet(const INT1 *url, json_t *root)
 			}
 			json_free_value(&subnet);
 		}
+	    json_free_value(&subnets);
 	}
     update_openstack_app_subnet(tenant_id,network_id,subnet_id,gateway_ip,start_ip,end_ip,gateway_ipv6, start_ipv6, end_ipv6, cidr);
     INT1 *reply = (char *)gn_malloc(25);
@@ -6741,6 +6845,10 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 	UINT1 ipv6[16] = {0};
 	UINT1 mac[6]={0};
 	UINT4 port_number = 0;
+	char* toStrText = NULL;
+	
+	json_tree_to_string(root, &toStrText);
+	LOG_PROC("INFO", "###########################################%s %d toStrText=%s",FN, LN,toStrText);
 	ports = json_find_first_label(root, "port");
 	if(ports){
 		json_t *port  = ports->child;
@@ -6812,7 +6920,7 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 			}
 			json_free_value(&port);
 		}
-
+		json_free_value(&ports);
 		type = get_openstack_port_type(port_type);
 		if(strcmp(port_type,computer)==0){
 			update_openstack_app_host_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id,0,NULL);
@@ -6820,7 +6928,7 @@ static INT1 *post_neutron_port(const INT1 *url, json_t *root)
 			update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
 		}else if(strcmp(port_type,floatip)==0){
 			update_openstack_app_dhcp_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
-			create_floatting_ip_by_rest(0,ip,NULL,NULL);
+			create_floatting_ip_by_rest(0,ip,NULL,NULL, floatingtype_General);
 		}else{
 			update_openstack_app_gateway_by_rest(NULL,type,port_number,ip,ipv6,mac,tenant_id,network_id,subnet_id,port_id);
 		}
@@ -6854,7 +6962,7 @@ static INT1 *put_neutron_port(const INT1 *url, json_t *root)
     INT1 *reply = (char *)gn_malloc(25);
 	reload_security_group_info();
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
-
+	
     return reply;
 }
 
@@ -6863,6 +6971,7 @@ static INT1 *del_neutron_network(const INT1 *url, json_t *root)
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
 
+	
     return reply;
 }
 
@@ -6870,7 +6979,7 @@ static INT1 *del_neutron_subnet(const INT1 *url, json_t *root)
 {
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
-
+	
     return reply;
 }
 
@@ -6879,6 +6988,7 @@ static INT1 *del_neutron_port(const INT1 *url, json_t *root)
     INT1 *reply = (char *)gn_malloc(25);
     memcpy(reply,"{\"status\":\"success\"}", strlen("{\"status\":\"success\"}"));
 
+	
     return reply;
 }
 
@@ -7076,7 +7186,8 @@ INT4 init_json_server()
 	INT1 *value = get_value(g_controller_configure, "[openvstack_conf]", "openvstack_on");
 	UINT4 flag_openstack_on = (NULL == value)?0:atoll(value);
 
-	if (flag_openstack_on) {
+	if (flag_openstack_on) 
+	{
 		ret += register_restful_handler(HTTP_GET, "/gn/tenant/json", get_tenant);
 		ret += register_restful_handler(HTTP_POST, "/gn/tenant/json", post_tenant);
 		ret += register_restful_handler(HTTP_DELETE, "/gn/tenant/json", del_tenant);
@@ -7103,6 +7214,14 @@ INT4 init_json_server()
     	ret += register_restful_handler(HTTP_POST, "/gn/fabric/external/update/json", update_fabric_external);
 
 		// debug
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/qosinstance", fabric_debug_get_all_qos_instance);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/qosfloatingbinding", fabric_debug_get_all_qos_floating_binding);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/qosrouterbinding", fabric_debug_get_all_qos_router_binding);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/qosloadbalancerbinding", fabric_debug_get_all_qos_loadbalancer_binding);
+		
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/qosrule", fabric_debug_get_all_qosrule);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/securitygroup", fabric_debug_get_all_security);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/firewall", fabric_debug_get_all_firewall);
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/floatingip", fabric_debug_get_all_floatingip);
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/loadbalance/pool", fabric_debug_get_all_loadbalance_pool);
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/loadbalance/member", fabric_debug_get_all_loadbalance_member);
@@ -7124,10 +7243,13 @@ INT4 init_json_server()
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/security/host", fabric_debug_get_all_hostsecurity);
 		ret += register_restful_handler(HTTP_POST, "/dcf/debug/security/clear", fabric_debug_clear_all_security);
 		ret += register_restful_handler(HTTP_POST, "/dcf/debug/security/reload", fabric_debug_reload_all_security);
-
+		
 		ret += register_restful_handler(HTTP_GET, "/dcf/debug/check_external", fabric_debug_get_exteral_check);
 		ret += register_restful_handler(HTTP_POST, "/dcf/debug/check_external/start", fabric_debug_start_exteral_check);
 		ret += register_restful_handler(HTTP_POST, "/dcf/debug/check_external/stop", fabric_debug_stop_exteral_check);
+
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/router_gateway", fabric_debug_get_router_gatewaylist);
+		ret += register_restful_handler(HTTP_GET, "/dcf/debug/clbvips", fabric_debug_get_clbvipslist);
 	}
     
 	//by:yhy 分配g_flow_entry_json_list内存空间

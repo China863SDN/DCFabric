@@ -226,7 +226,7 @@ void event_delete_switch_on(gn_switch_t* sw)
 	sem_post(&topo_change_thread_sem);
 	return;
 };
-//by:yhy 网络拓补发生改变
+//by:yhy 交换机端口连接增加
 void event_add_switch_port_on(gn_switch_t* sw,UINT4 port_no)
 {
 	pthread_mutex_lock(&g_event_add_switch_port_list_mutex);
@@ -236,30 +236,30 @@ void event_add_switch_port_on(gn_switch_t* sw,UINT4 port_no)
 	g_event_add_switch_port_list_num++;
 	pthread_mutex_unlock(&g_event_add_switch_port_list_mutex);
 	sem_post(&topo_change_thread_sem);
-};
-void event_delete_switch_port_on(gn_switch_t* sw,UINT4 port_no){
+}
+//by:yhy 交换机端口连接断开事件
+void event_delete_switch_port_on(gn_switch_t* sw,UINT4 port_no)
+{
 	pthread_mutex_lock(&g_event_delete_switch_port_list_mutex);
 	g_event_delete_switch_port_list[g_event_delete_switch_port_list_num].sw = sw;
 	g_event_delete_switch_port_list[g_event_delete_switch_port_list_num].port_no = port_no;
 	g_event_delete_switch_port_list_num++;
 	pthread_mutex_unlock(&g_event_delete_switch_port_list_mutex);
 	sem_post(&topo_change_thread_sem);
-};
+}
+
 ///////////////////////////////////////////////////
 //by:yhy 拓补变动响应线程  响应交换机的增加删除,交换机端口的增加删除
 void *topo_change_event_thread()
 {
-	//UINT4 sleep_times = 0;
 	UINT4 last_add_sw_num = 0;
 	UINT4 last_delete_sw_num = 0;
 	UINT4 last_add_sw_port_num = 0;
 	UINT4 last_delete_sw_port_num = 0;
 	INT4 iRet = 0;
-	//INT4 num = 0;
 	prctl(PR_SET_NAME, (unsigned long) "TopoEventThread" ) ;  
 	while(g_topo_change_thread_flag)
 	{
-		//sleep_times = 0;
 		//by:yhy 等待信号量  
 		iRet = sem_wait(&topo_change_thread_sem);
 		if(0 != iRet)
@@ -267,23 +267,16 @@ void *topo_change_event_thread()
 			int ierr= errno;
 			LOG_PROC("ERROR", "Error: %s! %d errno=%d",FN, LN, ierr);
 		}
-		/*
-		sem_getvalue(&topo_change_thread_sem, &num);
-		if(num<500)
-		{
-			LOG_PROC("ERROR", "Error: %s! %d num=%d g_event_delete_switch_list_num=%d",FN, LN, num,g_event_delete_switch_list_num);
-		}
-		*/
+
 		//why? 这个函数存疑
 		init_openstack_fabric_auto_start_delay();
-		////why? 为何等待存疑(目测此段代码是错误的)
+		
 		if(g_event_delete_switch_list_num)
 		{//by:yhy 有交换机需要删除
 			do
 			{
 				//by:yhy 下面几个操作赋值都是赋的对应操作的全局变量,此处为什么不是g_event_delete_switch_list_num
 				last_delete_sw_num = g_event_delete_switch_list_num;
-				//sleep(EVENT_SLEEP_DEFAULT_TIME);
 				MsecSleep(EVENT_SLEEP_DEFAULT_TIME*100);
 			}
 			while(last_delete_sw_num < g_event_delete_switch_list_num );
@@ -294,12 +287,10 @@ void *topo_change_event_thread()
 			do
 			{
 				last_add_sw_num = g_event_add_switch_list_num;
-				//sleep(EVENT_SLEEP_DEFAULT_TIME);	
 				MsecSleep(EVENT_SLEEP_DEFAULT_TIME*100);
 				
 			}
 			while(last_add_sw_num < g_event_add_switch_list_num );
-			//sleep_times = 5>g_event_add_switch_list_num?5:g_event_add_switch_list_num;
 			call_add_switch_fun();
 		}
 		if(g_event_delete_switch_port_list_num)
@@ -307,8 +298,6 @@ void *topo_change_event_thread()
 			do
 			{
 				last_delete_sw_port_num = g_event_delete_switch_port_list_num;
-				//sleep(EVENT_SLEEP_DEFAULT_TIME);
-				
 				MsecSleep(EVENT_SLEEP_DEFAULT_TIME*100);
 			}
 			while(last_delete_sw_port_num < g_event_delete_switch_port_list_num );
@@ -319,21 +308,16 @@ void *topo_change_event_thread()
 			do
 			{
 				last_add_sw_port_num = g_event_add_switch_port_list_num;
-				//sleep(EVENT_SLEEP_DEFAULT_TIME);
-				
 				MsecSleep(EVENT_SLEEP_DEFAULT_TIME*100);
 			}
 			while(last_add_sw_port_num < g_event_add_switch_port_list_num );
-			//sleep(sleep_times);
 			call_add_switch_port_fun();
 		}
 		last_delete_sw_num = 0;
 		last_add_sw_num = 0;
 		last_delete_sw_port_num = 0;
 		last_add_sw_port_num = 0;
-		
     }
-	
 	return NULL;
 }
 
@@ -355,13 +339,12 @@ void call_add_switch_fun()
 {
 	UINT2 i = 0;
 	pthread_mutex_lock(&g_event_add_switch_list_mutex);
-	//LOG_PROC("INFO", "call_add_switch_fun, sw num:%d",g_event_add_switch_list_num);
-	// call function
+
 	for(i=0;i < g_event_add_switch_fun_num;i++)
 	{
 		g_event_add_switch_fun[i](g_event_add_switch_list,g_event_add_switch_list_num);
 	}
-	// clear data
+
 	memset(g_event_add_switch_list, 0, sizeof(gn_switch_t*)*EVENT_MAX_CHANGED_SWITCH_NUM);
 	g_event_add_switch_list_num = 0;
 	pthread_mutex_unlock(&g_event_add_switch_list_mutex);
@@ -373,14 +356,14 @@ void call_delete_switch_fun()
 {
 	UINT2 i = 0;
 	pthread_mutex_lock(&g_event_delete_switch_list_mutex);
-	//LOG_PROC("INFO", "call_delete_switch_fun, sw num:%d",g_event_delete_switch_list_num);
+
 	// call function why? g_event_delete_switch_fun_num有可能大于g_event_delete_switch_fun[i]中i的最大值
 	for(i=0;i < g_event_delete_switch_fun_num;i++)
 	{//by:yhy 执行删除交换的相关动作
 		g_event_delete_switch_fun[i](g_event_delete_switch_list,g_event_delete_switch_list_num);
 	}
 	of131_fabric_impl_remove_sws_state(g_event_delete_switch_list, g_event_delete_switch_list_num);
-	// clear data
+
 	memset(g_event_delete_switch_list, 0, sizeof(gn_switch_t*)*EVENT_MAX_CHANGED_SWITCH_NUM);
 	g_event_delete_switch_list_num = 0;
 	pthread_mutex_unlock(&g_event_delete_switch_list_mutex);
@@ -390,16 +373,14 @@ void call_delete_switch_fun()
 void call_add_switch_port_fun()
 {
 	UINT2 i = 0;
-	//LOG_PROC("INFO", "call_add_switch_port_fun");
-	// call function
 	for(i=0;i < g_event_add_switch_port_fun_num;i++)
 	{
 		g_event_add_switch_port_fun[i](g_event_add_switch_port_list,g_event_add_switch_port_list_num);
 	}
 	
 	pthread_mutex_lock(&g_event_add_switch_port_list_mutex);
-	// clear data
-	memset(g_event_add_switch_port_list, 0, sizeof(gn_switch_t*)*EVENT_MAX_CHANGED_SWITCH_NUM);
+
+	memset(g_event_add_switch_port_list, 0, sizeof(t_event_sw_port)*EVENT_MAX_CHANGED_SWITCH_PORT_NUM);
 	g_event_add_switch_port_list_num = 0;
 	pthread_mutex_unlock(&g_event_add_switch_port_list_mutex);
 	return;
@@ -408,15 +389,14 @@ void call_add_switch_port_fun()
 void call_delete_switch_port_fun()
 {
 	UINT2 i = 0;
-	//LOG_PROC("INFO", "call_delete_switch_port_fun");
-	// call function
+
 	for(i=0;i < g_event_delete_switch_port_fun_num;i++)
 	{
 		g_event_delete_switch_port_fun[i](g_event_delete_switch_port_list,g_event_delete_switch_port_list_num);
 	}
 	pthread_mutex_lock(&g_event_delete_switch_port_list_mutex);
-	// clear data
-	memset(g_event_delete_switch_port_list, 0, sizeof(gn_switch_t*)*EVENT_MAX_CHANGED_SWITCH_NUM);
+
+	memset(g_event_delete_switch_port_list, 0, sizeof(t_event_sw_port)*EVENT_MAX_CHANGED_SWITCH_PORT_NUM);
 	g_event_delete_switch_port_list_num = 0;
 	pthread_mutex_unlock(&g_event_delete_switch_port_list_mutex);
 	return;

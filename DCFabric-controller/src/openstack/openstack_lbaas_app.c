@@ -856,7 +856,7 @@ void create_icmp_packet(UINT4 src_ip, UINT4 dst_ip, UINT1* src_mac, UINT1* dst_m
 	packet_in_info_t packout_req_info;
 	UINT1 data_len = sizeof(ip_t) + sizeof(icmp_t);
 
-	ip_t* new_ip = (ip_t*)malloc(data_len);
+	ip_t* new_ip = (ip_t*)gn_malloc(data_len);
 	memset(new_ip, 0, data_len);
 	icmp_t icmp_pkt;
 	icmp_t* new_icmp = &icmp_pkt;
@@ -893,7 +893,7 @@ void create_icmp_packet(UINT4 src_ip, UINT4 dst_ip, UINT1* src_mac, UINT1* dst_m
 
 	fabric_openstack_packet_output(sw, &packout_req_info, outport);
 
-	free(new_ip);
+	gn_free(&new_ip);
 }
 
 void create_tcp_packet(UINT4 src_ip, UINT4 dst_ip, UINT2 dst_port, UINT1* src_mac, UINT1* dst_mac, 
@@ -903,7 +903,7 @@ void create_tcp_packet(UINT4 src_ip, UINT4 dst_ip, UINT2 dst_port, UINT1* src_ma
     
     UINT1 data_len = sizeof(ip_t) + sizeof(tcp_t);
 
-    ip_t* new_ip = (ip_t*)malloc(data_len);
+    ip_t* new_ip = (ip_t*)gn_malloc(data_len);
     memset(new_ip, 0, data_len);
 
     tcp_t tcp_pkt;
@@ -944,7 +944,7 @@ void create_tcp_packet(UINT4 src_ip, UINT4 dst_ip, UINT2 dst_port, UINT1* src_ma
 
     fabric_openstack_packet_output(sw, &packout_req_info, outport);
 
-    free(new_ip);
+     gn_free(&new_ip);
 
 }
 
@@ -1826,15 +1826,18 @@ void clear_openstack_lbaas_info()
 //by:yhy 刷新负载平衡相关信息
 void reload_openstack_lbaas_info()
 {
+	INT4 iRet = GN_ERR;
 	// this function will reload lbaas info from openstack
 	clear_openstack_lbaas_info();
-	reoad_lbaas_info();
-
-	// reset upchecked flag
-	remove_openstack_lbaas_pool_by_check_status();
-	remove_openstack_lbaas_pool_member_by_check_status();
-	remove_openstack_lbaas_listener_member_by_check_status();
-	
-	remove_openstack_lbaas_member_by_check_status();
-	remove_openstack_lbaas_listener_by_check_status();
+	iRet = reoad_lbaas_info();
+	if(GN_OK == iRet)
+	{
+		// reset upchecked flag
+		remove_openstack_lbaas_pool_by_check_status();
+		remove_openstack_lbaas_pool_member_by_check_status();
+		remove_openstack_lbaas_listener_member_by_check_status();
+		
+		remove_openstack_lbaas_member_by_check_status();
+		remove_openstack_lbaas_listener_by_check_status();
+	}
 }

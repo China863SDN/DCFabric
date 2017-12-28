@@ -31,6 +31,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include "common.h"
+#include "error_info.h"
 
 
 #define ADD_ELEMENT_TO_LIST(list, element_type, element)    \
@@ -52,6 +54,7 @@ do                                                          \
     }                                                       \
 }while(0);
 
+#if 0
 static void* gn_malloc (size_t size)
 {
     void* mem = malloc(size);
@@ -64,6 +67,7 @@ static void gn_free(void **ptr)
     free(*ptr);
     *ptr = NULL;
 }
+#endif
 
 //read all the configuration from the ".ini" file
 ini_file_t* read_ini(const char *path)
@@ -255,6 +259,11 @@ void free_selections(ini_selection_t* selection_p)
     ini_comment_t *comm_tmp = NULL;
     ini_item_t *item_tmp = NULL;
 
+	if(NULL == sec_tmp)
+	{
+		return ;
+	}
+
 	while(NULL != sec_tmp->ini_items)
 	{
 		item_tmp = sec_tmp->ini_items;
@@ -296,14 +305,22 @@ int remove_selection(ini_file_t *ini_file, const char *selection)
 		{
 			if (0 == strcmp(sec_tmp->selection, selection)) 
 			{
-				printf("[INFO] Remove selection: %s\n", selection);
+				//printf("[INFO] Remove selection: %s\n", selection);
 				if (sec_tmp->pre) 
 				{
 					sec_tmp->pre->next = sec_tmp->next;
+					if(sec_tmp->next)
+					{
+						sec_tmp->next->pre = sec_tmp->pre;
+					}
 				}
 				else 
 				{
 					ini_file->selections = sec_tmp->next;
+					if(sec_tmp->next)
+					{
+						sec_tmp->next->pre = NULL;
+					}
 				}
 
 				free_selections(sec_tmp);
@@ -565,6 +582,12 @@ ini_file_t* save_ini(ini_file_t *ini_file, const char *path)
     ini_selection_t *sec_tmp = NULL;
     ini_comment_t *comm_tmp = NULL;
     ini_item_t *item_tmp = NULL;
+	
+	ini_selection_t *section_tmp = NULL;
+	ini_comment_t   *section_comm_tmp = NULL;
+	ini_item_t 		*section_item_tmp = NULL;
+	ini_comment_t 	*item_comm_tmp = NULL;
+	 
     char buf[1024] = {0};
 
     if((NULL == ini_file) || (NULL == ini_file->fd) || (NULL == path))
@@ -584,31 +607,37 @@ ini_file_t* save_ini(ini_file_t *ini_file, const char *path)
 
     if(doc->selections)
     {
-        while(NULL != doc->selections)
+    	section_tmp = doc->selections;
+        while(NULL != section_tmp)
         {
-            sec_tmp = doc->selections;
-            doc->selections = doc->selections->next;
-
-            while(NULL != sec_tmp->comments)
+            
+			sec_tmp = section_tmp;
+			section_tmp  = section_tmp->next;
+			
+			section_comm_tmp = sec_tmp->comments;
+            while(NULL != section_comm_tmp)
             {
-                comm_tmp = sec_tmp->comments;
-                sec_tmp->comments = sec_tmp->comments->next;
-
+                comm_tmp = section_comm_tmp;
+				section_comm_tmp = section_comm_tmp->next;
+				
                 fputs(comm_tmp->desc, ini_file->fd);
                 fputs("\n", ini_file->fd);
             }
             fputs(sec_tmp->selection, ini_file->fd);
             fputs("\n", ini_file->fd);
 
-            while(NULL != sec_tmp->ini_items)
+			section_item_tmp = sec_tmp->ini_items;
+            while(NULL != section_item_tmp)
             {
-                item_tmp = sec_tmp->ini_items;
-                sec_tmp->ini_items = sec_tmp->ini_items->next;
-                while(NULL != item_tmp->comments)
-                {
-                    comm_tmp = item_tmp->comments;
-                    item_tmp->comments = item_tmp->comments->next;
+				item_tmp = section_item_tmp;
+			    section_item_tmp = section_item_tmp->next;
 
+				item_comm_tmp = item_tmp->comments;
+                while(NULL != item_comm_tmp)
+                {
+                    comm_tmp = item_comm_tmp;
+					item_comm_tmp = item_comm_tmp->next;
+					
                     fputs(comm_tmp->desc, ini_file->fd);
                     fputs("\n", ini_file->fd);
                 }
@@ -625,7 +654,7 @@ ini_file_t* save_ini(ini_file_t *ini_file, const char *path)
     }
 
     fflush(ini_file->fd);
-    close_ini(&doc);
+   close_ini(&doc);
 
     ini_file_t *new_doc = read_ini(path);
     ini_file = new_doc;

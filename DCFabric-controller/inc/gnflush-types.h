@@ -40,8 +40,12 @@
 #define DEBUG 0
 #endif
 
-#define MAX_PORTS 150
-#define MAX_QUEUE_ID 40960
+#define PORT_LINK_UP 	0
+#define PORT_LINK_DOWN 	1
+
+
+#define MAX_PORTS       65535//150
+#define MAX_QUEUE_ID    1024//40960
 
 extern ini_file_t *g_controller_configure;
 extern UINT1 g_controller_mac[];
@@ -50,6 +54,18 @@ extern UINT4 g_controller_south_port;
 extern UINT1 g_is_cluster_on;
 extern UINT1 g_reserve_mac[];
 extern UINT4 g_reserve_ip;
+
+
+#define 	PROTO_ICMP  		1
+#define     PROTO_TCP			6
+#define 	PROTO_UDP			17
+#define 	PROTO_VRRP			112
+
+#define 	EVENT_RECV				0
+#define	 	EVENT_PROC				1
+#define 	EVENT_SEND				2
+
+#define     EVENT_DATASYNC			3
 
 
 enum http_type
@@ -75,6 +91,8 @@ enum forward_ip_type
 	External_vip_flow = 12,
 	Internal_floating_vip_flow = 13,
 	Portforward_ip_flow = 14,
+	Clb_forward_ip_flow = 15,
+	Clb_HA_MULTICAST
 };
 
 enum msgsock_type
@@ -87,8 +105,16 @@ enum msgsock_type
 	LLDP,
 	HEARTBEAT,
 	GETPORTSTATE,
-        PORT_FORWARD,
+    PORT_FORWARD,
 };
+
+enum port_type
+{
+	UNKOWN = 0,
+	HOST_CON,
+	SW_CON,
+};
+
 #pragma pack(1)
 struct gn_switch;
 struct gn_port;
@@ -107,9 +133,10 @@ typedef struct packet_in_info
 {
     UINT4 xid;          //packet in transection id
     UINT4 buffer_id;    //buffer id
-    UINT4 inport;       //��ڽ�����˿ں�
-    UINT4 data_len;     //��̫����ݰ��
-    UINT1 *data;        //��̫����ݰ�
+    UINT4 inport;       //???????????
+    UINT4 data_len;     //??????????
+	UINT1 In_TableID;
+    UINT1 *data;        //?????????
 }packet_in_info_t;
 
 typedef INT4 (*packet_in_proc_t)(struct gn_switch *sw, packet_in_info_t *packet_in_info);
@@ -117,27 +144,27 @@ typedef INT4 (*packet_in_proc_t)(struct gn_switch *sw, packet_in_info_t *packet_
 typedef struct mac_user mac_user_t;
 typedef struct mac_user_table
 {
-    UINT4 macuser_hsize;            //ָ���û���ϣ���С  ������
-    UINT4 macuser_hsize_tot;        //ָ���û���ϣ���С  ������
-    UINT4 macuser_lifetime;         //ָ���û������ʱ��  ������  ��ʵ��SDN�������hard time
-    mac_user_t **macuser_tb;        //����洢��ϣ���׵�ַ���ڴ�
-    void *macuser_memid;            //�ڴ�ر�־
-    pthread_mutex_t macuser_mutex;  //ȫ�ֱ� ��ѯʱ����
-    void *macuser_timer;            //��ʱ����־
-    UINT4 macuser_cnt;              //��¼MAC ��ַ�û���
+    UINT4 macuser_hsize;            //????????????С  ??????
+    UINT4 macuser_hsize_tot;        //????????????С  ??????
+    UINT4 macuser_lifetime;         //??????????????  ??????  ?????SDN???????hard time
+    mac_user_t **macuser_tb;        //????洢??????????????
+    void *macuser_memid;            //??????
+    pthread_mutex_t macuser_mutex;  //???? ????????
+    void *macuser_timer;            //????????
+    UINT4 macuser_cnt;              //???MAC ????????
 }mac_user_table_t;
 
 
 struct mac_user
 {
-    struct gn_switch *sw;     //���ڽ�����
-    UINT4 port;          //��MAC��ַ��Ӧ�Ķ˿�  �����ֽ���
-    INT4 tenant_id;      //��ʶ���û������ĸ��⻧����
-    UINT4 ipv4;          //ip,�����ֽ���
-    UINT1 ipv6[16];      //ipv6,�����ֽ���
-    UINT1 mac[6];        //�û�MAC��ַ
-    time_t tv_last_sec;  //�����µ�ʱ��
-    void *timer;         //�����Ķ�ʱ��
+    struct gn_switch *sw;     //?????????
+    UINT4 port;          //??MAC??????????  ?????????
+    INT4 tenant_id;      //?????????????????????
+    UINT4 ipv4;          //ip,?????????
+    UINT1 ipv6[16];      //ipv6,?????????
+    UINT1 mac[6];        //???MAC???
+    time_t tv_last_sec;  //?????μ????
+    void *timer;         //??????????
 
     mac_user_table_t *macuser_table;
     mac_user_t *next;
@@ -158,8 +185,8 @@ typedef struct port_stats
     UINT8 rx_bytes;        //Number of received bytes.
     UINT8 tx_bytes;        //Number of transmitted bytes.
     UINT4 max_speed;       //Max port bitrate in kbps
-    UINT4 duration_sec;    //port ���ʱ��
-    UINT4 timestamp;       //�����ȡ��ʱ����������
+    UINT4 duration_sec;    //port ??????
+    UINT4 timestamp;       //???????????????????
 }port_stats_t;
 
 //by:yhy 控制器自身sever端的配置信息
@@ -210,8 +237,9 @@ typedef struct buffer_list
 
 typedef struct neighbour
 {
-    struct gn_switch *neigh_sw;     //���ڵĽ�����
-    struct gn_port *neigh_port;  //�����ڽ�����ֱ���Ķ˿�
+
+    struct gn_switch *neigh_sw;     //??????????
+    struct gn_port *neigh_port;  //??????????????????
 }neighbour_t;
 
 typedef struct gn_port
@@ -226,10 +254,13 @@ typedef struct gn_port
     UINT4 peer;
     UINT4 config;
     UINT4 state;
-	//UINT4 queue_ids[MAX_QUEUE_ID];
+	UINT4 type;							//端口所接对象的类型(参见enum port_type)(未接,交换机,主机)
+	UINT2 queue_ids[MAX_QUEUE_ID];
     neighbour_t *neighbour;
     mac_user_t *user_info;
-    port_stats_t stats;     //portʵʱ��������Ϣ
+
+    port_stats_t stats;     //port???????????
+
 } gn_port_t;
 
 typedef gn_port_t *(*port_convertter_t)(UINT1 *of_port, gn_port_t *new_port);
@@ -261,12 +292,13 @@ typedef struct switch_desc
    char dp_desc[256];        /* 	可读的数据通道描述	*/
 }switch_desc_t;
 
+//by:yhy 邻居结构体
 typedef struct neighbor
 {
-    struct gn_switch *sw;
-    gn_port_t *port;
-    UINT8 weight;
-	BOOL  bValid;
+    struct gn_switch *sw;		//邻居交换机
+    gn_port_t *port;			//邻居交换机的端口
+    UINT8 weight;				//路径权重
+	BOOL  bValid;				//有效
 }neighbor_t;
 
 typedef struct gn_flowmod_helper
@@ -299,7 +331,6 @@ typedef struct gn_switch
     neighbor_t *neighbor[MAX_PORTS];	//by:yhy  数组neighbor的索引与ports的索引匹配,neighbor[a]即为ports[a]的邻居节点
     mac_user_t **users;
     msg_driver_t msg_driver;
-    buffer_list_t recv_buffer;			//by:yhy  接收缓存
     UINT4 send_len;
     UINT1 *send_buffer;					//by:yhy  长度:g_sendbuf_len
     gn_flowmod_helper_t flowmod_helper;
@@ -320,12 +351,16 @@ typedef struct gn_switch
     UINT8 weight;         				//by:yhy  sw_weight
     UINT1 sock_state;     				//by:yhy  socket status  判断当前线程是否拥有操作的权利"0"有效
 
-	
     UINT1 conn_state;  					//by:yhy  sw state
+    
+	UINT4 vlan_tag;
     void *data;        					//by:yhy  store sock fd funptr
     pthread_mutex_t sock_state_mutex;
 	p_loop_buffer recv_loop_buffer;
 	UINT1 TimerTask;
+	UINT2 Meter_ID;
+	UINT1 FirewallFlowInstallFlag;
+	
 }gn_switch_t;
 
 
@@ -334,7 +369,7 @@ typedef struct gn_switch
 
 
 /*
- * ��Ϣ������Ϣ�ṹ��
+ * ??????????????
  */
 typedef struct role_req_info
 {
@@ -401,7 +436,7 @@ typedef struct stats_req_info
 
 typedef struct neutron_network
 {
-    BOOL is_using;               //�Ƿ���ռ��
+    BOOL is_using;               //????????
     INT1 name[64];
     INT1 physical_network[64];
     BOOL admin_state_up;
@@ -415,7 +450,7 @@ typedef struct neutron_network
 
 typedef struct neutron_subnet
 {
-    BOOL is_using;              //�Ƿ���ռ��
+    BOOL is_using;              //????????
     INT1 ippool_start[32];
     INT1 ippool_end[32];
     INT1 host_routes[64];
@@ -433,7 +468,7 @@ typedef struct neutron_subnet
 
 typedef struct neutron_port
 {
-    BOOL is_using;       //�Ƿ���ռ��
+    BOOL is_using;       //????????
     char binding_host_id[63];
 
     char allowed_address_pairs[64];

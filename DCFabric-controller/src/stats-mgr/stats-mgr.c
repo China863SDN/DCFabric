@@ -225,7 +225,6 @@ void of13_proc_port_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
                 sw->ports[idx].stats.tx_bytes = new_stats.tx_bytes;
                 sw->ports[idx].stats.duration_sec = new_stats.duration_sec;
                 sw->ports[idx].stats.timestamp = timestamp;
-				LOG_PROC("OF13", "%s -- OFPMP_PORT_STATS",FN);
 				/*
                 printf("%s. Port :%s, rx_kbps: %e, tx_kbps: %e, rx_kpps: %e, tx_kpps: %e\n", sw->ports[idx].name,
                         FN, sw->ports[idx].stats.rx_kbps, sw->ports[idx].stats.tx_kbps, sw->ports[idx].stats.rx_kpps, sw->ports[idx].stats.tx_kpps);
@@ -236,7 +235,6 @@ void of13_proc_port_stats(gn_switch_t *sw, UINT1 *stats, UINT2 counts)
                 printf("  tx_bytes: %ld\n", new_stats.tx_bytes);
                 printf("  duration_sec: %d\n", duration_sec);
 				*/
-				LOG_PROC("OF13", "%s -- OFPMP_PORT_STATS",FN);
             }
         }
     }

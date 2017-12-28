@@ -57,6 +57,16 @@ INT1 *fabric_debug_reload_all_loadbalance(const INT1 *url, json_t *root);
 
 INT1 *fabric_debug_get_all_floatingip();
 
+INT1 *fabric_debug_get_all_firewall();
+
+INT1 *fabric_debug_get_all_security();
+
+INT1 *fabric_debug_get_all_qosrule();
+INT1 *fabric_debug_get_all_qos_instance();
+INT1 *fabric_debug_get_all_qos_floating_binding();
+INT1 *fabric_debug_get_all_qos_router_binding();
+INT1 *fabric_debug_get_all_qos_loadbalancer_binding();
+
 INT1 *fabric_debug_get_all_arp_request();
 
 INT1 *fabric_debug_get_all_arp_flood();
@@ -76,10 +86,13 @@ INT1* fabric_debug_start_exteral_check(const INT1 *url, json_t *root);
 INT1* fabric_debug_stop_exteral_check();
 
 INT1* fabric_debug_get_all_subnet();
-
+INT1* fabric_debug_get_router_gatewaylist();
+INT1* fabric_debug_get_clbvipslist();
 INT1* fabric_debug_get_all_qos_policy();
 
 INT1 *fabric_debug_post_qos_policy(const INT1 *url, json_t *root);
 
 INT1 *fabric_debug_delete_qos_policy(const INT1 *url, json_t *root);
+
+
 #endif

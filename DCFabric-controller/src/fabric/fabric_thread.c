@@ -227,7 +227,7 @@ void* fabric_flow_thread()
 	while(g_fabric_flow_flag)
 	{
 		//by:yhy 等待异步信号量
-		sem_wait(&fabric_flow_sem);
+		sem_wait(&fabric_flow_sem);  //only mininet mode
 		//by:yhy 判空
 		while(is_fabric_flow_queue_empty())
 		{//by:yhy g_fabric_flow_queue不空
@@ -245,8 +245,14 @@ void* fabric_flow_thread()
 				else
 				{
 					//by:yhy why?具体函数细节没懂
-					install_fabric_push_tag_flow(flow_node->src_host->sw,flow_node->dst_host->mac,flow_node->dst_tag);
-					install_fabric_push_tag_flow(flow_node->dst_host->sw,flow_node->src_host->mac,flow_node->src_tag);
+					UINT4 src_outport = get_out_port_between_switch(flow_node->src_host->sw->dpid, flow_node->dst_host->sw->dpid);
+					UINT4 dst_outport = get_out_port_between_switch(flow_node->dst_host->sw->dpid, flow_node->src_host->sw->dpid);
+					if ((0 == src_outport) ||(0 == dst_outport))
+					{
+				        return NULL;
+				    }
+					install_fabric_push_tag_portflow(flow_node->src_host->sw,flow_node->dst_host->mac,flow_node->dst_tag, src_outport);
+					install_fabric_push_tag_portflow(flow_node->dst_host->sw,flow_node->src_host->mac,flow_node->src_tag, dst_outport);
 				}
 			}
 			//by:yhy 销毁已处理的节点
@@ -335,7 +341,7 @@ void fabric_packet_flood( packet_in_info_t *packet_in_info)
 			{
 				// check port state is ok and also not connect other switch(neighbor)
 				//if(sw->ports[j].state == 0 && sw->neighbor[j] == NULL)
-				if(sw->ports[j].state == 0 && (FALSE==sw->neighbor[j]->bValid))
+				if((sw->ports[j].state == 0) &&(FALSE==sw->neighbor[j]->bValid))
 				{
 					pakout_req.outport = sw->ports[j].port_no;
 					if(CONNECTED == sw->conn_state)
@@ -343,6 +349,10 @@ void fabric_packet_flood( packet_in_info_t *packet_in_info)
 				}
 			}
 		}
+	}
+	if((NULL != packet_in_info->data)&&(OFPP13_CONTROLLER == packet_in_info->inport))
+	{
+		gn_free(&(packet_in_info->data));
 	}
 	return;
 };

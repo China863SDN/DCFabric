@@ -47,7 +47,7 @@
 #define NAT_HOST_MAX_NUM 		10000
 #define NAT_PORT_MAX_VALUE		59200
 #define NAT_PORT_MIN_VALUE		49200
-#define NAT_PORT_MAX_COUNT		10000
+#define NAT_PORT_MAX_COUNT		10000*NAT_HOST_MAX_NUM
 
 // 定义flag: 是否使用物理交换机处理NAT流表的修改
 UINT1 g_nat_physical_switch_flag = 1;
@@ -172,7 +172,7 @@ nat_host_p create_nat_host(UINT4 host_ip)
 	current_p = g_nat_host_list_head->next;
 
 	// 循环判断
-	while ((NULL != current_p) && (current_p->host_ip <= host_ip)) {
+	while ((NULL != current_p)/* && (current_p->host_ip <= host_ip)*/) {
 		if (current_p->host_ip == host_ip) {
 			LOG_PROC("INFO", "NAT: Can't create host: IP exist!");
 			return NULL;
@@ -235,7 +235,7 @@ void remove_nat_host_by_ip(UINT4 host_ip)
 	next_p = prev_p->next;
 
 	// 循环判断
-	while ((NULL != next_p) && (next_p->host_ip <= host_ip)) {
+	while ((NULL != next_p) /*&& (next_p->host_ip <= host_ip)*/) {
 		if (next_p->host_ip == host_ip) {
 			prev_p->next = next_p->next;
 			g_nat_host_list_head->host_ip--;
@@ -260,7 +260,7 @@ nat_host_p find_nat_host_by_ip(UINT4 host_ip)
 	nat_host_p host_p = g_nat_host_list_head->next;
 
 	// 循环判断
-	while ((NULL != host_p) && (host_p->host_ip <= host_ip)) {
+	while ((NULL != host_p) /*&& (host_p->host_ip <= host_ip)*/) {
 		if (host_p->host_ip == host_ip) {
 			// LOG_PROC("INFO", "NAT: Success! find host ip");
 			return host_p;
@@ -695,7 +695,7 @@ void destroy_nat_connect(UINT4 host_ip, UINT2 external_port_no, UINT1 proto_type
 
     if (g_controller_role == OFPCR_ROLE_MASTER)
     {
-        persist_fabric_nat_host_single(OPERATE_ADD, host_p);
+        persist_fabric_nat_host_single(OPERATE_DEL, host_p);
     }
 }
 
@@ -746,7 +746,7 @@ void destroy_nat_connect_by_mac_and_port(gn_switch_t* sw, UINT4 host_ip, UINT1* 
 
     if (g_controller_role == OFPCR_ROLE_MASTER)
     {
-        persist_fabric_nat_host_single(OPERATE_ADD, host_p);
+        persist_fabric_nat_host_single(OPERATE_DEL, host_p);
     }
 }
 
@@ -909,6 +909,7 @@ INT4 fabric_openstack_ip_nat_comute_foward(gn_switch_t *sw, packet_in_info_t *pa
 
 			if ((NULL == src_sw) || (0 == packetin_inport))
 			{
+				//LOG_PROC("INFO", "%s %d src_sw=0x%p packetin_inport=0x%p",FN,LN,src_sw,packetin_inport);
 				p_fabric_host_node gateway_p = find_openstack_app_gateway_by_host(openstack_p);
 				fabric_opnestack_create_arp_flood(gateway_p->ip_list[0], openstack_p->ip_list[0], gateway_p->mac);
 				return IP_DROP;

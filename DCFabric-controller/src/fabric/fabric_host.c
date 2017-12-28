@@ -230,16 +230,18 @@ p_fabric_host_node get_fabric_host_from_list_by_mac(UINT1* mac)
  * add a node with host info to the list
  * p_fabric_host_node node : host's info node
  */
-void insert_fabric_host_into_list(p_fabric_host_node node){
+INT1 insert_fabric_host_into_list(p_fabric_host_node node){
+	INT1 ret = GN_ERR;
 	pthread_mutex_lock(&g_fabric_host_thread_mutex);
-	if(node != NULL){
+	if((node != NULL)&&(node->ip_list[0])){
 		node->next = g_fabric_host_list.list;
 		g_fabric_host_list.list = node;
 		g_fabric_host_list.list_num++;
+		ret = GN_OK;
 	}
 //	printf("NUM of hosts:%d\n",g_fabric_host_list.list_num);
 	pthread_mutex_unlock(&g_fabric_host_thread_mutex);
-	return;
+	return ret;
 };
 /*
  * add a node with host info to the list by parameters
@@ -279,6 +281,7 @@ p_fabric_host_node remove_fabric_host_from_list_by_ip(UINT4 ip){
 			ret->next = NULL;
 			g_fabric_host_list.list = sentinel.next;
 			g_fabric_host_list.list_num--;
+			pthread_mutex_unlock(&g_fabric_host_thread_mutex);
 			return ret;
 		}
 		p_sentinel = p_sentinel->next;
@@ -304,6 +307,7 @@ p_fabric_host_node remove_fabric_host_from_list_by_mac(UINT1* mac){
 			ret->next = NULL;
 			g_fabric_host_list.list = sentinel.next;
 			g_fabric_host_list.list_num--;
+			pthread_mutex_unlock(&g_fabric_host_thread_mutex);
 			return ret;
 		}
 		p_sentinel = p_sentinel->next;
@@ -330,6 +334,7 @@ void delete_fabric_host_from_list_by_sw(gn_switch_t* sw)
 			temp_host = p_sentinel->next;
 			p_sentinel->next = temp_host->next;
 			temp_host->next = NULL;
+			g_fabric_host_list.list_num--;
 			delete_fabric_host_list_node(temp_host);
 		}
 		else
@@ -982,7 +987,7 @@ UINT4 is_fabric_flow_queue_empty()
 /*add new ip*/
 void add_fabric_host_ip(p_fabric_host_node node,UINT4 newIP)
 {
-	if(node->ip_count<FABRIC_HOST_IP_MAX_NUM)
+	if((node->ip_count<FABRIC_HOST_IP_MAX_NUM)&&(newIP!=0))
 	{
 		node->ip_list[node->ip_count++]=newIP;
 		//printf("%s : new ip:%s \n",FN,inet_htoa(ntohl(newIP)));
@@ -1005,6 +1010,9 @@ BOOL check_IP_in_fabric_host(p_fabric_host_node node,UINT4 IP)
 	return FALSE;
 }
 
+/* by:yhy
+ * 目测无效.查找mac为mac的主机,将其所接交换机的port置为ofport_no
+ */
 void set_fabric_host_port_portno(const UINT1 *mac, UINT4 ofport_no)
 {
 	p_fabric_host_node ret = NULL;
@@ -1012,10 +1020,10 @@ void set_fabric_host_port_portno(const UINT1 *mac, UINT4 ofport_no)
 	pthread_mutex_lock(&g_fabric_host_thread_mutex);
 	while(ret != NULL)
 	{
-		 if(memcmp(ret->mac, mac, 6) == 0)
+		if(memcmp(ret->mac, mac, 6) == 0)
 		{
-			 ret->port = ofport_no;
-			return;
+			ret->port = ofport_no;
+			break;
 		}
 		ret = ret->next;
 	}

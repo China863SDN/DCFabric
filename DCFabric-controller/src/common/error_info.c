@@ -31,40 +31,40 @@
 #include <locale.h>
 
 error_info_t g_error_info[ERROR_CODE_MAX];
-INT1 *UNKNOWN_ERROR = "未知错误";
+INT1 *UNKNOWN_ERROR = "unknown error";
 
 error_info_t g_error_info[] =
 {
-    {GN_OK, "操作成功"},
-    {GN_ERR, "操作失败"},
+    {GN_OK, "operater success"}, 
+    {GN_ERR, "operate failed"}, 
 
-    {EC_ROLE_IS_SLAVE, "控制器角色为slave"},
-    {EC_ROLE_IS_EQUAL, "控制器角色为equal"},
-    {EC_ROLE_IS_MASTER, "控制器角色为master"},
-    {EC_ROLE_IS_OTHER, "控制器角色为other"},
-    {EC_ROLE_INVALID, "角色错误"},
+    {EC_ROLE_IS_SLAVE, "the role of controller is slave"}, 
+    {EC_ROLE_IS_EQUAL, "the role of controller is equal"}, 
+    {EC_ROLE_IS_MASTER, "the role of controller is master"},
+    {EC_ROLE_IS_OTHER, "the role of controller is other"}, 
+    {EC_ROLE_INVALID, "the role of controller is wrong"}, 
 
-    {EC_SW_STATE_ERR, "交换机状态错误"},
-    {EC_SW_NOT_EXIST, "交换机不存在"},
-    {EC_SW_SEND_MSG_ERR, "发送消息到交换机失败"},
-    {EC_SW_NO_PATH, "交换机路径不存在"},
+    {EC_SW_STATE_ERR, "the state of switch is error"},
+    {EC_SW_NOT_EXIST, "the state of switch isn't exist"},
+    {EC_SW_SEND_MSG_ERR, "send message to switch fail"}, 
+    {EC_SW_NO_PATH, "the path of controller isn't exist"}, 
 
-    {EC_FLOW_EXIST, "流表已存在"},
-    {EC_FLOW_NOT_EXIST, "流表不存在"},
+    {EC_FLOW_EXIST, "flow table exist"}, 
+    {EC_FLOW_NOT_EXIST, "flow table isn't exist"}, 
 
-    {EC_METER_EXIST, "计量表已存在"},
-    {EC_METER_NOT_EXIST, "计量表不存在"},
-    {EC_METER_INVALID_FLAG, "计量表标识无效"},
-    {EC_METER_INVALID_TYPE, "计量表类型无效"},
+    {EC_METER_EXIST, "measure table exist"}, 
+    {EC_METER_NOT_EXIST, "measure table exist"}, 
+    {EC_METER_INVALID_FLAG, "measure table tag invalid"}, 
+    {EC_METER_INVALID_TYPE, "measure table type invalid"},
 
-    {EC_GROUP_EXIST, "组表已存在"},
-    {EC_GROUP_NOT_EXIST, "组表不存在"},
-    {EC_GROUP_INVALID_TYPE, "组表类型无效"},
+    {EC_GROUP_EXIST, "group table exist"}, 
+    {EC_GROUP_NOT_EXIST, "group table isn't exist"},
+    {EC_GROUP_INVALID_TYPE, "group table type invalid"},
 
-    {EC_RESTFUL_INVALID_REQ, "无效的请求"},
-    {EC_RESTFUL_REQUIRE_SRCDPID, "需要输入源端交换机DPID"},
-    {EC_RESTFUL_REQUIRE_DSTDPID, "需要输入目的端交换机DPID"},
-    {EC_RESTFUL_REQUIRE_TENANT_NM, "需要输入租户名称"}
+    {EC_RESTFUL_INVALID_REQ, "invalid request"},
+    {EC_RESTFUL_REQUIRE_SRCDPID, "need to input source switch DPID"},
+    {EC_RESTFUL_REQUIRE_DSTDPID, "need to input destination switch dpid"},
+    {EC_RESTFUL_REQUIRE_TENANT_NM, "need to input the name of tenant"}
 };
 
 

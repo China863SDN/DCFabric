@@ -36,10 +36,11 @@
 #include "redis_sync.h"
 #include "hiredis.h"
 #include "epoll_svr.h"
+#include "event.h"
 
 #define REDIS_PORT   6379
 
-UINT4 MAX_FILED_NUM = 204800*10;
+UINT4 MAX_FILED_NUM = 204800;
 UINT4 TABLE_DATA_LEN = 204800*10;
 
 field_pad_t* g_filed_pad_master = NULL;
@@ -61,7 +62,7 @@ INT1 g_redis_port[16];
 int g_topology_version = -1;
 
 
-
+INT4 	g_iRedisSyncFd[2] = {0};
 UINT1   g_method_DBSyn = 0;
 pthread_mutex_t g_redisMutex;
 redisContext *g_redisCtx = NULL;
@@ -665,6 +666,7 @@ void fini_redis_client()
 //by:yhy 如果当前主机是slave将Hbase中数据同步至当前控制器,如果当前控制器为master则将控制器数据同步至Hbase
 void sync_data()
 {
+	char wrbuf = DATASYNC_TIMER;
 	int tv1,tv2 ;
 	tv1= time(NULL);
 	LOG_PROC("INFO", "%s - START",FN);
@@ -677,17 +679,67 @@ void sync_data()
     {//by:yhy 主机
 		LOG_PROC("TIMER", "%s - g_controller_role == OFPCR_ROLE_MASTER",FN);
 		//by:hy 将主机信息交换机信息存入Hbase
-        persist_fabric_host_list();
-        persist_fabric_sw_list();
+        //persist_fabric_host_list();  //--ycy
+        //persist_fabric_sw_list();    //ycy
+        
+		write(g_iRedisSyncFd[1],&wrbuf, sizeof(UINT1));
+		Write_Event(EVENT_DATASYNC);
     }
 	tv2= time(NULL);
 	LOG_PROC("INFO", "%s - STOP tv2-tv1=%d",FN,tv2-tv1);
+}
+
+void *redis_datasync_thread(void *index)
+{
+	INT4 ret = 0;
+	char readbuf  = 0;
+	
+
+	while(1)
+	{
+		ret = Read_Event(EVENT_DATASYNC);
+		if(GN_OK != ret) 
+		{
+			LOG_PROC("ERROR", "Error: %s! %d",FN, LN);
+			continue;
+		}
+		
+		ret = read(g_iRedisSyncFd[0],&readbuf,1);
+		if(ret <= 0)
+		{
+			continue;
+		}
+		else
+		{
+			switch (readbuf)
+			{
+				case DATASYNC_TIMER:
+					{
+						persist_fabric_sw_list();
+					    persist_fabric_host_list();
+						break;
+					}
+				case DATASYNC_TRIGGER:
+					{
+						persist_fabric_sw_list();
+					    persist_fabric_host_list();
+					    persist_fabric_openstack_external_list();
+					    persist_fabric_nat_icmp_iden_list();
+					    persist_fabric_nat_host_list();
+					    persist_fabric_openstack_lbaas_members_list();
+						break;
+					}
+				default : break;
+			}
+		}
+	}
 }
 
 //by:yhy 分配同步所需的相关变量的内存空间,创建同步线程
 //       无明显问题,注意几个全局变量的用途
 INT4 init_sync_mgr()
 {
+	INT4 	ret = GN_OK;
 	pthread_t datasyn_thread;
 	
    
@@ -700,8 +752,19 @@ INT4 init_sync_mgr()
 
 	void* sync_timerid  = NULL;
     INT1* value = get_value(g_controller_configure, "[cluster_conf]", "sync_interval");
-	UINT4 sync_interval = ((NULL == value) ? 30 : atoll(value));;
+	UINT4 sync_interval = ((NULL == value) ? 30 : atoll(value));
 
+	ret  = Create_Event(EVENT_DATASYNC);
+	if(GN_OK != ret) 
+		return GN_ERR;
+
+	ret = pipe(g_iRedisSyncFd); //0 --success -1---failed
+	if(GN_OK != ret) 
+		return GN_ERR;
+	
+	fcntl(g_iRedisSyncFd[0], F_SETFL, fcntl(g_iRedisSyncFd[0], F_GETFD, 0)| O_NONBLOCK);
+	fcntl(g_iRedisSyncFd[1], F_SETFL, fcntl(g_iRedisSyncFd[1], F_GETFD, 0)| O_NONBLOCK);
+	pthread_create(&datasyn_thread, NULL, redis_datasync_thread, NULL);
 
 	sync_timerid = timer_init(1);
 

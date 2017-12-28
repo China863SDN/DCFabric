@@ -40,7 +40,8 @@
 #include "../cluster-mgr/cluster-mgr.h"
 #include "openstack_app.h"
 #include "fabric_floating_ip.h"
-
+#include "timer.h"
+#include "fabric_openstack_gateway.h"
 //by:yhy 这些全局变量具体用途存疑
 void *g_openstack_external_id = NULL;
 void *g_openstack_floating_id = NULL;
@@ -56,13 +57,14 @@ UINT1 g_openstack_external_init_flag = 0;
 //by:yhy 这些全局变量具体用途<费解>
 static const UINT4 external_min_seq = 1;
 static const UINT4 external_max_seq = 20;
+UINT1 openstack_external_updated =0;
 
 UINT4 g_external_check_on = 0;
-UINT4 g_external_check_interval = 20;
+UINT4 g_external_check_interval = 10;
 void *g_external_check_timerid = NULL;
 void *g_external_check_timer = NULL;
 
-UINT4 g_external_install_flow_interval = 20;
+UINT4 g_external_install_flow_interval = 60;
 void *g_external_install_flow_timerid = NULL;
 void *g_external_install_flow_timer = NULL;
 
@@ -71,6 +73,10 @@ extern UINT4 g_openstack_on;
 UINT1 ext_zero_mac[6] = {0};
 extern UINT1 g_fabric_start_flag;
 
+UINT4 G_ExternalGatewayIP_PortLinkDown =0;
+const UINT4 G_external_check_interval_Fast = 10;
+
+extern gn_server_t g_server;
 void install_external_flow(external_port_p epp);
 
 external_port_p create_external_port(
@@ -80,7 +86,8 @@ external_port_p create_external_port(
 		UINT1* external_outer_interface_mac,
 		UINT8 external_dpid,
 		UINT4 external_port,
-		char* network_id);
+		char* network_id,
+		char* subnet_id);
 external_floating_ip_p create_floating_ip_p(
 		UINT4 fixed_ip,
 		UINT4 floating_ip,
@@ -104,12 +111,14 @@ external_port_p update_external_port(
 		UINT1* external_outer_interface_mac,
 		UINT8 external_dpid,
 		UINT4 external_port,
-		char* network_id);
+		char* network_id,
+		char* subnet_id);
 external_floating_ip_p update_floating_ip_list(
 		UINT4 fixed_ip,
 		UINT4 floating_ip,
 		char* port_id,
-		char* router_id);
+		char* router_id,
+		UINT1 Type);
 nat_icmp_iden_p update_nat_icmp_iden(
 		UINT2 identifier,
 		UINT4 host_ip,
@@ -122,6 +131,7 @@ external_port_p find_openstack_external_by_outer_ip(UINT4 external_outer_interfa
 external_port_p find_openstack_external_by_gatway_ip(UINT4 external_gateway_ip);
 external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip);
 external_port_p find_openstack_external_by_network_id(char* network_id);
+external_port_p find_openstack_external_by_subnetwork_id(char* subnetwork_id);
 
 external_port_p find_openstack_external_by_outer_mac(UINT1* external_gateway_mac);
 nat_icmp_iden_p find_nat_icmp_iden_by_host_ip(UINT4 host_ip);
@@ -129,7 +139,7 @@ nat_icmp_iden_p find_nat_icmp_iden_by_host_mac(UINT1* host_mac);
 nat_icmp_iden_p find_nat_icmp_iden_by_identifier(UINT2 identifier);
 external_floating_ip_p find_external_floating_ip_by_fixed_ip(UINT4 fixed_ip);
 void get_sw_from_dpid(UINT8 dpid,gn_switch_t **sw);
-void test(UINT1 type);
+
 
 //by:yhy 初始化openstack_external用到的全局变量
 void init_openstack_external()
@@ -158,6 +168,7 @@ void init_openstack_external()
 	g_nat_icmp_iden_list=NULL;
 	return;
 }
+
 //by:yhy 通过对外接口IP查找外部网关端口结构体
 external_port_p get_external_port_by_out_interface_ip(UINT4 external_outer_interface_ip) 
 {
@@ -168,6 +179,7 @@ external_port_p get_external_port_by_out_interface_ip(UINT4 external_outer_inter
 	}
 	return NULL;
 }
+
 //by:yhy 获取浮动Ip对应的外联口
 external_port_p get_external_port_by_floatip(UINT4 external_floatip) 
 {
@@ -178,11 +190,13 @@ external_port_p get_external_port_by_floatip(UINT4 external_floatip)
 	}
 	return NULL;
 }
+
 //by:yhy 根据fixed_ip在g_openstack_floating_list查找对应的external_floating_ip_p
 external_floating_ip_p get_external_floating_ip_by_fixed_ip(UINT4 fixed_ip)
 {
 	return find_external_floating_ip_by_fixed_ip(fixed_ip);
 }
+
 //by:yhy 通过输入IP查找是否是对外floating ip,是则返回external_floating_ip_p
 external_floating_ip_p get_external_floating_ip_by_floating_ip(UINT4 floating_ip)
 {
@@ -192,12 +206,15 @@ external_floating_ip_p get_external_floating_ip_by_floating_ip(UINT4 floating_ip
 nat_icmp_iden_p get_nat_icmp_iden_by_host_ip(UINT4 host_ip){
 	return find_nat_icmp_iden_by_host_ip(host_ip);
 }
+
 nat_icmp_iden_p get_nat_icmp_iden_by_host_mac(UINT1* host_mac){
 	return find_nat_icmp_iden_by_host_mac(host_mac);
 }
+
 nat_icmp_iden_p get_nat_icmp_iden_by_identifier(UINT2 identifier){
 	return find_nat_icmp_iden_by_identifier(identifier);
 }
+
 //by:yhy 装载对外网关流表
 void install_external_flow(external_port_p epp)
 {
@@ -213,16 +230,22 @@ void install_external_flow(external_port_p epp)
 	{
 		if (sw)  
 		{
+			install_modifine_ExternalSwitch_goto_FirewallInTable_flow(sw);
+			install_modifine_ExternalSwitch_ExPort_goto_FirewallInTable_flow(sw, epp->external_port);
+			install_modifine_ExternalSwitch_QOS_in_goto_NATTable_flow(sw);
+			install_modifine_ExternalSwitch_goto_FirewallOutTable_flow(sw);
+			install_add_QOS_jump_default_flow(sw,FABRIC_QOS_OUT_TABLE,FABRIC_OUTPUT_TABLE);
 			//by:yhy 装载外部网关MAC流表
 			install_fabric_openstack_external_output_flow(sw,epp->external_port,epp->external_gateway_mac,epp->external_outer_interface_ip,1);
 			//by:yhy 装载外部接口IP流表
 			install_fabric_openstack_external_output_flow(sw,epp->external_port,epp->external_gateway_mac,epp->external_outer_interface_ip,2);
+
 		}
 		else 
 		{
 			INT1 str_dpid[48] = {0};
 			dpidUint8ToStr(epp->external_dpid, str_dpid);
-			LOG_PROC("ERROR", "can not find any sw match external_dpid:%s!\n", str_dpid);
+			LOG_PROC("ERROR", "%s can not find any sw match external_dpid:%s!\n", FN,str_dpid);
 		}
 	}
 }
@@ -230,58 +253,44 @@ void install_external_flow(external_port_p epp)
 /* by:yhy(待用)
  * 判断sw是否为外联交换机,若是则下发外联用流表
  */
-void initiative_check_if_external_and_install_flow(gn_switch_t* sw)
+BOOL initiative_check_if_external_and_install_flow(gn_switch_t* sw)
 {
-	if (0 == g_openstack_on) 
-	{
-		return;
-	}
-	if (g_controller_role == OFPCR_ROLE_SLAVE)
-	{
-		return;
-	}
-
 	external_port_p epp = NULL;
 	openstack_external_node_p node_p  = g_openstack_external_list;
 
 	while (NULL != node_p)
 	{
 		epp = (external_port_p)node_p->data;
-		if ((epp) && (GN_OK == epp->status)&&(epp->external_dpid == sw->dpid)) 
+		if ((epp) && (GN_OK == epp->status)&&sw&&(epp->external_dpid == sw->dpid)) 
 		{
 			if (0 != g_fabric_start_flag)
 			{
-				if (sw)  
+				
+				if ((0 == g_openstack_on) ||(g_controller_role == OFPCR_ROLE_SLAVE))
 				{
-					//by:yhy 装载外部网关MAC流表
-					install_fabric_openstack_external_output_flow(sw,epp->external_port,epp->external_gateway_mac,epp->external_outer_interface_ip,1);
-					//by:yhy 装载外部接口IP流表
-					install_fabric_openstack_external_output_flow(sw,epp->external_port,epp->external_gateway_mac,epp->external_outer_interface_ip,2);
+					return TRUE;
 				}
-				else 
-				{
-					INT1 str_dpid[48] = {0};
-					dpidUint8ToStr(epp->external_dpid, str_dpid);
-					LOG_PROC("ERROR", "can not find any sw match external_dpid:%s!\n", str_dpid);
-				}
+				install_modifine_ExternalSwitch_goto_FirewallInTable_flow(sw);
+				install_modifine_ExternalSwitch_ExPort_goto_FirewallInTable_flow(sw, epp->external_port);
+				install_modifine_ExternalSwitch_QOS_in_goto_NATTable_flow(sw);
+				install_modifine_ExternalSwitch_goto_FirewallOutTable_flow(sw);
+				install_add_QOS_jump_default_flow(sw,FABRIC_QOS_OUT_TABLE,FABRIC_OUTPUT_TABLE);
+				//by:yhy 装载外部网关MAC流表
+				install_fabric_openstack_external_output_flow(sw,epp->external_port,epp->external_gateway_mac,epp->external_outer_interface_ip,1);
+				//by:yhy 装载外部接口IP流表
+				install_fabric_openstack_external_output_flow(sw,epp->external_port,epp->external_gateway_mac,epp->external_outer_interface_ip,2);
+				return TRUE;
 			}
 		}
 		node_p=node_p->next;
 	}
+	return FALSE;
 }
 
-
-
 //by:yhy   通过restAPI创建对外网关
-void create_external_port_by_rest(
-		UINT4 external_gateway_ip,
-		UINT1* external_gateway_mac,
-        UINT4 external_outer_interface_ip,
-		UINT1* external_outer_interface_mac,
-		UINT8 external_dpid,
-		UINT4 external_port,
-		char* network_id)
+void create_external_port_by_rest(UINT4 external_gateway_ip,UINT1* external_gateway_mac,UINT4 external_outer_interface_ip,UINT1* external_outer_interface_mac,UINT8 external_dpid,UINT4 external_port,char* network_id, char* subnet_id)
 {
+	//LOG_PROC("INFO", "------------------%s_%d_%u_%ld",FN,LN,external_gateway_ip,external_dpid);
 	external_port_p epp = update_external_port(
 	        external_gateway_ip,
 			external_gateway_mac,
@@ -289,7 +298,8 @@ void create_external_port_by_rest(
 			external_outer_interface_mac,
 	        external_dpid,
 	        external_port,
-			network_id);
+			network_id,
+			subnet_id);
 	
 	if ((epp) && (GN_OK == epp->status))
 	{
@@ -299,6 +309,7 @@ void create_external_port_by_rest(
 		update_external_config(epp);
 	}
 }
+
 //by:yhy 根据network_id匹配并删除g_openstack_external_list中的项
 void remove_external_port_in_list_by_networkid(INT1* network_id)
 {
@@ -341,41 +352,96 @@ void remove_external_port_in_list_by_networkid(INT1* network_id)
 		g_openstack_external_list = next_p;
 	}	
 }	
+
 //by:yhy 根据network_id匹配并删除external_port
 void remove_external_port_by_networkid(INT1* network_id)
 {
+	external_port_p external_p = NULL;
+    openstack_external_node_p node_p = g_openstack_external_list;
+	
 	if (g_controller_role == OFPCR_ROLE_SLAVE)
 	{
 		return;
 	}
 
-	external_port_p external_p = find_openstack_external_by_network_id(network_id);
-
-	if (external_p) 
+    while(node_p) 
 	{
-		gn_switch_t *sw = NULL;
-		get_sw_from_dpid(external_p->external_dpid,&sw);
-		//by:yhy 删除流表项
-		if (sw) 
+        external_p = (external_port_p)node_p->data;
+		
+        if ((external_p) && (0 != strlen(external_p->network_id)) && (0 == strcmp(network_id, external_p->network_id))&& external_p->external_port) 
 		{
-			remove_fabric_openstack_external_output_flow(sw, external_p->external_gateway_mac, external_p->external_outer_interface_ip, 1);
-			remove_fabric_openstack_external_output_flow(sw, external_p->external_gateway_mac, external_p->external_outer_interface_ip, 2);
-		}
-
-		//by:yhy 删除配置文件中的项
-		INT1* selection = get_selection_by_name_value(g_controller_configure, "external_network_id", network_id);
-		if (selection) 
-		{
-			INT4 return_value = remove_selection(g_controller_configure, selection);
-			if (return_value)
+			gn_switch_t *sw = NULL;
+			get_sw_from_dpid(external_p->external_dpid,&sw);
+			//by:yhy 删除流表项
+			if (sw) 
 			{
-				g_controller_configure = save_ini(g_controller_configure,CONFIGURE_FILE);
+				remove_fabric_openstack_external_output_flow(sw, external_p->external_gateway_mac, external_p->external_outer_interface_ip, 1);
+				remove_fabric_openstack_external_output_flow(sw, external_p->external_gateway_mac, external_p->external_outer_interface_ip, 2);
 			}
-		}
-		//by:yhy 删除g_openstack_external_list中的项
-		remove_external_port_in_list_by_networkid(network_id);
-	}
+
+			//by:yhy 删除配置文件中的项
+			INT1* selection = get_selection_by_name_value(g_controller_configure, "external_network_id", network_id);
+			if (selection) 
+			{
+				INT4 return_value = remove_selection(g_controller_configure, selection);
+				if (return_value)
+				{
+					g_controller_configure = save_ini(g_controller_configure,CONFIGURE_FILE);
+				}
+			}
+	     }
+        node_p = node_p->next;
+    }
+	remove_external_port_in_list_by_networkid(network_id);
 }
+
+//by:yhy 根据outer_interface_ip匹配并删除external_port
+void remove_external_port_by_outer_interface_ip(UINT4 outer_interface_ip)
+{
+	LOG_PROC("INFO", "------------------%s_%d",FN,LN);
+	external_port_p external_p = NULL;
+    openstack_external_node_p node_p = g_openstack_external_list;
+	
+	if (g_controller_role == OFPCR_ROLE_SLAVE)
+	{
+		return;
+	}
+	LOG_PROC("INFO", "------------------%s_%d",FN,LN);
+    while(node_p) 
+	{
+        external_p = (external_port_p)node_p->data;
+		
+        if ((external_p) && (0 != strlen(external_p->network_id)) && (outer_interface_ip == external_p->external_outer_interface_ip)&& external_p->external_port) 
+		{
+			LOG_PROC("INFO", "------------------%s_%d",FN,LN);
+			gn_switch_t *sw = NULL;
+			get_sw_from_dpid(external_p->external_dpid,&sw);
+			//by:yhy 删除流表项
+			if (sw) 
+			{
+				LOG_PROC("INFO", "------------------%s_%d",FN,LN);
+				remove_fabric_openstack_external_output_flow(sw, external_p->external_gateway_mac, external_p->external_outer_interface_ip, 1);
+				remove_fabric_openstack_external_output_flow(sw, external_p->external_gateway_mac, external_p->external_outer_interface_ip, 2);
+				install_remove_FirewallIn_flow(sw,external_p->external_outer_interface_ip);
+				install_remove_FirewallOut_flow(sw,external_p->external_outer_interface_ip);
+			}
+
+			//by:yhy 删除配置文件中的项
+			char * String_outer_interface_ip =inet_htoa(ntohl(outer_interface_ip));
+			INT1* selection = get_selection_by_name_value(g_controller_configure, "external_outer_interface_ip", String_outer_interface_ip);
+			if (selection) 
+			{
+				INT4 return_value = remove_selection(g_controller_configure, selection);
+				if (return_value)
+				{
+					g_controller_configure = save_ini(g_controller_configure,CONFIGURE_FILE);
+				}
+			}
+	     }
+        node_p = node_p->next;
+    }
+}
+
 //by:yhy 初始化openstack的external功能(对Pica8下发流表)
 void init_external_flows()
 {
@@ -385,6 +451,7 @@ void init_external_flows()
 		value = get_value(g_controller_configure, "[openvstack_conf]", "external_check_internal");
 		g_external_install_flow_interval = (NULL == value) ? 20: atoi(value);
 		
+		LOG_PROC("INFO", "%s %d g_external_install_flow_interval=%d", FN, LN, g_external_install_flow_interval);
 		TimerFunction_init_external_flows();
 
 		g_external_install_flow_timerid = timer_init(1);
@@ -395,18 +462,14 @@ void init_external_flows()
 					TimerFunction_init_external_flows);
 	}
 }
+
 void TimerFunction_init_external_flows(void)
 {
 	if (0 == g_openstack_on) 
 	{
 		return;
 	}
-	LOG_PROC("INFO", "External:external flow installed!");
-	//if (0 != g_openstack_external_init_flag) 
-	//{
-	//	LOG_PROC("INFO", "External:external flow has been initialized!");
-	//	return;
-	//}
+	LOG_PROC("INFO", "%s %d", FN, LN);
 
 	external_port_p epp = NULL;
 	openstack_external_node_p node_p  = g_openstack_external_list;
@@ -414,19 +477,22 @@ void TimerFunction_init_external_flows(void)
 	while (NULL != node_p)
 	{
 		epp = (external_port_p)node_p->data;
+		if(epp)
+		{
+			LOG_PROC("INFO", "%s %d epp->status=%d  epp->external_outer_interface_ip=0x%x", FN, LN, epp->status, epp->external_outer_interface_ip);
+		}
 		if ((epp) && (GN_OK == epp->status)) 
 		{
 			install_external_flow(epp);
 		}
 		node_p=node_p->next;
 	}
-	//g_openstack_external_init_flag = 1;
 }
 
 //by:yhy 更新 对外网关 配置(刷新配置文件)
 void update_external_config(external_port_p epp)
 {
-
+	//LOG_PROC("INFO", "------------%s",FN);
 	UINT1 seq_num = external_min_seq;
 	char para_title[48] = {0};
 	char dpid_str[48] = {0};
@@ -456,6 +522,7 @@ void update_external_config(external_port_p epp)
 		return;
 	}
 
+	//LOG_PROC("INFO", "%s %d external_outer_interface_ip=0x%x epp->external_port=%d, seq_num=%d!",FN,LN,epp->external_outer_interface_ip,epp->external_port,seq_num);
 	dpidUint8ToStr(epp->external_dpid, dpid_str);
 	
 	// config
@@ -467,26 +534,19 @@ void update_external_config(external_port_p epp)
 	g_controller_configure = save_ini(g_controller_configure,CONFIGURE_FILE);
 }
 
-external_floating_ip_p create_floatting_ip_by_rest(
-		UINT4 fixed_ip,
-        UINT4 floating_ip,
-		char* port_id,
-        char* router_id)
+external_floating_ip_p create_floatting_ip_by_rest(UINT4 fixed_ip,UINT4 floating_ip,char* port_id,char* router_id,UINT1 Type)
 {
 	external_floating_ip_p efp = update_floating_ip_list(
 			fixed_ip,
 			floating_ip,
 			port_id,
-			router_id);
+			router_id,
+			Type);
 	return efp;
 }
 
-nat_icmp_iden_p create_nat_imcp_iden_p(
-		UINT2 identifier,
-		UINT4 host_ip,
-		UINT1* host_mac,
-		UINT8 sw_dpid,
-		UINT4 inport){
+nat_icmp_iden_p create_nat_imcp_iden_p(UINT2 identifier,UINT4 host_ip,UINT1* host_mac,UINT8 sw_dpid,UINT4 inport)
+{
 	return update_nat_icmp_iden(
 			identifier,
 			host_ip,
@@ -494,18 +554,13 @@ nat_icmp_iden_p create_nat_imcp_iden_p(
 			sw_dpid,
 			inport);
 }
+
 //by:yhy 根据参数新建并初始化一个openstack的对外网关,并将其添加到g_openstack_external_list中
-external_port_p create_external_port(
-        UINT4 external_gateway_ip,
-		UINT1* external_gateway_mac,
-        UINT4 external_outer_interface_ip,
-		UINT1* external_outer_interface_mac,
-		UINT8 external_dpid,
-		UINT4 external_port,
-		char* network_id){
+external_port_p create_external_port(UINT4 external_gateway_ip,UINT1* external_gateway_mac,UINT4 external_outer_interface_ip,UINT1* external_outer_interface_mac,UINT8 external_dpid,UINT4 external_port,char* network_id,char* subnet_id)
+{
     external_port_p epp = NULL;
     epp = (external_port_p)mem_get(g_openstack_external_id);
-	
+	//LOG_PROC("INFO", "------------------%s_%d_%u",FN,LN,external_gateway_ip);
 	//addedby:yhy
 	if(NULL == epp)
 	{
@@ -517,26 +572,36 @@ external_port_p create_external_port(
     if(external_gateway_ip && external_gateway_ip!=0){
     	epp->external_gateway_ip=external_gateway_ip;
     }
-    if(external_outer_interface_ip && external_outer_interface_ip!=0){
+    if(external_outer_interface_ip && external_outer_interface_ip!=0)
+	{
     	epp->external_outer_interface_ip=external_outer_interface_ip;
     }
-    if ((external_gateway_mac) && (0 != memcmp(ext_zero_mac, external_gateway_mac, 6))) {
+    if ((external_gateway_mac) && (0 != memcmp(ext_zero_mac, external_gateway_mac, 6))) 
+	{
     	memcpy(epp->external_gateway_mac, external_gateway_mac, 6);
     }
-    if ((external_outer_interface_mac) && (0 != memcmp(ext_zero_mac, external_outer_interface_mac, 6))) {
+    if ((external_outer_interface_mac) && (0 != memcmp(ext_zero_mac, external_outer_interface_mac, 6))) 
+	{
     	memcpy(epp->external_outer_interface_mac, external_outer_interface_mac, 6);
     }
-    if(external_dpid && external_dpid!=0){
+    if(external_dpid && external_dpid!=0)
+	{
     	epp->external_dpid=external_dpid;
     }
-    if(external_port && external_port!=0){
+    if(external_port && external_port!=0)
+	{
     	epp->external_port=external_port;
     }
-    if(network_id){
+    if(network_id)
+	{
 		strcpy(epp->network_id,network_id);
 	}
+	if(subnet_id)
+	{
+		strcpy(epp->subnet_id,subnet_id);
+	}
     add_openstack_external_to_list(epp);
-    test(1);
+
     return epp;
 }
 
@@ -569,13 +634,8 @@ openstack_external_node_p remove_tail_nat_icmp_iden()
 	return prev_p;
 }
 
-nat_icmp_iden_p create_nat_icmp_iden(
-		UINT2 identifier,
-		UINT4 host_ip,
-		UINT1* host_mac,
-		UINT8 sw_dpid,
-		UINT4 inport
-		){
+nat_icmp_iden_p create_nat_icmp_iden(UINT2 identifier,UINT4 host_ip,UINT1* host_mac,UINT8 sw_dpid,UINT4 inport)
+{
 	nat_icmp_iden_p nii = NULL;
 	nii = (nat_icmp_iden_p)mem_get(g_nat_icmp_iden_id);
 	// if no memory
@@ -611,6 +671,7 @@ nat_icmp_iden_p create_nat_icmp_iden(
 	
 	return nii;
 }
+
 //by:yhy 将epp添加到g_openstack_external_list中
 void add_openstack_external_to_list(external_port_p epp)
 {
@@ -629,6 +690,7 @@ void add_openstack_external_to_list(external_port_p epp)
     node_p->next = g_openstack_external_list;
     g_openstack_external_list = node_p;
 }
+
 //by:yhy 将data构造成g_openstack_external_list所支持的节点结构
 openstack_external_node_p create_openstack_external_node(UINT1* data)
 {
@@ -647,11 +709,8 @@ openstack_external_node_p create_openstack_external_node(UINT1* data)
 	return ret;
 };
 
-external_floating_ip_p create_floating_ip_p(
-		UINT4 fixed_ip,
-		UINT4 floating_ip,
-		char* port_id,
-		char* router_id){
+external_floating_ip_p create_floating_ip_p(UINT4 fixed_ip,UINT4 floating_ip,char* port_id,char* router_id)
+{
 	external_floating_ip_p efp = NULL;
 	efp = (external_floating_ip_p)mem_get(g_openstack_floating_id);
 	
@@ -676,9 +735,10 @@ external_floating_ip_p create_floating_ip_p(
     	strcpy(efp->router_id,router_id);
     }
     add_openstack_floating_to_list(efp);
-    test(2);
+    
     return efp;
 }
+
 void add_openstack_floating_to_list(external_floating_ip_p efp){
 	external_floating_ip_p efp_p = NULL;
 	openstack_external_node_p node_p = NULL;
@@ -693,6 +753,7 @@ void add_openstack_floating_to_list(external_floating_ip_p efp){
 	node_p->next = g_openstack_floating_list;
 	g_openstack_floating_list = node_p;
 }
+
 void add_nat_icmp_iden_to_list(nat_icmp_iden_p nii){
 	nat_icmp_iden_p nii_p = NULL;
 	openstack_external_node_p node_p = NULL;
@@ -707,6 +768,7 @@ void add_nat_icmp_iden_to_list(nat_icmp_iden_p nii){
 	node_p->next = g_nat_icmp_iden_list;
 	g_nat_icmp_iden_list = node_p;
 }
+
 //by:yhy 检查openstack对外端口external_p的有效性
 INT4 check_external_port_status(external_port_p external_p)
 {
@@ -721,37 +783,34 @@ INT4 check_external_port_status(external_port_p external_p)
 		&& (external_p->external_port)
 		&& (external_p->network_id)
 		&& (0 != strlen(external_p->network_id))
-		&& (0 != strcmp("0", external_p->network_id))) {
+		&& (0 != strcmp("0", external_p->network_id))) 
+	{
 		return GN_OK;
 	}
+	
+
 	//by:yhy add 201701051305
 	LOG_PROC("ERROR", "check_external_port_status -- Finall return GN_ERR");
 	return GN_ERR;
 }
+
 //by:yhy 更新外部网关列表信息
-external_port_p update_external_port(
-        UINT4 external_gateway_ip,
-		UINT1* external_gateway_mac,
-	    UINT4 external_outer_interface_ip,
-		UINT1* external_outer_interface_mac,
-		UINT8 external_dpid,
-		UINT4 external_port,
-		char* network_id)
+external_port_p update_external_port(UINT4 external_gateway_ip,UINT1* external_gateway_mac,UINT4 external_outer_interface_ip,UINT1* external_outer_interface_mac,UINT8 external_dpid,UINT4 external_port,char* network_id,char* subnet_id)
 {
 	char ip_str[48]={0};
     external_port_p epp = NULL;
-	//by:jjq 根据interface_ip在外部的external结构体中找
+	LOG_PROC("INFO", "------------------%s_%d_%u_%ld",FN,LN,external_gateway_ip,external_dpid);
     epp = find_openstack_external_by_outer_ip(external_outer_interface_ip);
 	number2ip(external_outer_interface_ip, ip_str);
     if(epp == NULL)
 	{
         epp = create_external_port(external_gateway_ip,external_gateway_mac,external_outer_interface_ip,
-                                   external_outer_interface_mac,external_dpid,external_port,network_id);
+                                   external_outer_interface_mac,external_dpid,external_port,network_id, subnet_id);
     }
 	else
 	{
 		//by:yhy 如果发生外部网关的变化(即原有的网关与现有网关不一致)
-		if ((external_dpid) && (external_dpid != epp->external_dpid)) 
+		if(((external_dpid) && (external_dpid != epp->external_dpid))||((external_dpid) && (external_dpid == epp->external_dpid)&&(external_port != epp->external_port)))
 		{
 			if (g_controller_role == OFPCR_ROLE_MASTER)
 			{
@@ -798,6 +857,10 @@ external_port_p update_external_port(
 		{
 			strcpy(epp->network_id,network_id);
 		}
+		if(subnet_id)
+		{
+			strcpy(epp->subnet_id, subnet_id);
+		}
     }
 
 	if (epp) 
@@ -808,12 +871,7 @@ external_port_p update_external_port(
 	return epp;
 }
 
-INT4 compare_floating_ip_list(
-		UINT4 fixed_ip,
-		UINT4 floating_ip,
-		char* port_id,
-		char* router_id, 
-		external_floating_ip_p efp) 
+INT4 compare_floating_ip_list(UINT4 fixed_ip,UINT4 floating_ip,char* port_id,char* router_id, external_floating_ip_p efp) 
 {
 	if ((efp)
 		&& (fixed_ip == efp->fixed_ip)
@@ -826,18 +884,17 @@ INT4 compare_floating_ip_list(
 	return 0;
 }
 
-external_floating_ip_p update_floating_ip_list(
-		UINT4 fixed_ip,
-		UINT4 floating_ip,
-		char* port_id,
-		char* router_id)
+external_floating_ip_p update_floating_ip_list(UINT4 fixed_ip,UINT4 floating_ip,char* port_id,char* router_id,UINT1 Type)
 {
 	external_floating_ip_p efp = NULL;
 	efp = find_external_floating_ip_by_floating_ip(floating_ip);
 	if(efp == NULL) {
 		efp = create_floating_ip_p(fixed_ip,floating_ip,port_id,router_id);
 		if (efp)
+		{
+			efp->type = Type;
 			efp->check_status = (UINT2)CHECK_CREATE;
+		}
 	}
 	else if (compare_floating_ip_list(fixed_ip,floating_ip,port_id,router_id,efp)) {
 		efp->check_status = (UINT2)CHECK_LATEST;
@@ -865,12 +922,9 @@ external_floating_ip_p update_floating_ip_list(
 
 	return efp;
 }
-nat_icmp_iden_p update_nat_icmp_iden(
-		UINT2 identifier,
-		UINT4 host_ip,
-		UINT1* host_mac,
-		UINT8 sw_dpid,
-		UINT4 inport){
+
+nat_icmp_iden_p update_nat_icmp_iden(UINT2 identifier,UINT4 host_ip,UINT1* host_mac,UINT8 sw_dpid,UINT4 inport)
+{
 	nat_icmp_iden_p nii=NULL;
 	nii = find_nat_icmp_iden_by_host_ip(host_ip);
 	if(nii == NULL){
@@ -900,7 +954,9 @@ nat_icmp_iden_p update_nat_icmp_iden(
 
 	return nii;
 }
-void destory_openstack_external(){
+
+void destory_openstack_external()
+{
     if(g_openstack_external_id != NULL){
         mem_destroy(g_openstack_external_id);
         g_openstack_external_id = NULL;
@@ -921,6 +977,7 @@ void destory_openstack_external(){
     g_openstack_floating_list = NULL;
     g_nat_icmp_iden_list=NULL;
 }
+
 //by:yhy 通过ip查找对应的openstack外部网关端口
 external_port_p find_openstack_external_by_outer_ip(UINT4 external_outer_interface_ip)
 {
@@ -942,25 +999,45 @@ external_port_p find_openstack_external_by_outer_ip(UINT4 external_outer_interfa
     }
     return NULL;
 };
+
 //by:yhy why?这个函数有问题
 external_port_p get_external_port_by_host_mac(UINT1* host_mac)
 {
+	INT1 ret = GN_OK;
+	char network_id[48] = {0};
+	char subnet_id[48] = {0};
 	external_port_p epp = NULL;
+	UINT4 external_outer_interface_ip = 0;
+	openstack_router_outerinterface_p node_router_outerinterface = NULL;
 	openstack_external_node_p node_p = g_openstack_external_list;
-
-	while(node_p != NULL )
+	p_fabric_host_node p_node =  get_fabric_host_from_list_by_mac(host_mac);
+	if(NULL == p_node)
 	{
-		epp = (external_port_p)node_p->data;
-		if ((epp) && (GN_OK == epp->status)) 
-		{
-			return epp;
-		}
-		node_p=node_p->next;
+		return NULL;
 	}
-	return NULL;
+	openstack_port_p port_p = (openstack_port_p)p_node->data;
+	if(NULL == port_p)
+	{
+		return NULL;
+	}
+	strncpy(network_id, port_p->network_id, 48);
+	strncpy(subnet_id, port_p->subnet_id, 48);
+
+	
+	node_router_outerinterface = find_openstack_router_outerinterface_by_networkAndsubnetid(network_id, subnet_id);
+	if(NULL != node_router_outerinterface)
+	{
+		ret = find_openstack_router_outerinterfaceip_by_router(node_router_outerinterface ,&external_outer_interface_ip);
+		if(GN_OK == ret)
+		{
+			epp = find_openstack_external_by_outer_ip(external_outer_interface_ip);
+		}
+	}
+	return epp;
 }
 
-external_port_p get_external_port(){
+external_port_p get_external_port()
+{
 	external_port_p epp = NULL;
 	openstack_external_node_p node_p = g_openstack_external_list;
 	while(node_p != NULL ){
@@ -972,6 +1049,7 @@ external_port_p get_external_port(){
 	}
 	return NULL;
 }
+
 //by:yhy 根据fixed_ip在g_openstack_floating_list查找对应的external_floating_ip_p
 external_floating_ip_p find_external_floating_ip_by_fixed_ip(UINT4 fixed_ip)
 {
@@ -992,27 +1070,61 @@ external_floating_ip_p find_external_floating_ip_by_fixed_ip(UINT4 fixed_ip)
     }
     return NULL;
 };
-//by:yhy 根据浮动IP在g_openstack_external_list中查找与之对应的external_port_p
-external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip){
-	external_port_p epp = NULL;
-	openstack_external_node_p node_p = g_openstack_external_list;
-    char network_id[48];
-    find_fabric_network_by_floating_ip(external_floating_ip,network_id);
-	while(node_p != NULL )
+
+external_floating_ip_p find_external_fixed_ip_by_floating_ip(UINT4 floating_ip)
+{
+	external_floating_ip_p epp = NULL;
+    openstack_external_node_p node_p = g_openstack_floating_list;
+    while(node_p != NULL)
 	{
-		epp = (external_port_p)node_p->data;
-		if(epp->external_dpid  && epp->external_port)
+        epp = (external_floating_ip_p)node_p->data;
+        if(epp==NULL)
 		{
-			if((0 != strlen(network_id)) && (0 == strcmp(epp->network_id,network_id)))
-			{
-				return epp;
-			}
-		}
-		node_p=node_p->next;
-	}
-	return NULL;
+        	return NULL;
+        }
+        if(epp->floating_ip == floating_ip)
+		{
+            return epp;
+        }
+        node_p = node_p->next;
+    }
+    return NULL;
 };
-external_port_p find_openstack_external_by_gatway_ip(UINT4 external_gateway_ip){
+
+//by:yhy 根据浮动IP在g_openstack_external_list中查找与之对应的external_port_p
+external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip)
+{
+	INT1 ret = GN_OK;
+	char network_id[48] = {0};
+	char subnet_id[48] = {0};
+	external_port_p epp = NULL;
+	external_floating_ip_p efp = NULL;
+	UINT4 external_outer_interface_ip = 0;
+	openstack_router_outerinterface_p node_router_outerinterface = NULL;
+	openstack_external_node_p node_p = g_openstack_external_list;
+
+   	efp = find_external_fixed_ip_by_floating_ip(external_floating_ip);
+	if(NULL == efp)
+	{
+		return NULL;
+	}
+    find_fabric_network_by_floating_ip(efp->fixed_ip,network_id, subnet_id);
+
+	node_router_outerinterface = find_openstack_router_outerinterface_by_networkAndsubnetid(network_id, subnet_id);
+	if(NULL != node_router_outerinterface)
+	{
+		ret = find_openstack_router_outerinterfaceip_by_router(node_router_outerinterface ,&external_outer_interface_ip);
+		if(GN_OK == ret)
+		{
+			epp = find_openstack_external_by_outer_ip(external_outer_interface_ip);
+		}
+	}
+
+	return epp;
+};
+
+external_port_p find_openstack_external_by_gatway_ip(UINT4 external_gateway_ip)
+{
     external_port_p epp = NULL;
     openstack_external_node_p node_p = g_openstack_external_list;
     while(node_p != NULL){
@@ -1024,24 +1136,54 @@ external_port_p find_openstack_external_by_gatway_ip(UINT4 external_gateway_ip){
     }
     return NULL;
 };
+
 //by:yhy 根据network_id匹配并查找g_openstack_external_list中的项
 external_port_p find_openstack_external_by_network_id(char* network_id)
 {
+	INT1 ret = GN_OK;
     external_port_p epp = NULL;
+	UINT4 external_outer_interface_ip = 0;
+	openstack_router_outerinterface_p node_router_outerinterface = NULL;
     openstack_external_node_p node_p = g_openstack_external_list;
-	
-    while(node_p) 
+
+	if(NULL == network_id)
 	{
-        epp = (external_port_p)node_p->data;
-		
-        if ((epp) && (0 != strlen(epp->network_id)) && (0 == strcmp(network_id, epp->network_id))) 
+		return NULL;
+	}
+	
+	node_router_outerinterface = find_openstack_router_outerinterface_by_networkid(network_id);
+	if(NULL != node_router_outerinterface)
+	{
+		ret = find_openstack_router_outerinterfaceip_by_router(node_router_outerinterface ,&external_outer_interface_ip);
+		if(GN_OK == ret)
 		{
-            return epp;
-        }
-        node_p = node_p->next;
-    }
-    return NULL;
+			epp = find_openstack_external_by_outer_ip(external_outer_interface_ip);
+		}
+	}
+	
+    return epp;
 };
+
+external_port_p find_openstack_external_by_subnetwork_id(char* subnetwork_id)
+{
+	INT1 ret = GN_OK;
+    external_port_p epp = NULL;
+	UINT4 external_outer_interface_ip = 0;
+	openstack_router_outerinterface_p node_router_outerinterface = NULL;
+    openstack_external_node_p node_p = g_openstack_external_list;
+
+	node_router_outerinterface = find_openstack_router_outerinterface_by_subnetid(subnetwork_id);
+	if(NULL != node_router_outerinterface)
+	{
+		ret = find_openstack_router_outerinterfaceip_by_router(node_router_outerinterface ,&external_outer_interface_ip);
+		if(GN_OK == ret)
+		{
+			epp = find_openstack_external_by_outer_ip(external_outer_interface_ip);
+		}
+	}
+    return epp;
+};
+
 //by:yhy 通过输入IP查找是否是对外floating ip,是则返回external_floating_ip_p
 external_floating_ip_p find_external_floating_ip_by_floating_ip(UINT4 floating_ip)
 {
@@ -1062,7 +1204,9 @@ external_floating_ip_p find_external_floating_ip_by_floating_ip(UINT4 floating_i
     }
     return NULL;
 }
-external_port_p find_openstack_external_by_outer_mac(UINT1* external_gateway_mac){
+
+external_port_p find_openstack_external_by_outer_mac(UINT1* external_gateway_mac)
+{
     external_port_p epp = NULL;
     openstack_external_node_p node_p = g_openstack_external_list;
     while(node_p != NULL){
@@ -1080,6 +1224,7 @@ external_port_p find_openstack_external_by_ip_mac(UINT4 gateway_ip, UINT1* gatew
 {
     external_port_p epp = NULL;
     openstack_external_node_p node_p = g_openstack_external_list;
+	
     while(node_p != NULL)
 	{
         epp = (external_port_p)node_p->data;
@@ -1089,6 +1234,7 @@ external_port_p find_openstack_external_by_ip_mac(UINT4 gateway_ip, UINT1* gatew
 			{
 				if (0 != memcmp(epp->external_gateway_mac, gateway_mac, 6)) 
 				{
+				
 					return epp;
 				}
 				else 
@@ -1104,7 +1250,8 @@ external_port_p find_openstack_external_by_ip_mac(UINT4 gateway_ip, UINT1* gatew
 
 
 
-nat_icmp_iden_p find_nat_icmp_iden_by_host_ip(UINT4 host_ip){
+nat_icmp_iden_p find_nat_icmp_iden_by_host_ip(UINT4 host_ip)
+{
 	nat_icmp_iden_p nii = NULL;
 	openstack_external_node_p node_p = g_nat_icmp_iden_list;
 	while(node_p != NULL){
@@ -1119,7 +1266,9 @@ nat_icmp_iden_p find_nat_icmp_iden_by_host_ip(UINT4 host_ip){
 	}
 	return NULL;
 }
-nat_icmp_iden_p find_nat_icmp_iden_by_host_mac(UINT1* host_mac){
+
+nat_icmp_iden_p find_nat_icmp_iden_by_host_mac(UINT1* host_mac)
+{
 	nat_icmp_iden_p nii = NULL;
 	openstack_external_node_p node_p = g_nat_icmp_iden_list;
 	while(node_p != NULL){
@@ -1131,7 +1280,9 @@ nat_icmp_iden_p find_nat_icmp_iden_by_host_mac(UINT1* host_mac){
 	}
 	return NULL;
 }
-nat_icmp_iden_p find_nat_icmp_iden_by_identifier(UINT2 identifier){
+
+nat_icmp_iden_p find_nat_icmp_iden_by_identifier(UINT2 identifier)
+{
 	nat_icmp_iden_p nii = NULL;
 	openstack_external_node_p node_p = g_nat_icmp_iden_list;
 	while(node_p != NULL){
@@ -1147,62 +1298,11 @@ nat_icmp_iden_p find_nat_icmp_iden_by_identifier(UINT2 identifier){
 	return NULL;
 }
 
-
-void test(UINT1 type)
+void update_floating_ip_mem_info()
 {
-	openstack_external_node_p node = NULL;
-	UINT4 num = 0;
-	if(type==1)
-	{
-		node = g_openstack_external_list;
-		while(node != NULL)
-		{
-			external_port_p p = (external_port_p)(node->data);
-			if(NULL!=p)
-			{
-				node = node->next;
-				num++;
-			}
-			else
-			{
-	            printf("node data: %s \n",node->data);
-	            node = node->next;
-			}
-		}
-	}else if(type==2){
-		node = g_openstack_floating_list;
-		while(node != NULL){
-			external_floating_ip_p p = (external_floating_ip_p)(node->data);
-			if(NULL!=p){
-				node = node->next;
-				num++;
-			}else{
-	            printf("node data: %s \n",node->data);
-	            node = node->next;
-			}
-		}
-	}else if(type==3){
-		node = g_nat_icmp_iden_list;
-		while(node != NULL){
-			nat_icmp_iden_p p = (nat_icmp_iden_p)(node->data);
-			if(NULL!=p){
-				node = node->next;
-				// printf("g_nat_icmp_iden_list : id:[%d]  | ip:[%d]  | \n",p ->identifier,p->host_ip);
-				num++;
-			}else{
-				printf("node data: %s \n",node->data);
-				node = node->next;
-			}
-		}
-	}
-
-	LOG_PROC("INFO", "external number: %d",num);
-	return;
-}
-
-void update_floating_ip_mem_info(){
 	updateOpenstackFloating();
 }
+
 //by:yhy 根据dpid 查找对应的switch
 void get_sw_from_dpid(UINT8 dpid,gn_switch_t **sw)
 {
@@ -1216,6 +1316,7 @@ void get_sw_from_dpid(UINT8 dpid,gn_switch_t **sw)
 		}
 	}
 }
+
 //by:yhy 读取(并更新和持久化)openstack外部端口配置
 void read_external_port_config()
 {
@@ -1230,7 +1331,8 @@ void read_external_port_config()
 
 	for (seq_num = external_min_seq ; seq_num <= external_max_seq; seq_num++) 
 	{
-		char network_id[48];
+		char network_id[48] = {0};
+		char subnet_id[48] = {0};
 		UINT4 external_gateway_ip = 0;
 		UINT4 external_outer_interface_ip = 0;
 		UINT1 external_outer_interface_mac[6] = {0};
@@ -1270,7 +1372,7 @@ void read_external_port_config()
 			// value = get_value(g_controller_configure, para_title, "external_network_id");
 			// (NULL == value) ? strncpy(network_id, "0", 48) : strncpy(network_id, value, 48);
 
-			if (external_gateway_ip && external_outer_interface_ip && external_dpid && external_port) 
+			if (external_gateway_ip && external_outer_interface_ip && external_dpid ) 
 			{
 				LOG_PROC("INFO", "External: read config of switch: %d!", seq_num);
 				//by:yhy why? check 理解是否正确 检查openstack中的对外IP是否在控制器的主机列表中(why? 外连口IP怎么会在某台主机上?)
@@ -1281,10 +1383,11 @@ void read_external_port_config()
 					//by:yhy why?为什么要做下面的操作
 					memcpy(external_outer_interface_mac, host->mac, 6);
 					strcpy(network_id, port_p->network_id);
+					strcpy(subnet_id, port_p->subnet_id);
 				}
 				//by:yhy 更新
 				update_external_port(external_gateway_ip, external_gateway_mac, external_outer_interface_ip, external_outer_interface_mac,
-									 external_dpid, external_port, network_id);
+									 external_dpid, external_port, network_id, subnet_id);
 			}
 			else 
 			{
@@ -1303,6 +1406,22 @@ openstack_external_node_p get_floating_list()
 {
 	return g_openstack_floating_list;
 }
+
+void reset_floating_flowinstall_flag()
+{
+	openstack_external_node_p node_p = g_openstack_floating_list;
+	while (node_p) 
+	{
+		external_floating_ip_p epp = (external_floating_ip_p)node_p->data;
+		if (epp)
+		{
+			epp->flow_installed = 0;
+		}
+		
+		node_p = node_p->next;
+	}
+}
+
 //by:yhy 复位g_openstack_floating_list中external_floating_ip_p节点的check_status
 void reset_floating_ip_flag()
 {
@@ -1318,6 +1437,7 @@ void reset_floating_ip_flag()
 		node_p = node_p->next;
 	}
 }
+
 //by:yhy 复位g_openstack_floating_list->data->check_status
 void cleare_floating_ip_unchecked()
 {
@@ -1358,79 +1478,143 @@ void cleare_floating_ip_unchecked()
 		remove_proactive_floating_flows_by_floating(epp);
 		next_p = head_p->next;
 		mem_free(g_openstack_floating_id, epp);
-		mem_free(g_openstack_external_node_id, next_p);
+		mem_free(g_openstack_external_node_id, head_p);
 		g_openstack_floating_list = next_p;
 	}	
 }
+
 //by:yhy 刷新浮动IP
 void reload_floating_ip()
 {
+	INT4 iRet = 0;
 	reset_floating_ip_flag();
-	updateOpenstackFloating();
-	cleare_floating_ip_unchecked();
-}
-//by:yhy 更新openstack 外部网关MAC
-void update_openstack_external_gateway_mac(UINT4 gateway_ip, UINT1* gateway_mac, UINT4 outer_ip, UINT1* outer_mac)
-{
-	external_port_p epp = find_openstack_external_by_ip_mac(gateway_ip, gateway_mac, outer_ip, outer_mac);
-	if (epp) 
+	iRet = updateOpenstackFloating();
+	if(GN_OK == iRet)
 	{
-		UINT8 dpid = epp->external_dpid;
-		UINT4 port = epp->external_port;
-		char network_id[48] = {0};
-		memcpy(network_id, epp->network_id, 48);
-		create_external_port_by_rest(gateway_ip, gateway_mac, outer_ip, outer_mac, dpid, port, network_id);
+		cleare_floating_ip_unchecked();
 	}
 }
-//by:yhy 根据对外接口信息更新对外网关端口
-void update_openstack_external_by_outer_interface(UINT4 host_ip, UINT1* host_mac, char* network_id)
+
+//by:yhy 更新openstack 外部网关MAC
+void update_openstack_external_gateway_mac(UINT8 external_dpid,UINT4 gateway_ip, UINT1* gateway_mac, UINT4 outer_ip, UINT1* outer_mac, UINT4 external_port)
 {
+	LOG_PROC("INFO", "---%s_%d: %d %d %x:%x:%x:%x:%x:%x",FN,LN,outer_ip,external_port,gateway_mac[0],gateway_mac[1],gateway_mac[2],gateway_mac[3],gateway_mac[4],gateway_mac[5]);
+	external_port_p epp = find_openstack_external_by_outer_ip(outer_ip);
+	if ((epp))
+	{
+		if(0 != openstack_external_CheckIfExternalDownSwitchPortUP(gateway_ip))
+		{
+			openstack_external_ResetCheckTimerTimeoutNormal();
+		}
+		
+		openstack_external_updated=1;
+
+		if((external_port != epp->external_port)||(gateway_ip !=  epp->external_gateway_ip) ||(outer_ip != epp->external_outer_interface_ip)\
+			||(0 != memcmp(gateway_mac, epp->external_gateway_mac, 6))||(0 != memcmp(outer_mac, epp->external_outer_interface_mac, 6)))
+		{
+
+			if(external_port != epp->external_port)
+			{
+				gn_switch_t *sw = NULL;
+				get_sw_from_dpid(epp->external_dpid, &sw);
+				install_remove_ExternalSwitch_ExPort_goto_FirewallInTable_flow(sw, epp->external_port);
+			}
+			epp->external_port =external_port;
+			UINT8 dpid = external_dpid;
+			UINT4 port = epp->external_port;
+			char network_id[48] = {0};
+			char subnet_id[48] = {0};
+			memcpy(network_id, epp->network_id, 48);
+			memcpy(subnet_id, epp->subnet_id, 48);
+			
+			LOG_PROC("INFO", "---%s %d outer_ip=0x%x external_port=%d\n",FN,LN,outer_ip,external_port);
+			create_external_port_by_rest(gateway_ip, gateway_mac, outer_ip, outer_mac, dpid, port, network_id, subnet_id);
+		}
+	}
+}
+
+//by:yhy 根据对外接口信息更新对外网关端口
+void update_openstack_external_by_outer_interface(UINT4 host_ip, UINT1* host_mac, char* network_id, char *subnet_id)
+{
+	//LOG_PROC("INFO", "------------------%s_%d",FN,LN);
 	if ((0 == host_ip) || (NULL == host_mac) || (NULL == network_id))
 	{
 		return ;
 	}
 	external_port_p external_p = find_openstack_external_by_outer_ip(host_ip);
-	if ((external_p) && (external_p->external_outer_interface_ip == host_ip)&&(0 == memcmp(external_p->external_outer_interface_mac, host_mac, 6))&& (0 == strcmp(external_p->network_id, network_id))) 
+	if ((external_p) && (external_p->external_outer_interface_ip == host_ip)&&(0 == memcmp(external_p->external_outer_interface_mac, host_mac, 6))
+		&& (0 == strcmp(external_p->network_id, network_id))&&(0 == strcmp(external_p->subnet_id, subnet_id))) 
 	{
+		
+		LOG_PROC("INFO", "---%s %d host_ip=0x%x \n",FN,LN,host_ip);
 		return;
 	}
 	else
-	{		
-		create_external_port_by_rest(0, ext_zero_mac, host_ip, host_mac, 0, 0, network_id);
+	{	
+		LOG_PROC("INFO", "---%s %d host_ip=0x%x \n",FN,LN,host_ip);
+		//LOG_PROC("INFO", "%s_%d_%s",FN,LN,subnet_id);
+		openstack_subnet_p subnet_data = find_openstack_host_subnet_by_subnet_id(subnet_id);
+		if(subnet_data)
+		{
+			LOG_PROC("INFO", "%s_%d_%u",FN,LN,subnet_data->gateway_ip);
+			create_external_port_by_rest(subnet_data->gateway_ip, ext_zero_mac, host_ip, host_mac, 0, 0, network_id, subnet_id);
+		}
+		else
+		{
+			create_external_port_by_rest(0, ext_zero_mac, host_ip, host_mac, 0, 0, network_id, subnet_id);
+		}
 	}
 }
+
 //by:yhy 外部网关校验(对网关MAC发送ARP请求包)
 void external_check_tx_timer(void *para, void *tid)
 {
-	LOG_PROC("TIMER", "external_check_tx_timer - START");
+	LOG_PROC("INFO", "external_check_tx_timer - ------------------------------START");
 	if (0 == g_external_check_on) 
 	{
 		LOG_PROC("TIMER", "external_check_tx_timer - 0 == g_external_check_on");
 		return ;
 	}
-	
+	UINT1 i = 0;
+	UINT2 j = 0;
 	external_port_p epp = NULL;
     openstack_external_node_p node_p = g_openstack_external_list;
-    while(node_p != NULL)
+	while(node_p != NULL)
 	{//by:yhy 遍历对外网关列表
         epp = (external_port_p)node_p->data;
-		if ((epp) && (epp->external_dpid) && (epp->external_port) && (epp->external_outer_interface_ip)) 
+		//LOG_PROC("INFO", "%s-%d",FN,LN);
+		if ((epp) && (epp->external_outer_interface_ip)&&(epp->external_dpid==0)) 
 		{
 			gn_switch_t *sw = NULL;
-			get_sw_from_dpid(epp->external_dpid, &sw);
-			if (sw) 
+			LOG_PROC("INFO", "%s-%d-------------------0x%x-0x%x",FN,LN,epp->external_outer_interface_ip,epp->external_gateway_ip);
+			for(j = 0; j < g_server.max_switch; j++)
 			{
-				fabric_opnestack_create_arp_request(epp->external_outer_interface_ip, 
-													epp->external_gateway_ip, 
-													epp->external_outer_interface_mac, 
-													sw, 
-													epp->external_port);
-			}
+				sw =&(g_server.switches[j]);
+				if (sw&&(CONNECTED == sw->conn_state)) 
+				{
+					LOG_PROC("INFO", "%s-%d-%ld-%d-%d",FN,LN,sw->dpid,sw->n_ports,i);
+					for(i=0;i<sw->n_ports;i++)
+					{
+						if(sw->ports[i].state == 0 && sw->ports[i].type != SW_CON && sw->neighbor[i]->bValid == FALSE)
+						{
+							LOG_PROC("INFO", "%s -- %d -- 0x%x /%d ",FN,LN,sw->sw_ip,sw->ports[i].port_no);
+							fabric_opnestack_create_arp_request(epp->external_outer_interface_ip, 
+																epp->external_gateway_ip, 
+																epp->external_outer_interface_mac, 
+																sw, 
+																sw->ports[i].port_no);
+						}
+					}
+					openstack_external_updated =0;
+				}
+				MsecSleep(10);
+			}	
 		}
         node_p = node_p->next;
     }
-	LOG_PROC("TIMER", "external_check_tx_timer - STOP");
+	//LOG_PROC("INFO", "%s-%d",FN,LN);
 }
+
 //by:yhy 启动对外交换机检查
 void start_external_mac_check(UINT4 check_on, UINT4 check_internal)
 {
@@ -1445,19 +1629,72 @@ void start_external_mac_check(UINT4 check_on, UINT4 check_internal)
 	if ((flag_openstack_on) && (g_external_check_on) && (g_external_check_interval)) 
 	{
 		//by:yhy 定时对对外交换机发送ARP请求
-		external_check_tx_timer(NULL, NULL);
+		//external_check_tx_timer(NULL, NULL);
 
 		g_external_check_timerid = timer_init(1);
 		timer_creat(g_external_check_timerid, g_external_check_interval, NULL, &g_external_check_timer, external_check_tx_timer);
 	}
 }
 
+//by:yhy
 void stop_external_mac_check()
 {
 	timer_kill(g_external_check_timerid, &g_external_check_timer);
 	g_external_check_timerid = NULL;
 	g_external_check_timer = NULL;
 	g_external_check_on = 0;
+}
+
+/* by:yhy
+ * 检查DPID是否为externalDPID
+ */
+UINT1 openstack_external_judge_DPID_is_externalDPID(UINT8 DPID)
+{
+	external_port_p epp = NULL;
+    openstack_external_node_p node_p = g_openstack_external_list;
+	
+    while(node_p) 
+	{
+        epp = (external_port_p)node_p->data;
+		
+        if ((epp) && DPID == epp->external_dpid) 
+		{
+            return 1;
+        }
+        node_p = node_p->next;
+    }
+    return 0;
+}
+
+/* by:yhy
+ * 针对sw的指定port进行对外部网关的arp检测
+ */
+UINT1 openstack_external_CheckExternalOnSwitchPort(gn_switch_t *sw ,UINT4 portIndex)
+{
+	external_port_p epp = NULL;
+    openstack_external_node_p node_p = g_openstack_external_list;
+	UINT1 i=0;
+    while(node_p != NULL)
+	{
+        epp = (external_port_p)node_p->data;
+		if ((epp) && (epp->external_outer_interface_ip)) 
+		{
+			if (sw&&(CONNECTED == sw->conn_state)) 
+			{
+				if(sw->ports[portIndex].state == 0 && sw->neighbor[portIndex]->bValid == FALSE && sw->ports[portIndex].type != SW_CON)
+				{
+					LOG_PROC("INFO", "%s -- %d -- %d /%d epp->external_outer_interface_ip=0x%x epp->external_gateway_ip=0x%x",FN,LN,sw->sw_ip,sw->ports[portIndex].port_no,epp->external_outer_interface_ip,epp->external_gateway_ip);
+					fabric_opnestack_create_arp_request(epp->external_outer_interface_ip, 
+														epp->external_gateway_ip, 
+														epp->external_outer_interface_mac, 
+														sw, 
+														sw->ports[portIndex].port_no);
+				}
+				openstack_external_updated =0;
+			}
+		}
+        node_p = node_p->next;
+    }
 }
 
 //by:yhy 启动对外交换机检查(定期发送arp request)
@@ -1475,4 +1712,62 @@ void init_external_mac_check_mgr()
 	start_external_mac_check(check_on, check_interval);
 }
 
+INT4 openstack_external_CheckIfExternalSwitchPort(gn_switch_t *sw ,UINT4 portIndex)
+{
+	external_port_p epp = NULL;
+    openstack_external_node_p node_p = g_openstack_external_list;
+	UINT1 i=0;
+	LOG_PROC("INFO", "%s -- %d",FN,LN);
+    while(node_p != NULL)
+	{
+        epp = (external_port_p)node_p->data;
+		if ((epp) && (epp->external_outer_interface_ip)) 
+		{
+			if (sw->dpid == epp->external_dpid) 
+			{
+				if((sw->ports[portIndex].port_no)==epp->external_port)
+				{
+					LOG_PROC("INFO", "%s -- %d",FN,LN);
+					G_ExternalGatewayIP_PortLinkDown = epp->external_gateway_ip;
+					return 1;
+				}
+			}
+		}
+        node_p = node_p->next;
+    }
+	return 0;
+}
 
+INT1 openstack_external_CheckIfExternalDownSwitchPortUP(UINT4 gatewayIP)
+{
+	if(gatewayIP == G_ExternalGatewayIP_PortLinkDown)
+	{
+		LOG_PROC("INFO", "%s -- %d",FN,LN);
+		G_ExternalGatewayIP_PortLinkDown == 0;
+		return 1;
+	}
+	else
+	{
+		LOG_PROC("INFO", "%s -- %d",FN,LN);
+		return 0;
+	}
+}
+
+void openstack_external_ResetCheckTimerTimeoutFast(void)
+{
+	if(g_external_check_timer)
+	{
+		LOG_PROC("INFO", "%s -- %d",FN,LN);
+		((Timer_Node *)g_external_check_timer)->timeout =G_external_check_interval_Fast;
+		((Timer_Node *)g_external_check_timer)->times =G_external_check_interval_Fast;
+	}
+}
+void openstack_external_ResetCheckTimerTimeoutNormal(void)
+{
+	if(g_external_check_timer)
+	{
+		LOG_PROC("INFO", "%s -- %d",FN,LN);
+		((Timer_Node *)g_external_check_timer)->timeout =g_external_check_interval;
+		((Timer_Node *)g_external_check_timer)->times =g_external_check_interval;
+	}
+}

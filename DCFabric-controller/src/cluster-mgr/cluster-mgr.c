@@ -27,7 +27,7 @@
 *                                                                             *
 ******************************************************************************/
 
-#include "cluster-mgr.h"
+
 #include "redis_client.h"
 #include "openflow-common.h"
 #include "openflow-10.h"
@@ -36,7 +36,8 @@
 #include "zookeeper.h"
 #include "redis_sync.h"
 #include "../restful-svr/restful-svr.h"
-
+#include "common.h"
+#include "cluster-mgr.h"
 
 
 UINT1 g_cluster_state = CLUSTER_STOP;	
@@ -47,7 +48,7 @@ UINT8 g_cluster_id;                             //by:yhy 控制器id,被初始�
 INT1  g_zookeeper_server[300] = {0};            //zookeeper服务器地址  ip:port,ip:port,ip:port,ip:port
 INT1  g_controllers[MAX_CONTROLLER][30];        //所有控制器的信息
 UINT8 g_master_id;                              //by:yhy 当前master的id.可以从zookeeper的SDN_MASTER_PATH中读取,也可以从Hbase的MASTER_ID中读取
-UINT4 g_startup_time_delay = 10;				//by:yhy master宕机后重启延时时间
+UINT4 g_startup_time_delay = 3;				//by:yhy master宕机后重启延时时间
 
 static zhandle_t * g_zkhandler = NULL;         //zookeep client hanlder
 //static controller_cluster_t g_controller_cluster[CLUSTER_NUM];     //???????????????
@@ -58,6 +59,10 @@ const INT1* SDN_DATA_PATH 		= "/sdn_root/sdn_data";
 const INT1* SDN_ELEC_PATH 		= "/sdn_root/sdn_data/election_generation_id";
 const INT1* SDN_MASTER_PATH 	= "/sdn_root/sdn_data/master_id";
 const INT1* SDN_TOPO_VER_PATH 	= "/sdn_root/sdn_data/topology_version_id";
+
+
+void wt_get_master_id(zhandle_t *zh, INT4 type, INT4 state, const INT1 *path, void *watcherCtx);
+void cb_awget_master_id (int rc, const char *value, int value_len,const struct Stat *stat, const void *data);
 
 //by:yhy 更新控制器本地,Hbase,Zoo,控制器所接交换机中的与控制器主从身份有关的信息
 //       重点是主机身份的菜更新信息
@@ -90,6 +95,9 @@ INT4 update_role(UINT4 role)
         INT1 master_id[TABLE_STRING_LEN] = {0};
 		//by:yhy 主机身份,更新本地g_election_generation_id,更新Hbase和Zoo中SDN_ELEC_PATH,SDN_MASTER_PATH
         g_master_id = g_cluster_id;
+		snprintf(master_id, TABLE_STRING_LEN, "%llu", g_master_id);
+		zoo_set(g_zkhandler, SDN_MASTER_PATH, master_id, strlen(master_id), -1);
+		persist_value(MASTER_ID, master_id);
         if(ZOK != zoo_get(g_zkhandler, SDN_ELEC_PATH, 0, election_generation, &len, NULL))
         {
             g_election_generation_id = strtoull(election_generation, 0, 10);
@@ -101,13 +109,13 @@ INT4 update_role(UINT4 role)
         }
 
         snprintf(election_generation, TABLE_STRING_LEN, "%llu", g_election_generation_id);
-        snprintf(master_id, TABLE_STRING_LEN, "%llu", g_master_id);
+        //snprintf(master_id, TABLE_STRING_LEN, "%llu", g_master_id);
 
         zoo_set(g_zkhandler, SDN_ELEC_PATH, election_generation, strlen(election_generation), -1);
-        zoo_set(g_zkhandler, SDN_MASTER_PATH, master_id, strlen(master_id), -1);
+        //zoo_set(g_zkhandler, SDN_MASTER_PATH, master_id, strlen(master_id), -1);
 
         persist_value(ELECTION_GENERATION_ID, election_generation);
-        persist_value(MASTER_ID, master_id);
+        //persist_value(MASTER_ID, master_id);
     }
     else if(OFPCR_ROLE_SLAVE == role)
     {//无
@@ -255,17 +263,18 @@ void cb_awget_children2 (INT4 rc, const struct String_vector *strings, const str
 
                 sprintf(g_controllers[idx], "tcp:%s:6633", inet_htoa(ntohl(node_id)));
             }
+			
 
             if (g_cluster_id == min_node_id)
             {
-                LOG_PROC("INFO", "Master re-elected, I'm the master %llu %llu %llu", g_master_id, g_cluster_id, min_node_id);
+                LOG_PROC("INFO", "Master re-elected, I'm the master %llu %llu %llu g_controller_cnt=%d", g_master_id, g_cluster_id, min_node_id,g_controller_cnt);
 
                 update_role(OFPCR_ROLE_MASTER);
                 update_controller_info(strings);
             }
             else
             {
-                LOG_PROC("INFO", "Master re-elected, I'm the slave");
+                LOG_PROC("INFO", "Master re-elected, I'm the slave %llu %llu %llu g_controller_cnt=%d", g_master_id, g_cluster_id, min_node_id,g_controller_cnt);
                 update_role(OFPCR_ROLE_SLAVE);
             }
         }
@@ -312,14 +321,28 @@ void wt_get_children2(zhandle_t *zh, INT4 type, INT4 state, const INT1 *path, vo
 		    {
 		        LOG_PROC("ERROR", "Connecting to zookeeper servers [%s] failed", g_zookeeper_server);
 		        return ;
-		    } 
+		    }
+			
+			//by:yhy 删除"/sdn_root/sdn_node"中旧临时节点
+    		snprintf(node_name, 100, "%s/%llu", SDN_NODE_PATH, g_cluster_id);
+    		zoo_delete(g_zkhandler, node_name, -1);
+			
+			//如果当前master id是自己并且存在正在运行的其他节点，则延迟10s启动
+    		is_election_finished(g_zkhandler);
+			
 			ret = zoo_awget_children2(g_zkhandler, SDN_NODE_PATH, wt_get_children2, 0, cb_awget_children2, "Get children");
             if (ret)
             {
                 LOG_PROC("ERROR", "Start watch children failed. --ret code: %d", ret);
                 return;
             }
-		   
+		    //by:yhy 监控master_id 当"/sdn_root/sdn_data/master_id"发生改变时,wt_get_master_id会收到通知
+		   // ret = zoo_awget(g_zkhandler, SDN_MASTER_PATH, wt_get_master_id, 0, cb_awget_master_id, "Get master");  
+			//if(ret)
+		   // {
+		   // 	LOG_PROC("ERROR", "Start watch master id failed, ret_code: %d", ret);
+		   //     return GN_ERR;
+		   // }
 			snprintf(node_name, 100, "%s/%llu", SDN_NODE_PATH, g_cluster_id);
 		    ret = zoo_acreate(g_zkhandler, node_name, "alive", 5, &ZOO_OPEN_ACL_UNSAFE, ZOO_EPHEMERAL, cb_string_completion, "Create local node");
 		    if (ret)
@@ -339,7 +362,7 @@ void cb_awget_master_id (int rc, const char *value, int value_len,const struct S
 	INT1 controller_ip[TABLE_STRING_LEN] = {0};
 
 	number2ip(htonl(g_cluster_id), controller_ip);
-
+	LOG_PROC("INFO", "%s %d", FN, LN);
     if(ZOK == rc)
 	{
 		UINT8 node_id;
@@ -440,6 +463,7 @@ void is_election_finished(zhandle_t * g_zkhandler)
     INT1 flag = -1;
     INT4 ret = zoo_aget_children2(g_zkhandler, SDN_NODE_PATH, 0, cb_get_children2, &flag);
     INT4 count = 3000; //等待cb_get_children2结果，最多300s
+
     if (!ret)
     {
         while (0 != flag && 1 != flag && count > 0)
@@ -449,11 +473,13 @@ void is_election_finished(zhandle_t * g_zkhandler)
             continue;
         }
 
-        if (flag)
+       // if (flag)
+        if((0 == flag)||(1 == flag))
         {
-            LOG_PROC("WARNING", "%u seconds delay, waitting for last election to be completed.", g_startup_time_delay);
+            LOG_PROC("INFO", "%s %u seconds delay, waitting for last election to be completed.", FN, g_startup_time_delay);
             //sleep(g_startup_time_delay);
-            MsecSleep(g_startup_time_delay*1000);
+            
+            //MsecSleep(g_startup_time_delay*1000);
             
             INT4 len = TABLE_STRING_LEN;
             INT1 value[TABLE_STRING_LEN] = {0};
@@ -464,8 +490,10 @@ void is_election_finished(zhandle_t * g_zkhandler)
     }
     else
     {
-        LOG_PROC("WARNING", "Get zookeeper sdn nodes failure!");
+        LOG_PROC("WARNING", "%s Get zookeeper sdn nodes failure!",FN);
     }
+	
+	LOG_PROC("INFO", "%s %d flag=%d", FN, LN,flag);
 }
 
 
@@ -478,7 +506,7 @@ UINT4 set_master_id(UINT8 controller_id)
 	INT4    ret = 0;
 	UINT8   node_id = 0;
 
-    strings = (struct String_vector *)malloc(sizeof(struct String_vector));
+    strings = (struct String_vector *)gn_malloc(sizeof(struct String_vector));
     zoo_get_children(g_zkhandler, SDN_NODE_PATH, 1, strings);  
     if(strings)
     {
@@ -493,7 +521,7 @@ UINT4 set_master_id(UINT8 controller_id)
         }
     }
 
-    free(strings);
+    gn_free(&strings);
     
     if (!flag)
     {
@@ -529,7 +557,7 @@ int update_controllers_role(UINT4 controller_id, UINT1 mode)
     }
 	query_value(CUSTOM_MASTER_ID, master_controller_id);
 	
-    strings = (struct String_vector *)malloc(sizeof(struct String_vector));
+    strings = (struct String_vector *)gn_malloc(sizeof(struct String_vector));
     zoo_get_children(g_zkhandler, SDN_NODE_PATH, 1, strings);  
     if(strings)
     {
@@ -675,7 +703,7 @@ int update_controllers_role(UINT4 controller_id, UINT1 mode)
     	}
     }
     
-    free(strings);
+    gn_free(&strings);
     
     return 0;
 }
@@ -692,7 +720,7 @@ UINT4 set_cluster_role(UINT8 controller_id)
     {
         return GN_OK;
     }
-	strings = (struct String_vector *)malloc(sizeof(struct String_vector));
+	strings = (struct String_vector *)gn_malloc(sizeof(struct String_vector));
 	zoo_get_children(g_zkhandler, SDN_NODE_PATH, 1, strings);  
 	if (strings  && g_cluster_state ==CLUSTER_SETUP)
 	{
@@ -727,7 +755,7 @@ UINT4 set_cluster_role(UINT8 controller_id)
 	{
 		set_master_id(controller_id);
 	}
-	free(strings);
+	gn_free(&strings);
 	return GN_OK;
 }
 //by:yhy 开启或关闭控制器主从切换
@@ -824,7 +852,8 @@ UINT4 set_cluster_onoff(UINT4 onoff)
 		}
     }
 
-    free(strings);
+    //free(strings);
+    gn_free(&strings);
 	g_cluster_state = onoff;
 	return GN_OK;
 }
@@ -850,16 +879,16 @@ INT4 get_controller_status(UINT4 tmp_id)
     		
         for(i = 0; i < strings->count; i++)
         { 
-        	node_id = atoll(strings->data[i]);
-        	if(node_id == tmp_id) 
+        	node_id = strtoull(strings->data[i], 0, 10);
+        	if(htonl(node_id) == tmp_id) 
         	{		
         		flag = 1;
         	}
         }
     }
 
-    free(strings);
-
+    //free(strings);
+	gn_free(&strings);
     return flag;
 }
 
@@ -876,7 +905,7 @@ INT4 init_cluster_mgr()
 
     g_cluster_id = g_controller_ip;
     conf_value = get_value(g_controller_configure, "[cluster_conf]", "zoo_server");
-    NULL == conf_value ? strncpy(g_zookeeper_server, "0", 300 - 1) : strncpy(g_zookeeper_server, conf_value, 300 - 1);
+    (NULL == conf_value) ? strncpy(g_zookeeper_server, "0", 300 - 1) : strncpy(g_zookeeper_server, conf_value, 300 - 1);
 
     if (0 == strcmp("0", g_zookeeper_server))
     {
@@ -886,6 +915,8 @@ INT4 init_cluster_mgr()
 
     conf_value = get_value(g_controller_configure, "[cluster_conf]", "startup_time_delay");
     g_startup_time_delay = (NULL == conf_value) ? 10 : atoll(conf_value);
+	g_startup_time_delay = (g_startup_time_delay > 10)? 10: g_startup_time_delay;
+
 	//by:yhy 下面开始zookeeper的相关操作
     //zookeeper日志级别设置
     zoo_set_debug_level(ZOO_LOG_LEVEL_WARN);

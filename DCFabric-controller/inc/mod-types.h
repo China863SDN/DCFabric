@@ -36,17 +36,17 @@ extern const UINT8 MASK_SET;
 
 #define UUID_LEN 40
 
-//ÌØÊâ³¡¾°Á÷±íÏîµÄÓÅÏÈ¼¶
+//ï¿½ï¿½ï¿½â³¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¼ï¿½
 #define FLOW_FIREWALL_PRIORITY 5
 #define FLOW_TENANT_PRIORITY 6
 
-//ÌØÊâ³¡¾°Á÷±íÏî±êÊ¶
+//ï¿½ï¿½ï¿½â³¡ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ê¶
 #define FLOW_FIREWALL_CREATER "Firewall"
 #define FLOW_TENANT_CREATER "Tenant"
 #define FLOW_L2_CREATER "L2Forwarder"
 #define FLOW_L3_CREATER "L3Forwarder"
 
-//¸ºÔØ×´Ì¬
+//ï¿½ï¿½ï¿½ï¿½×´Ì¬
 typedef enum
 {
     LOAD_IDLE = 0,  // 0% - 25%
@@ -253,8 +253,8 @@ typedef struct flow_stats
     UINT8 byte_count;
     UINT8 packet_count;
     UINT4 max_speed;      //Max port bitrate in kbps
-    UINT4 duration_sec;   //port ´æ»îÊ±³¤
-    UINT4 timestamp;      //´¦Àí³ÉÈ¡ÑùÊ±¼ä¼ä¸ôµÄÕûÊı±¶
+    UINT4 duration_sec;   //port ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½
+    UINT4 timestamp;      //ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½È¡ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 }flow_stats_t;
 
 typedef struct gn_flow
@@ -280,10 +280,10 @@ typedef struct gn_meter
     struct gn_meter *pre;
     struct gn_meter *next;
     UINT4 meter_id;
-    UINT2 flags;
-    UINT2 type;
-    UINT4 rate;
-    UINT4 burst_size;
+    UINT2 flags;				//æµé‡è®¡æ•°å•ä½
+    UINT2 type;					//qosè¶…é€Ÿåæ‰§è¡ŒåŠ¨ä½œ
+    UINT4 rate;					//æœ€å¤§é€Ÿç‡å€¼
+    UINT4 burst_size;			//é€Ÿç‡æµ®åŠ¨å€¼
     UINT1 prec_level;
 }gn_meter_t;
 

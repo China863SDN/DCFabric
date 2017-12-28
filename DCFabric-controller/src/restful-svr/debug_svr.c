@@ -31,14 +31,18 @@
 #include "openstack_lbaas_app.h"
 #include "openstack_host.h"
 #include "openstack-server.h"
+#include "openstack_security_app.h"
 #include "fabric_openstack_external.h"
 #include "fabric_host.h"
 #include "fabric_openstack_nat.h"
+#include "fabric_firewall.h"
 #include "../qos-mgr/qos-mgr.h"
 #include "../qos-mgr/qos-meter.h"
 #include "../qos-mgr/qos-policy.h"
-
-
+#include "fabric_openstack_gateway.h"
+#include "openstack_firewall_app.h"
+#include "openstack_qos_app.h"
+#include "openstack_clbaas_app.h"
 
 extern t_fabric_sw_list g_fabric_sw_list_total;
 extern t_fabric_sw_list g_fabric_sw_list;
@@ -54,6 +58,9 @@ extern t_fabric_arp_flood_queue g_arp_flood_queue;
 extern openstack_node_p g_openstack_host_network_list;
 extern openstack_node_p g_openstack_host_subnet_list;
 extern qos_policy_p g_qos_policy_list;
+
+extern openstack_lbaas_node_p g_openstack_clbaas_vipfloatingips_list;
+extern openstack_router_outerinterface_node_p g_openstack_router_outerinterface_list;
 
 extern UINT4 g_openstack_on;
 extern UINT4 g_external_check_on;
@@ -103,6 +110,12 @@ INT1 *fabric_debug_get_all_host()
 					break;
 				case OPENSTACK_PORT_TYPE_LOADBALANCER:
 					strcpy(str_temp, "load balance");
+					break;
+				case OPENSTACK_PORT_TYPE_CLBLOADBALANCER:
+					strcpy(str_temp, "clb load balance");
+					break;
+				case OPENSTACK_PORT_TYPE_CLBLOADBALANCER_HA:
+					strcpy(str_temp, "clb load balance HA");
 					break;
 				default:
 					strcpy(str_temp, "unknown");
@@ -960,6 +973,479 @@ INT1 *fabric_debug_get_all_floatingip()
    return json_to_reply(obj, GN_OK);
 }
 
+
+INT1 *fabric_debug_get_all_firewall()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("firewall policy list");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	fabric_firewall_policy_p	node_policy = G_firewall_persist_policy_list; 
+	while (node_policy) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[48] = {0};
+		
+		key = json_new_string("InnerIP");
+		bzero(str_temp, 48);
+		number2ip(node_policy->InnerIP, str_temp);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		array1 = json_new_array();
+		key = json_new_string("firewall rule list");
+		json_insert_child(key, array1);
+		json_insert_child(entry, key);
+		
+		fabric_firewall_rule_p node_rule = node_policy->FirewallRuleList;
+	
+		while (node_rule) 
+		{
+			entry1 = json_new_object();
+			
+			key = json_new_string("OuterIP");
+			bzero(str_temp, 48);
+			number2ip(node_rule->OuterIP, str_temp);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+
+			key = json_new_string("OuterIPMask");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "%d", node_rule->OuterIPMask);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+	        json_insert_child(entry1, key);
+			
+			key = json_new_string("Protocol");
+			value = json_new_string(node_rule->Protocol);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("Direction");
+			value = json_new_string(node_rule->Direction);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("PortMax");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "%d", node_rule->PortMax);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+	        json_insert_child(entry1, key);
+			
+			key = json_new_string("PortMin");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "%d", node_rule->PortMin);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+	        json_insert_child(entry1, key);
+			
+			
+			key = json_new_string("Enabled");
+			if(node_rule->Enable)
+			{
+				value = json_new_string("true");
+			}
+			else
+			{
+				value = json_new_string("false");
+			}
+			
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+
+			node_rule=node_rule->next;
+			
+			json_insert_child(array1, entry1);
+		}
+		
+
+		json_insert_child(array, entry);
+		node_policy = node_policy->next;
+	}
+	return json_to_reply(obj, GN_OK);
+}
+
+
+
+INT1 *fabric_debug_get_all_security()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("security list");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	openstack_security_p security_p = g_openstack_security_list;
+	
+	while (security_p) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[60] = {0};
+		
+		key = json_new_string("Security Group");
+		value = json_new_string(security_p->security_group);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		array1 = json_new_array();
+		key = json_new_string("Security Rule");
+		json_insert_child(key, array1);
+		json_insert_child(entry, key);
+	
+	
+		
+		openstack_security_rule_p security_rule = security_p->security_rule_p;
+		
+		while (security_rule) 
+		{
+			entry1 = json_new_object();
+			
+			key = json_new_string("Rule ID");
+			value = json_new_string(security_rule->rule_id);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("direction");
+			value = json_new_string(security_rule->direction);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("ethertype");
+			value = json_new_string(security_rule->ethertype);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("protocol");
+			value = json_new_string(security_rule->protocol);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("remote_ip_prefix");
+			value = json_new_string(security_rule->remote_ip_prefix);
+			json_insert_child(key, value);
+            json_insert_child(entry1, key);
+			
+			key = json_new_string("PortMax");
+			bzero(str_temp, 60);
+			sprintf(str_temp, "%d", security_rule->port_range_max);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+	        json_insert_child(entry1, key);
+			
+			key = json_new_string("PortMin");
+			bzero(str_temp, 60);
+			sprintf(str_temp, "%d", security_rule->port_range_min);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+	        json_insert_child(entry1, key);
+
+			security_rule=security_rule->next;
+			json_insert_child(array1, entry1);
+		}
+		
+		json_insert_child(array, entry);
+		security_p = security_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+
+
+
+
+INT1 *fabric_debug_get_all_qosrule()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("qos rule list");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	openstack_qos_rule_p	qos_p	=G_openstack_qos_rule_List;
+	
+	while (qos_p) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[48] = {0};
+		
+		key = json_new_string("id");
+		value = json_new_string(qos_p->id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("name");
+		value = json_new_string(qos_p->name);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("max_rate");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%ld", qos_p->max_rate);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		json_insert_child(array, entry);
+		qos_p = qos_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+
+
+INT1 *fabric_debug_get_all_qos_instance()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("qos instance");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	openstack_qos_instance_p 	qos_instance_p = G_openstack_qos_instance_List;
+	
+	while (qos_instance_p) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[48] = {0};
+		
+		key = json_new_string("qos_rule_id");
+		value = json_new_string(qos_instance_p->qos_rule_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("qos_binding_id");
+		value = json_new_string(qos_instance_p->qos_binding_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("qos_operation_type");
+		value = json_new_string(qos_instance_p->qos_operation_type);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("switch_dpid");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%x", qos_instance_p->switch_dpid);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("meter_id");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%u", qos_instance_p->meter_id);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("table_id");
+		bzero(str_temp, 48);
+		sprintf(str_temp, "%u", qos_instance_p->table_id);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		json_insert_child(array, entry);
+		qos_instance_p = qos_instance_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+
+INT1 *fabric_debug_get_all_qos_floating_binding()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("qos floating binding list");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	openstack_qos_binding_p 	qos_binding_p = G_openstack_qos_floating_binding_List;
+	
+	while (qos_binding_p) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[48] = {0};
+		
+		key = json_new_string("id");
+		value = json_new_string(qos_binding_p->id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("qos_id");
+		value = json_new_string(qos_binding_p->qos_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("tenant_id");
+		value = json_new_string(qos_binding_p->tenant_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("device_owner");
+		value = json_new_string(qos_binding_p->device_owner);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("subnet_id");
+		value = json_new_string(qos_binding_p->subnet_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("router_id");
+		value = json_new_string(qos_binding_p->router_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("ip");
+		bzero(str_temp, 48);
+		number2ip(qos_binding_p->ip, str_temp);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		json_insert_child(array, entry);
+		qos_binding_p = qos_binding_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+INT1 *fabric_debug_get_all_qos_router_binding()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("qos router binding list");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	openstack_qos_binding_p 	qos_binding_p = G_openstack_qos_router_binding_List;
+	
+	while (qos_binding_p) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[48] = {0};
+		
+		key = json_new_string("id");
+		value = json_new_string(qos_binding_p->id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("qos_id");
+		value = json_new_string(qos_binding_p->qos_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("tenant_id");
+		value = json_new_string(qos_binding_p->tenant_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("device_owner");
+		value = json_new_string(qos_binding_p->device_owner);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("subnet_id");
+		value = json_new_string(qos_binding_p->subnet_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("router_id");
+		value = json_new_string(qos_binding_p->router_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("ip");
+		bzero(str_temp, 48);
+		number2ip(qos_binding_p->ip, str_temp);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		json_insert_child(array, entry);
+		qos_binding_p = qos_binding_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+INT1 *fabric_debug_get_all_qos_loadbalancer_binding()
+{
+	json_t *obj, *array, *key, *value, *entry,*array1,*entry1;
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("qos loadbalancer binding list");
+	json_insert_child(key, array);
+    json_insert_child(obj, key);
+
+	openstack_qos_binding_p 	qos_binding_p = G_openstack_qos_loadbalancer_binding_List;
+	
+	while (qos_binding_p) 
+	{
+		entry = json_new_object();
+		INT1 str_temp[48] = {0};
+		
+		key = json_new_string("id");
+		value = json_new_string(qos_binding_p->id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("qos_id");
+		value = json_new_string(qos_binding_p->qos_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("tenant_id");
+		value = json_new_string(qos_binding_p->tenant_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("device_owner");
+		value = json_new_string(qos_binding_p->device_owner);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("subnet_id");
+		value = json_new_string(qos_binding_p->subnet_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("router_id");
+		value = json_new_string(qos_binding_p->router_id);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		key = json_new_string("ip");
+		bzero(str_temp, 48);
+		number2ip(qos_binding_p->ip, str_temp);
+		value = json_new_string(str_temp);
+		json_insert_child(key, value);
+		json_insert_child(entry, key);
+		
+		json_insert_child(array, entry);
+		qos_binding_p = qos_binding_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+
+
 INT1 *fabric_debug_get_all_arp_request()
 {
 	json_t *obj, *array, *key, *value, *entry;
@@ -1040,12 +1526,14 @@ INT1 *fabric_debug_get_all_external_config()
 
 	openstack_external_node_p node_p = g_openstack_external_list;
 
-	while (node_p) {
+	while (node_p) 
+	{
 		external_port_p epp = (external_port_p)node_p->data;
 		entry = json_new_object();
 		INT1 str_temp[48] = {0};
 
-		if (epp) {
+		if (epp) 
+		{
 
             key = json_new_string("external_dpid");
             bzero(str_temp, 48);
@@ -1850,5 +2338,156 @@ INT1 *fabric_debug_delete_qos_policy(const INT1 *url, json_t *root)
 
 	return json_to_reply(obj, GN_OK);
 }
+
+
+INT1* fabric_debug_get_router_gatewaylist()
+{
+	json_t *obj, *array, *key, *value, *entry;
+	INT1 str_temp[48] = {0};
+	openstack_router_gateway_p     		node_gateway = NULL;
+	openstack_router_outerinterface_p	node_router_outerinterface = NULL;
+	openstack_router_outerinterface_node_p node_p = g_openstack_router_outerinterface_list;
+
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("router_gateway list");
+	json_insert_child(key, array);
+	json_insert_child(obj, key);
+	
+	
+	while (node_p) {
+		
+		entry = json_new_object();
+		node_router_outerinterface = (openstack_router_outerinterface_p)node_p->data;
+		if(NULL != node_router_outerinterface)
+		{
+			key = json_new_string("devce_id");
+			value = json_new_string(node_router_outerinterface->device_id);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+			
+			node_gateway = (openstack_router_gateway_p)node_router_outerinterface->data;
+			while(node_gateway)
+			{
+
+				key = json_new_string("network_id");
+				value = json_new_string(node_gateway->network_id);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+
+				key = json_new_string("subnet_id");
+				value = json_new_string(node_gateway->subnet_id);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+
+				key = json_new_string("interfaceip");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "0x%x", node_gateway->interfaceip);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+
+				key = json_new_string("porttype");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "%d", node_gateway->port_type);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+
+				
+				key = json_new_string("check_status");
+				bzero(str_temp, 48);
+				sprintf(str_temp, "%d", node_gateway->check_status);
+				value = json_new_string(str_temp);
+				json_insert_child(key, value);
+				json_insert_child(entry, key);
+				
+				node_gateway = node_gateway->next;
+			}
+		}
+		
+		json_insert_child(array, entry);
+		
+		node_p = node_p->next;
+	}
+	
+	return json_to_reply(obj, GN_OK);
+}
+
+
+INT1* fabric_debug_get_clbvipslist()
+{
+
+	json_t *obj, *array, *key, *value, *entry;
+	INT1 str_temp[48] = {0};
+	openstack_clbaas_vipfloating_p lb_vipfloating = NULL;
+	openstack_lbaas_node_p node_p = g_openstack_clbaas_vipfloatingips_list;
+
+	obj = json_new_object();
+	array = json_new_array();
+
+	key = json_new_string("clb_vips list");
+	json_insert_child(key, array);
+	json_insert_child(obj, key);
+
+	while(node_p != NULL) 
+	{
+		
+		entry = json_new_object();
+		lb_vipfloating = (openstack_clbaas_vipfloating_p)node_p->data;
+
+		if(NULL != lb_vipfloating)
+		{
+			key = json_new_string("pool_id");
+			value = json_new_string(lb_vipfloating->pool_id);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+
+			key = json_new_string("router_id");
+			value = json_new_string(lb_vipfloating->router_id);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+
+			key = json_new_string("export_id");
+			value = json_new_string(lb_vipfloating->ex_port_id);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+
+			key = json_new_string("ext_ip");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "0x%x", lb_vipfloating->ext_ip);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+
+			key = json_new_string("inside_ip");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "0x%x", lb_vipfloating->inside_ip);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+
+			key = json_new_string("ext_status");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "%d", lb_vipfloating->ext_status);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+
+			key = json_new_string("inside_status");
+			bzero(str_temp, 48);
+			sprintf(str_temp, "%d", lb_vipfloating->inside_status);
+			value = json_new_string(str_temp);
+			json_insert_child(key, value);
+			json_insert_child(entry, key);
+		}
+		json_insert_child(array, entry);
+		node_p = node_p->next;
+	}
+
+	return json_to_reply(obj, GN_OK);
+}
+
 
 

@@ -192,8 +192,55 @@ typedef unsigned long long int UINT8;
 #define PRINT_OTHER	 		FALSE
 #define PRINT_HBASE			FALSE
 
-extern UINT1 g_log_debug;
+extern UINT4 g_log_debug;
 
+#if 1
+#include "log.h"
+#define log_time(LocalYear,LocalMonth,LocalTime)    \
+    length = snprintf(buffer, sizeof(buffer),       \
+                "%d/%d/%d-%d:%d:%d",                \
+                LocalYear,                          \
+                LocalMonth,                         \
+                LocalTime->tm_mday,                 \
+                LocalTime->tm_hour,                 \
+                LocalTime->tm_min,                  \
+                LocalTime->tm_sec); 
+    
+#define LOG_PROC(log_level, format, arguments...)   \
+{                                                   \
+    struct timeval cur_sys_time;                    \
+    struct tm* LocalTime =NULL;                     \
+    INT4 LocalYear =0;                              \
+    INT4 LocalMonth =0;                             \
+    gettimeofday(&cur_sys_time, NULL);              \
+    LocalTime = localtime((time_t*)(&cur_sys_time));\
+    LocalYear = LocalTime->tm_year+1900;            \
+    LocalMonth = LocalTime->tm_mon+1;               \
+    char buffer[819200] = {0};                   \
+    INT4 length = 0;                                \
+    if(((0==strcmp(log_level,"INFO"))&&(PRINT_INFO||(0x01 == (g_log_debug&0x01)))) || \
+        ((0==strcmp(log_level,"ERROR"))&&(PRINT_ERROR||(0x02 == (g_log_debug&0x02)))) || \
+        ((0==strcmp(log_level,"WARNING"))&&(PRINT_WARNING||(0x04 == (g_log_debug&0x04)))) || \
+        ((0==strcmp(log_level,"DEBUG"))&&(PRINT_DEBUG||(0x08 == (g_log_debug&0x08)))) || \
+        ((0==strcmp(log_level,"TIMER"))&&(PRINT_TIMER||(0x10 == (g_log_debug&0x10)))) || \
+        ((0==strcmp(log_level,"TIME"))&&(PRINT_TIME||(0x20 == (g_log_debug&0x20)))) || \
+        ((0==strcmp(log_level,"PACKET_IN"))&&(PRINT_PACKET_IN||(0x40 == (g_log_debug&0x40)))) || \
+        ((0==strcmp(log_level,"HANDLER"))&&(PRINT_HANDLER||(0x80 == (g_log_debug&0x80)))) || \
+        ((0==strcmp(log_level,"OF13"))&&(PRINT_OF13||(0x100 == (g_log_debug&0x100)))) || \
+        ((0==strcmp(log_level,"OF10"))&&(PRINT_OF10||(0x200 == (g_log_debug&0x200)))) || \
+        ((0==strcmp(log_level,"IP_PACKET"))&&(PRINT_IP_PACKET||(0x400 == (g_log_debug&0x400)))) || \
+        ((0==strcmp(log_level,"ARP_PACKET"))&&(PRINT_ARP_PACKET||(0x800 == (g_log_debug&0x800)))) || \
+        ((0==strcmp(log_level,"HBASE"))&&(PRINT_HBASE||(0x1000 == (g_log_debug&0x1000))))) \
+    {                                               \
+        log_time(LocalYear,LocalMonth,LocalTime)    \
+        length += snprintf(buffer+length, sizeof(buffer)-length, "[%s] ", log_level); \
+        length += snprintf(buffer+length, sizeof(buffer)-length, format, ##arguments); \
+        length += snprintf(buffer+length, sizeof(buffer)-length, "\n"); \
+        printf("%s ", buffer);						\
+        write_log(buffer, length);                  \
+    }                                               \
+}
+#else
 #define Print_Time(LocalYear,LocalMonth,LocalTime) 			\
 	printf("%d/%d/%d-%d:%d:%d", LocalYear,LocalMonth,LocalTime->tm_mday,	LocalTime->tm_hour,	LocalTime->tm_min, LocalTime->tm_sec);	
 
@@ -302,7 +349,7 @@ extern UINT1 g_log_debug;
 	{												\
 	}												\
 }	
-
+#endif
 
 #define MSG_MAX_LEN  10240
 

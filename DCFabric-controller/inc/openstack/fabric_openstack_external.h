@@ -37,16 +37,22 @@
 #define OPENSTACK_NAT_ICMP_MAX_NUM 128
 #define OPENSTACK_EXTERNAL_NODE_MAX_NUM (OPENSTACK_EXTERNAL_MAX_NUM+OPENSTACK_FLOATING_MAX_NUM+OPENSTACK_NAT_ICMP_MAX_NUM)
 
+enum EFloatingip_Type
+{
+	floatingtype_General,
+	floatingtype_Clbvips
+};
 /*外部网关端口结构体*/
 typedef struct external_port
 {
 	char network_id[48];
-	UINT4 external_gateway_ip;//public net gatway
-	UINT4 external_outer_interface_ip;//外部接口
+	char subnet_id[48];
+	UINT4 external_gateway_ip;				//public net gatway
+	UINT4 external_outer_interface_ip;		//外部接口
 	UINT1 external_gateway_mac[6];
 	UINT1 external_outer_interface_mac[6];
-	UINT8 external_dpid; //openflow route dpid
-	UINT4 external_port; //openflow route port
+	UINT8 external_dpid; 					//出口交换机的dpid
+	UINT4 external_port; 					//出口交换机的出口端口
 	INT4  status;
 	UINT4 ID;	// 标识符
 }external_port_t,*external_port_p;
@@ -58,6 +64,7 @@ typedef struct _external_floating_ip
 	UINT4 floating_ip;			//by:yhy 外网浮动IP
 	char port_id[48];			//
 	char router_id[48];			//
+	UINT1 type;
 	UINT1 check_status;			//
 	UINT1 flow_installed;		//
 }external_floating_ip, *external_floating_ip_p;
@@ -124,7 +131,8 @@ void create_external_port_by_rest(
         UINT1* external_outer_interface_mac,
         UINT8 external_dpid,
         UINT4 external_port,
-		char* network_id);
+		char* network_id,
+		char* subnet_id);
 
 external_port_p create_external_port(
         UINT4 external_gateway_ip,
@@ -133,7 +141,8 @@ external_port_p create_external_port(
 		UINT1* external_outer_interface_mac,
 		UINT8 external_dpid,
 		UINT4 external_port,
-		char* network_id);
+		char* network_id,
+		char* subnet_id);
 
 void update_external_config(external_port_p epp);
 
@@ -145,7 +154,7 @@ nat_icmp_iden_p update_nat_icmp_iden(
 		UINT4 inport);
 
 void remove_external_port_by_networkid(INT1* network_id);
-
+void remove_external_port_by_outer_interface_ip(UINT4 outer_interface_ip);
 // update external flows
 void init_external_flows();
 
@@ -154,7 +163,8 @@ external_floating_ip_p create_floatting_ip_by_rest(
 		UINT4 fixed_ip,
         UINT4 floating_ip,
 		char* port_id,
-        char* router_id);
+        char* router_id,
+        UINT1 Type);
 
 //add nat_imcp_iden_p into mem
 nat_icmp_iden_p create_nat_imcp_iden_p(
@@ -174,10 +184,20 @@ external_floating_ip_p find_external_floating_ip_by_floating_ip(UINT4 floating_i
 external_port_p find_openstack_external_by_floating_ip(UINT4 external_floating_ip);
 
 void reload_floating_ip();
-void update_openstack_external_gateway_mac(UINT4 gateway_ip, UINT1* gateway_mac, UINT4 outer_ip, UINT1* outer_mac);
-void update_openstack_external_by_outer_interface(UINT4 host_ip, UINT1* host_mac, char* network_id);
+void update_openstack_external_gateway_mac(UINT8 external_dpid,UINT4 gateway_ip, UINT1* gateway_mac, UINT4 outer_ip, UINT1* outer_mac, UINT4 external_port);
+external_port_p find_openstack_external_by_outer_ip(UINT4 external_outer_interface_ip);
+void update_openstack_external_by_outer_interface(UINT4 host_ip, UINT1* host_mac, char* network_id, char* subnet_id);
 void start_external_mac_check(UINT4 check_on, UINT4 check_internal);
 void stop_external_mac_check();
 void init_external_mac_check_mgr();
+void reset_floating_flowinstall_flag();
 
+
+UINT1 openstack_external_judge_DPID_is_externalDPID(UINT8 DPID);
+UINT1 openstack_external_CheckExternalOnSwitchPort(gn_switch_t *sw ,UINT4 portIndex);
+
+void openstack_external_ResetCheckTimerTimeoutNormal(void);
+void openstack_external_ResetCheckTimerTimeoutFast(void);
+INT1 openstack_external_CheckIfExternalDownSwitchPortUP(UINT4 gatewayIP);
+INT4 openstack_external_CheckIfExternalSwitchPort(gn_switch_t *sw ,UINT4 portIndex);
 #endif

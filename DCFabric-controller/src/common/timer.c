@@ -33,23 +33,14 @@
 
 extern ini_file_t *g_controller_configure;
 
-UINT1 g_log_debug = 0;
+UINT4 g_log_debug = 0;
 //
 UINT1 RUN_FLAG = 0;
 //by:yhy 全局 系统当前时间(每秒刷新一次)
 struct timeval g_cur_sys_time;
 pthread_t g_datetime_thread;
 
-//时间节点
-typedef struct _timer_node
-{
-    UINT1       is_used;								//by:yhy 该node是否启用
-    UINT4       timeout;            					//by:yhy 该node超时时间
-    UINT4       times;              					//by:yhy 该node剩余时间
-    void        *para;              					//by:yhy 参数
-    void        *timer_id;          					//by:yhy 参数
-    void        (*fun)(void *para,  void *timer_id);	//by:yhy 当times为零时执行的功能函数
-}Timer_Node;
+
 
 
 
@@ -247,7 +238,7 @@ void *sys_time()
 		if(!(iCount%10))
 		{
 			value = get_value(g_controller_configure, "[controller]", "log_debug");
-			g_log_debug = ((NULL == value) ? 0 : atoll(value));;
+			g_log_debug = ((NULL == value) ? 0 : atoi(value));;
 		}
         MsecSleep(1000);
     }

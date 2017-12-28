@@ -79,11 +79,11 @@ static INT4 arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info
 //by:yhy ARP包处理
 static INT4 fabric_arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
-	LOG_PROC("HANDLER", "%s -- START",FN);
+	//LOG_PROC("HANDLER", "%s -- %d",FN,LN);
 	//by:yhy <费解>这步操作用意
     if (0 == of131_fabric_impl_get_tag_sw(sw))
     {
-		LOG_PROC("HANDLER", "%s -- 0 == of131_fabric_impl_get_tag_sw(sw)",FN);
+		//LOG_PROC("HANDLER", "%s %d",FN, LN);
         return GN_OK;
     }
     
@@ -92,37 +92,34 @@ static INT4 fabric_arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_
     p_fabric_host_node dst_port=NULL;
 	
 	
-	//by:yhy add,2017/01/12
 	UINT1  SourceIP[15] = "";
 	strcpy(SourceIP,inet_htoa(ntohl(arp->sendip)));
 	UINT1  DestinationIP[15] = "";
 	strcpy(DestinationIP,inet_htoa(ntohl(arp->targetip)));
-	LOG_PROC("ARP_PACKET","Source IP:[%s] -> Destination IP:[%s]",SourceIP,DestinationIP);
-	LOG_PROC("ARP_PACKET","Source MAC:[%02x:%02x:%02x:%02x:%02x:%02x] -> Destination MAC:[%02x:%02x:%02x:%02x:%02x:%02x]",
-			 arp->sendmac[0],arp->sendmac[1],arp->sendmac[2],arp->sendmac[3],arp->sendmac[4],arp->sendmac[5],
-			 arp->targetmac[0],arp->targetmac[1],arp->targetmac[2],arp->targetmac[3],arp->targetmac[4],arp->targetmac[5]
-			);
+	LOG_PROC("HANDLER","Source IP:[%s] -> Destination IP:[%s] arp->opcode=0x%x",SourceIP,DestinationIP,arp->opcode);
+	//LOG_PROC("INFO","Source IP:[%s] -> Destination IP:[%s] arp->opcode=0x%x",SourceIP,DestinationIP,arp->opcode);
+	//LOG_PROC("INFO","Source MAC:[%02x:%02x:%02x:%02x:%02x:%02x] -> Destination MAC:[%02x:%02x:%02x:%02x:%02x:%02x]",
+	//		 arp->sendmac[0],arp->sendmac[1],arp->sendmac[2],arp->sendmac[3],arp->sendmac[4],arp->sendmac[5],
+	//		 arp->targetmac[0],arp->targetmac[1],arp->targetmac[2],arp->targetmac[3],arp->targetmac[4],arp->targetmac[5]);
 	
-	
-	//by:yhy opcode 为1表示ARP请求,为2表示ARP应答
+
     if(arp->opcode == htons(1))
 	{//by:yhy ARP请求包
-		LOG_PROC("HANDLER", "%s -- ARP请求包 arp->opcode == htons(1)",FN);
+		
         //by:yhy 将ARP包中的发送方MAC,IP,packet_in_info中的流入端口保存
-        src_port = g_default_arp_handler.save_src_port(sw,arp->sendmac,arp->sendip,packet_in_info->inport);
+        src_port = g_default_arp_handler.save_src_port(sw,arp->sendmac,arp->sendip,arp->targetip, packet_in_info->inport);
         //get arp_request dst info
         dst_port = g_default_arp_handler.find_dst_port(src_port,arp->targetip);
 
+		LOG_PROC("HANDLER", "%s src_port==0x%x  dst_port==0x%x",FN, src_port, dst_port);
 		//by:yhy 源主机和目标主机均未知,则直接返回,不处理
         if(src_port==NULL && dst_port==NULL)
 		{
-			LOG_PROC("HANDLER", "%s -- src_port==NULL && dst_port==NULL",FN);
 	        return GN_OK;
         }
 		
         if(dst_port!=NULL)
 		{//by:yhy 若找到目标主机
-			LOG_PROC("HANDLER", "%s -- dst_port!=NULL",FN);
 			//by:yhy 执行arp_reply
         	g_default_arp_handler.arp_reply(src_port,dst_port,arp->sendip,arp->targetip,packet_in_info);	
         }
@@ -135,9 +132,8 @@ static INT4 fabric_arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_
     }
 	else
 	{//by:yhy ARP应答包
-		LOG_PROC("HANDLER", "%s -- ARP应答包 arp->opcode == htons(2)",FN);
     	//by:yhy 将ARP包中的发送方MAC,IP,packet_in_info中的流入端口保存
-    	src_port = g_default_arp_handler.save_src_port(sw,arp->sendmac,arp->sendip,packet_in_info->inport);
+    	src_port = g_default_arp_handler.save_src_port(sw,arp->sendmac,arp->sendip,arp->targetip, packet_in_info->inport);
     	//by:yhy 查找ARP应答包的目标主机
     	dst_port = g_default_arp_handler.find_dst_port(src_port,arp->targetip);
     	if(dst_port!=NULL)
@@ -146,16 +142,14 @@ static INT4 fabric_arp_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_
 			//by:yhy ARP应答包发送方的MAC,IP均已知,将其从flood列表中删除
     		g_default_arp_handler.arp_remove_ip_from_flood_list(arp->sendip);
 			//by:yhy 输出ARP应答包
-    		g_default_arp_handler.arp_reply_output(src_port,dst_port,arp->targetip,packet_in_info);
+    		g_default_arp_handler.arp_reply_output(sw->dpid,src_port,dst_port,arp->targetip,packet_in_info);
     	}
 		else 
 		{
-			LOG_PROC("HANDLER", "%s -- dst_port==NULL",FN);
 			//by:yhy ARP应答包发送方的MAC,IP均已知,将其从flood列表中删除
 			g_default_arp_handler.arp_remove_ip_from_flood_list(arp->sendip);
 		}
     }
-	LOG_PROC("HANDLER", "%s -- STOP",FN);
     return GN_OK;
 }
 
@@ -195,10 +189,16 @@ void destory_param_set(param_set_p param)
 //by:yhy ip包处理 
 static INT4 fabric_ip_packet_handle(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
-	LOG_PROC("HANDLER", "%s -- START",FN);
-    if (0 == of131_fabric_impl_get_tag_sw(sw))
+	UINT4  sw_vlan_tag = 0;
+	
+	if(NULL == sw)
+	{
+		return GN_OK;
+	}
+	sw_vlan_tag = of131_fabric_impl_get_tag_sw(sw);
+    if (0 == sw_vlan_tag)
     {
-		LOG_PROC("HANDLER", "%s -- 0 == of131_fabric_impl_get_tag_sw(sw)",FN);
+		LOG_PROC("HANDLER", "%s sw ip= 0x%x sw_vlan_tag=%d",FN, sw->sw_ip, sw_vlan_tag);
         return GN_OK;
     }
 
@@ -218,7 +218,7 @@ static INT4 fabric_ip_packet_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 	INT4 foward_type = IP_DROP;
 
 	//by:yhy 保存源MAC,IP,交换机端口
-	src_port = g_default_ip_handler.save_src_port_ip(sw,p_ip->eth_head.src,p_ip->src,packet_in_info->inport);
+	src_port = g_default_ip_handler.save_src_port_ip(sw,p_ip->eth_head.src,p_ip->src, p_ip->dest, packet_in_info->inport);
 
 	//by:yhy 根据源端口,目标IP查找交换机的目标端口
 	dst_port = g_default_ip_handler.find_dst_port_ip(src_port, p_ip->dest);
@@ -228,57 +228,57 @@ static INT4 fabric_ip_packet_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 	strcpy(SourceIP,inet_htoa(ntohl(p_ip->src)));
 	UINT1  DestinationIP[15] = "";
 	strcpy(DestinationIP,inet_htoa(ntohl(p_ip->dest)));
-	LOG_PROC("IP_PACKET","Source IP:[%s] -> Destination IP:[%s]",SourceIP,DestinationIP);
-	
+	//LOG_PROC("HANDLER","%s-src-|%02x:%02x:%02x:%02x:%02x:%02x|",FN,p_ip->eth_head.src[0],p_ip->eth_head.src[1], p_ip->eth_head.src[2], p_ip->eth_head.src[3], p_ip->eth_head.src[4], p_ip->eth_head.src[5]);
+	//LOG_PROC("HANDLER","%s-dest-|%02x:%02x:%02x:%02x:%02x:%02x|",FN,p_ip->eth_head.dest[0],p_ip->eth_head.dest[1], p_ip->eth_head.dest[2], p_ip->eth_head.dest[3], p_ip->eth_head.dest[4], p_ip->eth_head.dest[5]);
+	LOG_PROC("HANDLER","Source IP:[%s] -> Destination IP:[%s]  TTL:%d",SourceIP,DestinationIP,(p_ip->ttl));
+	//LOG_PROC("INFO","Source IP:[%s] -> Destination IP:[%s]  TTL:%d",SourceIP,DestinationIP,(p_ip->ttl));
 	
 	if ((src_port == NULL && dst_port == NULL) && (-1 != p_ip->dest))
 	{//by:yhy 源主机,目标主机均不存在,且目标IP不为广播地址
 		// return GN_ERR;
-		LOG_PROC("HANDLER", "%s -- (src_port == NULL && dst_port == NULL) && (-1 != p_ip->dest)",FN);
+		LOG_PROC("HANDLER", "%s sw_ip=0x%x p_ip->dest=0x%x",FN, sw->sw_ip, p_ip->dest);
 	}
 	else 
 	{
 		//by:yhy 检查src_port与dst_port是否存在通路
-		INT4 gn_access_result = g_default_ip_handler.ip_packet_check_access(src_port, dst_port, packet_in_info, param);
-
-		if(gn_access_result == GN_ERR)
-		{//by:yhy 如果不存在通路,则装载deny_flow
-			g_default_ip_handler.ip_install_deny_flow(sw, p_ip);
-			LOG_PROC("HANDLER", "%s -- gn_access_result == GN_ERR",FN);
+		INT4 gn_access_result = g_default_ip_handler.ip_packet_check_access(sw,src_port,dst_port,packet_in_info,param);
+		//LOG_PROC("INFO", "%s_%d_%d",FN,LN,gn_access_result);
+		if((SECURITY_CHECK_IPPACKET_CAMEFROM_SECURITY_THROUGH ==gn_access_result )||(SECURITY_CHECK_IPPACKET_CAMEFROM_SECURITY_DENY ==gn_access_result ))
+		{
+			if (OFPP13_CONTROLLER != packet_in_info->inport)
+			{
+				//LOG_PROC("INFO", "%s_%d",FN,LN);
+				fabric_openstack_packet_output(sw, packet_in_info, OFPP13_TABLE);
+			}
 		}
-		else 
-		{//by:yhy 存在通路
+		else if((SECURITY_CHECK_IPPACKET_INVALID ==gn_access_result )||(SECURITY_CHECK_IPPACKET_NOT_CAMEFROM_SECURITY ==gn_access_result ))
+		{
 			param->src_port = src_port;
 			param->dst_port = dst_port;
-
 			//by:yhy 根据IP包内容判断下一步操作的类型
 			foward_type = g_default_ip_handler.ip_packet_compute_src_dst_forward(src_port,dst_port,packet_in_info,param);
- 
+ 			
+			LOG_PROC("HANDLER", "%s foward_type=%d p_ip->proto=%d packet_in_info->inport=%d",FN, foward_type, p_ip->proto, packet_in_info->inport);
 			//by:yhy 增加对应主机节点的消息计数值;发往外部的icmp消息不统计
             if (!(foward_type == CONTROLLER_FORWARD && IPPROTO_ICMP == p_ip->proto))
             {
                 add_msg_counter(sw, p_ip->dest, p_ip->eth_head.dest);
-				LOG_PROC("HANDLER", "%s -- !(foward_type == CONTROLLER_FORWARD && IPPROTO_ICMP == p_ip->proto)",FN);
             }
-			
-			//by:yhy 根据下一步操作类型,执行相关动作
+	
 			if(foward_type==CONTROLLER_FORWARD)
 			{
 				//by:yhy openflow输出一个packet_out
 				fabric_openstack_packet_output(param->dst_sw, packet_in_info, param->dst_inport);
-				LOG_PROC("HANDLER", "%s -- foward_type==CONTROLLER_FORWARD)",FN);
 			}
 			else if(foward_type==IP_FLOOD) 
 			{
 				//by:yhy ip flood
 				g_default_ip_handler.ip_flood(src_port,param->src_ip, param->dst_ip, param->src_mac,packet_in_info);
-				LOG_PROC("HANDLER", "%s -- foward_type==IP_FLOOD",FN);
 			}
 			else if(foward_type==BROADCAST_DHCP) 
 			{
 				//can access but don't know where is dst_port ->flood
 				openstack_ip_p_broadcast(packet_in_info);
-				LOG_PROC("HANDLER", "%s -- foward_type==BROADCAST_DHCP",FN);
 				//DHCP handle
 				//TODO
 			}
@@ -297,9 +297,15 @@ static INT4 fabric_ip_packet_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 			}
 			else if((Internal_port_flow == foward_type) || (Internal_out_subnet_flow == foward_type)) 
 			{
+				//icmp_t* p_icmp = (icmp_t*)p_ip->data;
 				g_default_ip_handler.ip_packet_install_flow(param, foward_type);
-				fabric_openstack_packet_output(param->dst_port->sw,packet_in_info,param->dst_port->port);
-				LOG_PROC("HANDLER", "%s -- (Internal_port_flow == foward_type) || (Internal_out_subnet_flow == foward_type)",FN);
+
+			
+				//LOG_PROC("INFO","%s %d p_ip->dest=0x%x p_ip->src=0x%x seq=%d id=%d",FN,LN,p_ip->dest,p_ip->src,ntohs(p_icmp->seq),ntohs(p_icmp->id));
+				if(OFPP13_CONTROLLER != packet_in_info->inport)
+				{
+					fabric_openstack_packet_output(sw,packet_in_info,OFPP13_TABLE);
+				}
 				// fabric_openstack_packet_output(sw, packet_in_info, OFPP13_TABLE);
 			}
 			else
@@ -309,15 +315,17 @@ static INT4 fabric_ip_packet_handle(gn_switch_t *sw, packet_in_info_t *packet_in
 					//install other flows
 					g_default_ip_handler.ip_packet_install_flow(param, foward_type);
 					fabric_openstack_packet_output(sw, packet_in_info, OFPP13_TABLE);
-					LOG_PROC("HANDLER", "%s -- OFPP13_CONTROLLER != packet_in_info->inport",FN);
 				}
 			}
+		}
+		else
+		{
+			//do nothing
 		}
 	}
 	//by:yhy 销毁参数
 	destory_param_set(param);
 	
-	LOG_PROC("HANDLER", "%s -- STOP",FN);
 	return GN_OK;
 }
 
@@ -331,7 +339,7 @@ static INT4 ip_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 static INT4 ipv6_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
 	//by:yhy add 201701091313
-	LOG_PROC("HANDLER", "ipv6_packet_handler - START");
+	//LOG_PROC("HANDLER", "%s ", FN);
 #if 0
 	if (0 == g_fabric_start_flag) {
 		return 0;
@@ -395,20 +403,18 @@ static INT4 ipv6_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_inf
 
 #endif
     //by:yhy add 201701091313
-	LOG_PROC("HANDLER", "ipv6_packet_handler - STOP");
+	//LOG_PROC("HANDLER", "ipv6_packet_handler - STOP");
 	return GN_OK;
 }
 ///Added by Xu yanwei in 2015-08-13
 static INT4 vlan_packet_handler(gn_switch_t *sw, packet_in_info_t *packet_in_info)
 {
-	LOG_PROC("HANDLER", "vlan_packet_handler - START");
 	if(get_fabric_state())
 	{
 		fabric_vlan_handle(sw, packet_in_info);
 		LOG_PROC("HANDLER", "vlan_packet_handler - STOP");
 		return GN_OK;
 	}
-	LOG_PROC("HANDLER", "vlan_packet_handler - STOP");
     return GN_OK;
 }
 
@@ -491,7 +497,7 @@ void init_handler()
 {
 	if(get_fabric_state())
 	{
-		init_forward_param_list();//by:yhy <费解>干什么用的
+		//init_forward_param_list();//by:yhy <费解>干什么用的
 
 		g_default_forward_handler.ip=fabric_ip_packet_handle;
 		g_default_forward_handler.arp=fabric_arp_packet_handler;
@@ -534,7 +540,7 @@ void init_handler()
 			g_default_ip_handler.ip_flood=openstack_ip_p_flood;
 			g_default_ip_handler.ip_packet_install_flow=openstack_ip_p_install_flow;
 			g_default_ip_handler.ip_packet_check_access = openstack_ip_packet_check_access;
-			g_default_ip_handler.ip_packet_compute_src_dst_forward = openstack_ip_packet_compute_src_dst_forward;
+			//g_default_ip_handler.ip_packet_compute_src_dst_forward = openstack_ip_packet_compute_src_dst_forward;
 			g_default_ip_handler.ip_install_deny_flow = openstack_ip_install_deny_flow;
 			// g_default_ip_handler.ip_broadcast = openstack_ip_p_broadcast;
 		}

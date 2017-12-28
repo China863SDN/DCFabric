@@ -99,8 +99,10 @@ void add_msg_counter(gn_switch_t* sw, UINT4 ip, const UINT1* mac)
             LOG_PROC("WARNING", "Msg overload: mem_get failure!!!");
         }
     }
-
-    temp->count++;
+    if(temp)
+    {
+    	temp->count++;
+    }
 }
 
 //向sw发送禁止匹配ip和mac的主机的流表
@@ -128,7 +130,8 @@ void *msg_overload_thread(void *value)
     INT1 ip_str[48] = {0};
     INT1 mac_str[48] = {0};
 	
-	prctl(PR_SET_NAME, (unsigned long) "MsgOverloadThread" ) ;  
+	prctl(PR_SET_NAME, (unsigned long) "MsgOverloadThread" ) ; 
+	MsecSleep(12*1000);
     while (TRUE)
     {
         //sleep(g_overload_internal);

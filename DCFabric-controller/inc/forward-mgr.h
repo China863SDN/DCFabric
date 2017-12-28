@@ -60,11 +60,13 @@ typedef struct forward_handler
 
 typedef struct security_param_set
 {
-	 UINT1 ip_proto;        	/* IP protocol*/
 	 UINT2 tcp_port_num;        /* port number*/
 	 UINT2 udp_port_num;        /* port number*/
+	 UINT1 ip_proto;        	/* IP protocol*/
 	 UINT1 imcp_type; 	    	/* ICMP type. */
 	 UINT1 icmp_code;   	  	/* ICMP code. */
+	 UINT1 rev;
+	 
 }security_param_t, *security_param_p;
 
 typedef struct param_set
@@ -77,6 +79,7 @@ typedef struct param_set
 	gn_switch_t* dst_sw;
 	gn_switch_t* out_sw;
 	UINT1 proto;
+	UINT1 Rev[3];
 	UINT2 src_port_no;
 	UINT2 dst_port_no;
 	UINT4 src_inport;
@@ -107,17 +110,17 @@ typedef struct param_set
 	UINT4 vip_tcp_port_no;
 }param_set_t, *param_set_p;
 
-typedef p_fabric_host_node (*save_src_info)(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 inport);
+typedef p_fabric_host_node (*save_src_info)(gn_switch_t *sw,UINT1* sendmac,UINT4 sendip,UINT4 targetip, UINT4 inport);
 typedef p_fabric_host_node (*find_dst_port)(p_fabric_host_node src_node,UINT4 targetip);
 typedef INT4 (*flood_t)(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in);
 typedef INT4 (*ip_packet_flood_t)(p_fabric_host_node src_port,UINT4 sendip,UINT4 targetip,UINT1* srcmac,packet_in_info_t *packet_in);
 typedef INT4 (*ip_packet_install_flow_t)(param_set_p param_set, INT4 foward_type);
 typedef INT4 (*reply_t)(p_fabric_host_node src_port,p_fabric_host_node dst_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in);
-typedef INT4 (*check_access_t)(p_fabric_host_node src_port,p_fabric_host_node dst_port, packet_in_info_t* packet_in, param_set_p param);
+typedef INT4 (*check_access_t)(gn_switch_t *sw,p_fabric_host_node src_port,p_fabric_host_node dst_port, packet_in_info_t* packet_in, param_set_p param);
 typedef INT4 (*compute_forward_t)(p_fabric_host_node src_port,p_fabric_host_node dst_port,packet_in_info_t *packet_in, param_set_p param_set);
 typedef INT4 (*output_t)(p_fabric_host_node src_port,p_fabric_host_node dst_port,UINT4 sendip,UINT4 targetip,packet_in_info_t *packet_in);
 typedef INT4 (*remove_ip_from_flood_list_t)(UINT4 sendip);
-typedef INT4 (*reply_output_t)(p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in);
+typedef INT4 (*reply_output_t)(UINT8 external_dpid,p_fabric_host_node src,p_fabric_host_node dst,UINT4 targetIP, packet_in_info_t *packet_in);
 typedef p_fabric_host_node (*find_ip_dst_port)(p_fabric_host_node src_node,UINT4 targetip);
 typedef INT4 (*ip_install_deny_flow_t)(gn_switch_t *sw, ip_t* ip);
 

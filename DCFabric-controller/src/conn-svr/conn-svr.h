@@ -35,13 +35,11 @@
 #include "../inc/openflow/openflow-common.h"
 
 
-#define Event_QUEUE_MAX_NUM  65535*6
-#define PIPEEVENT_QUEUE_NUM	65535
+#define Event_QUEUE_MAX_NUM   65535*6
+#define PIPEEVENT_QUEUE_NUM	 65535
 
 
-#define 	EVENT_RECV			0
-#define	 	EVENT_PROC			1
-#define 	EVENT_SEND			2
+
 
 #define push_MsgAndEvent(EventNo, pNode,pQueue, stMsgSock_t,MsgType, iSockFd, swIndex ) \
 	pNode = get_MsgSock_Node(g_pMsgNodeBuff); \
@@ -51,12 +49,15 @@
 		stMsgSock_t.iSockFd =  iSockFd;		\
 		stMsgSock_t.uiSw_Index = swIndex;	\
 		stMsgSock_t.uiUsedFlag = 1;			\
-		push_MsgSock_into_queue( pQueue, pNode, &stMsgSock_t);	\
-		Write_Event(EventNo);			\
+		if(GN_OK == push_MsgSock_into_queue( pQueue, pNode, &stMsgSock_t))	\
+		{								\
+			Write_Event(EventNo);			\
+		}							\
 	}	\
 	else	\
 	{		\
 		LOG_PROC("ERROR","Memory alloc error : %s, %d",FN, LN);	\
+		exit(0);					\
 	}
 
 
@@ -76,6 +77,13 @@ typedef struct Event_SockFd
 	void  * funcptr;   
 }stEvent_SockFd;
 
+typedef  struct _switch_conn_times
+{
+	 UINT8 dpid;
+	 UINT8 conn_times;
+	 struct _switch_conn_times* next; 
+}switch_conn_times_t, *switch_conn_times_p;
+
 extern t_MultiPurpose_queue g_tProc_queue ;
 extern UINT4 g_heartbeat_interval;
 extern p_Queue_node		 g_pMsgNodeBuff ;
@@ -89,6 +97,7 @@ void free_switch(gn_switch_t *sw);
 INT4 new_switch(UINT4 switch_sock, struct sockaddr_in addr);
 UINT1 *init_sendbuff(gn_switch_t *sw, UINT1 of_version, UINT1 type, UINT2 buf_len, UINT4 transaction_id);
 INT4 send_of_msg(gn_switch_t *sw, UINT4 total_len);
+gn_switch_t *find_sw_by_swip(UINT4 sw_ip);
 gn_switch_t* find_sw_by_port_physical_mac(UINT1* mac);
 
 INT4 send_packet(gn_switch_t *sw, INT1* pBuf, UINT4 nLen);
@@ -108,6 +117,6 @@ INT4 pop_MsgSock_from_queue( p_MultiPurpose_queue para_queue, p_Queue_node ptota
 //Queue related stop
 /**************************************************************************/
 
-
+UINT4 update_switch_conn_times(UINT8 dpid);
 
 #endif /* CONN_SVR_H_ */

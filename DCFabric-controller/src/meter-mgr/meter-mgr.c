@@ -1,38 +1,12 @@
-/*
- * GNFlush SDN Controller GPL Source Code
- * Copyright (C) 2015, Greenet <greenet@greenet.net.cn>
- *
- * This file is part of the GNFlush SDN Controller. GNFlush SDN
- * Controller is a free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, , see <http://www.gnu.org/licenses/>.
- */
-
-/******************************************************************************
-*                                                                             *
-*   File Name   : meter-mgr.c           *
-*   Author      : greenet Administrator           *
-*   Create Date : 2015-3-3           *
-*   Version     : 1.0           *
-*   Function    : .           *
-*                                                                             *
-******************************************************************************/
-
 #include "meter-mgr.h"
 #include "../conn-svr/conn-svr.h"
 #include "openflow-common.h"
 #include "openflow-10.h"
 #include "openflow-13.h"
 
+/* by:yhy
+ * 在sw的meter_entries寻找与meter_id匹配的项
+ */
 gn_meter_t *find_meter_by_id(gn_switch_t *sw, UINT4 meter_id)
 {
     gn_meter_t *p_meter = sw->meter_entries;
@@ -43,13 +17,13 @@ gn_meter_t *find_meter_by_id(gn_switch_t *sw, UINT4 meter_id)
         {
             return p_meter;
         }
-
         p_meter = p_meter->next;
     }
-
     return NULL;
 }
-
+/* by:yhy
+ * 对sw添加meter
+ */
 INT4 add_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 {
     INT4 ret = 0;
@@ -80,6 +54,11 @@ INT4 add_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
     return ret;
 }
 
+
+
+/* by:yhy
+ * 在sw中寻找匹配meter的项,找到后更新,并下发.无法找到匹配项的话不做处理.
+ */
 INT4 modify_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 {
     INT4 ret = 0;
@@ -127,6 +106,9 @@ INT4 modify_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
     return ret;
 }
 
+/* by:yhy 
+ * 删除sw上的meter
+ */
 INT4 delete_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 {
     INT4 ret = 0;
@@ -174,7 +156,9 @@ INT4 delete_meter_entry(gn_switch_t *sw, gn_meter_t *meter)
 
     return ret;
 }
-
+/* by:yhy
+ * 清空sw上的所有meter
+ */
 void clear_meter_entries(gn_switch_t *sw)
 {
     meter_mod_req_info_t meter_mod_req_info;
@@ -198,12 +182,16 @@ void clear_meter_entries(gn_switch_t *sw)
     sw->msg_driver.msg_handler[OFPT13_METER_MOD](sw, (UINT1 *)&meter_mod_req_info);
 }
 
-
+/* by:yhy
+ *
+ */
 INT4 init_meter_mgr()
 {
     return GN_OK;
 }
-
+/* by:yhy
+ *
+ */
 void fini_meter_mgr()
 {
 }
