@@ -540,7 +540,7 @@ void init_handler()
 			g_default_ip_handler.ip_flood=openstack_ip_p_flood;
 			g_default_ip_handler.ip_packet_install_flow=openstack_ip_p_install_flow;
 			g_default_ip_handler.ip_packet_check_access = openstack_ip_packet_check_access;
-			//g_default_ip_handler.ip_packet_compute_src_dst_forward = openstack_ip_packet_compute_src_dst_forward;
+			g_default_ip_handler.ip_packet_compute_src_dst_forward = openstack_ip_packet_compute_src_dst_forward;
 			g_default_ip_handler.ip_install_deny_flow = openstack_ip_install_deny_flow;
 			// g_default_ip_handler.ip_broadcast = openstack_ip_p_broadcast;
 		}
