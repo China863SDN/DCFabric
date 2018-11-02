@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>system configuration</title>
+    <link href="../css/application.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="img/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <meta charset="utf-8">
+    <script src="../js/cookie.js"></script>
+    <script>
+        var user = getCookie("user");
+        if (user) {
+            addCookie("user", user);
+        } else {
+            window.location = "../login.html";
+        }
+    </script>
+</head>
+<body id="sizediv" class="background-dark">
+<div id="logobar" class="logo">
+    <h2 class="page-title">
+        <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;">
+        DCFabric <small>configuration management</small></h2>
+</div>
+<nav id="sidebar" class="sidebar nav-collapse collapse">
+    <ul id="side-nav" class="side-nav">
+        <li class='accordion-group'>
+            <a href="../cluster_config/cluster_config.html"><i class="icon-desktop"></i> <span class="name">cluster configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../interchanger_desc/interchanger_desc.html"><i class="icon-desktop"></i> <span class="name">switch information</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../chart/chart.html"><i class="icon-desktop"></i> <span class="name">network topo</span></a>
+        </li>
+     <!--   <li class='accordion-group'>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">flow configuration</span></a>
+        </li>
+        <li class="accordion-group">
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">firewall management</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">L3 gateway configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter table configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group table configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">tenant managent</span></a>
+        </li>-->
+        <li class='accordion-group'>
+            <a href="../open_manage/openstack_main.html"><i class="icon-desktop"></i> <span class="name">openstack</span></a>
+        </li>
+         <li class='accordion-group active'>
+            <a href="../open_qos/openstack_qos.html"><i class="icon-desktop"></i> <span class="name">QoS manager</span></a>
+        </li>
+        <li class='accordion-group '>
+                <a href="../flowtable_manager/flow_table_config.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">flowtable</span>
+                </a>
+            </li>
+</nav>
+<div id="wrapbar" class="wrap">
+    <header id="headbar" class="page-header">
+        <div class="navbar">
+            <div class="navbar-inner">
+                <ul class="nav pull-right">
+                    <!--<li class="hidden-phone dropdown">
+                        <a href="#" title="Account" id="account"
+                           class="dropdown-toggle"
+                           data-toggle="dropdown">
+                            <i class="icon-user"></i>
+                        </a>
+                        <ul id="account-menu" class="dropdown-menu account" role="menu">
+                            <li role="presentation" class="account-picture">
+                                <img src="../img/2.jpg" alt="">
+                                Philip Daineka
+                            </li>
+                            <li role="presentation">
+                                <a href="form_account.html" class="link">
+                                    <i class="icon-user"></i>
+                                    Profile
+                                </a>
+                            </li>
+                            <li role="presentation">
+                                <a href="component_calendar.html" class="link">
+                                    <i class="icon-calendar"></i>
+                                    Calendar
+                                </a>
+                            </li>
+                            <li role="presentation">
+                                <a href="#" class="link">
+                                    <i class="icon-inbox"></i>
+                                    Inbox
+                                </a>
+                            </li>
+                        </ul>
+                    </li>-->
+                    <li class="hidden-phone" id="user_login"><span></span><a href="javacript:void(0);" onclick="logout()"><i class="icon-signout"></i></a></li>
+                </ul>
+            </div>
+        </div>
+    </header>
+    <div class="content container-fluid">
+        <div id="middle-top" class="row-fluid">
+            <div class="span12">
+                <h4 class="page-title">QoS information <small></small></h4>
+            </div>
+        </div>
+        <select id="control" style='display:none;width:160px;height:25px;margin-top: 10px;margin-right:20px;padding-top: 2px;'></select>
+       
+                   
+                    <div class="row-fluid">
+                        <section class="widget">
+                            <header style="padding-bottom: 20px;">
+                                <h4 style="display: block;float: left;">
+                                    <i class="icon-file-alt"></i>
+                                    flows bandth information
+                                    </h4>
+                                    <div style="display: block;float: right;"><button type="button" class="btn btn-primary btn-small" onclick="search()">inquiry</button></div>
+                                    </header>
+                                     <div class="body">
+                                <table id="datatable-table1" class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>FloatingIP</th>
+                                            <th>FixedIP</th>
+                                            <th>Bandwidth(MBps)</th>
+                                            <th>Flows limit(GB/Month)</th>
+                                            <th>Used(GB)</th>
+                                            <th>Operate</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody></tbody>
+                                </table>
+                            </div>
+                                    </section>
+                                    </div>
+                          
+                                    
+                </div>
+                 <div id="myModal2" class="modal hide fade" tabindex="-1" role="dialog" style="style="background-color: rgba(61, 66, 68, 1);color:#fff"">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" >×</button>
+                <h4 id="myModalLabel2" style="color:#fff">view network information</h4>
+            </div>
+            <div class="modal-body">
+                <div id="netport" class="row" style='margin-left:0px;'>
+                    
+                </div>
+                
+            </div>
+            <div class="modal-footer" style="background-color: rgba(61, 66, 68, 1);">
+                <button class="btn" data-dismiss="modal">close</button>
+            </div>
+        </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- jquery and friends -->
+<script src="../js/jquery/jquery.1.9.0.min.js"> </script>
+<script src="../js/jquery/jquery-migrate-1.1.0.min.js"> </script>
+<!-- jquery plugins -->
+<script src="../js/jquery/jquery.maskedinput.js"></script>
+<script src="../js/parsley.js"> </script>
+<script src="../js/jquery/jquery.uniform.js"></script>
+<script src="../js/select2.js"></script>
+<script src="../js/jquery/jquery.dataTables.min.js"></script>
+
+<!-- bootstrap default plugins -->
+<script src="../js/bootstrap/bootstrap-transition.js"></script>
+<script src="../js/bootstrap/bootstrap-collapse.js"></script>
+<script src="../js/bootstrap/bootstrap-alert.js"></script>
+<script src="../js/bootstrap/bootstrap-tooltip.js"></script>
+<script src="../js/bootstrap/bootstrap-popover.js"></script>
+<script src="../js/bootstrap/bootstrap-button.js"></script>
+<script src="../js/bootstrap/bootstrap-dropdown.js"></script>
+<script src="../js/bootstrap/bootstrap-modal.js"></script>
+<script src="../js/bootstrap/bootstrap-tab.js"> </script>
+
+<!--backbone and friends -->
+<script src="../js/underscore-min.js"></script>
+<script src="../js/backbone-min.js"></script>
+<script src="../js/backbone-pageable.js"></script>
+<script src="../js/backgrid.js"></script>
+<script src="../js/backgrid-paginator.js"></script>
+
+<!-- page-specific js -->
+<script src="../js/tables-dynamic.js"></script>
+
+<!--chart-->
+
+
+<script type="text/javascript">
+    
+    function search(){
+        $("#datatable-table1 tbody").html("");
+        for(var i=0;i<=4;i++){
+            $("#datatable-table1 tbody").append("<tr>"
+            +"<td>192.168.53.136</td>"
+            +"<td>100.0.0.2</td>"
+            +"<td>100</td>"
+            +"<td>100</td>"
+            +"<td>80</td>"
+            +"<td>"
+            +"<button type='button' class='btn btn-success btn-small' onclick='searchNetPort()'>view detail information</button>"
+            +"<button type='button' class='btn btn-danger btn-small' onclick=''>rate-limiting</button>"
+            +"<button type='button' class='btn btn-danger btn-small' onclick=''>flow-limiting</button>"
+            +"</td>"
+            +"</tr>");
+        }
+    }
+    function searchNetPort(){
+       var cont = "";
+       for(var i=0;i<=4;i++){
+           cont += "<div class='span4' style='margin-left:0px;padding: 5px;width: 250px;border-bottom: 1px solid #cccccc;'>";
+           cont +=     "<p>interface name:1</p>";
+           cont +=     "<p>interface number:2</p>";
+           cont +=     "<p>MAC address:3</p>";
+           cont += "</div>";
+       }
+       $("#netport").html("");
+       $("#netport").append(cont);
+       $("#myModal2").modal('show');
+    }   
+    var nodes = [];
+    var links = [];
+    var host = [];
+    $(function(){
+        $("#user_login span").html(user);
+        search();
+    });
+</script>
+</body>
+</html>

@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>system configuration</title>
+    <link href="../css/application.min.css" rel="stylesheet">
+
+    <link rel="shortcut icon" href="img/favicon.png">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="">
+    <meta name="author" content="">
+    <meta charset="utf-8">
+    <script src="../js/cookie.js"></script>
+    <script>
+        var user = getCookie("user");
+        if (user) {
+            addCookie("user", user);
+        } else {
+            window.location = "../login.html";
+        }
+    </script>
+</head>
+
+<body class="background-dark">
+    <div class="logo">
+        <h2 class="page-title">
+            <img src="../img/telecom.png" style="width:50px;position: relative;top: -7px;"> DCFabric
+            <small>configuration managment</small>
+        </h2>
+    </div>
+    <nav id="sidebar" class="sidebar nav-collapse collapse">
+        <ul id="side-nav" class="side-nav">
+            <li class='accordion-group'>
+                <a href="../cluster_config/cluster_config.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">cluster configuration</span>
+                </a>
+            </li>
+            <li class='accordion-group '>
+                <a href="../interchanger_desc/interchanger_desc.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">switch information</span>
+                </a>
+            </li>
+            <li class='accordion-group '>
+                <a href="../hostinfo/index.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">host information</span>
+                </a>
+            </li>
+            <li class='accordion-group'>
+                <a href="../chart/chart.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">network topo</span>
+                </a>
+            </li>
+            <!--   <li class='accordion-group'>
+            <a href="../flow_table_config/flow_table_config.html"><i class="icon-desktop"></i> <span class="name">flow configuration</span></a>
+        </li>
+        <li class="accordion-group">
+            <a href="../firewall_manager/firewall_config.html"><i class="icon-desktop"></i> <span class="name">firewall management</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../gateway_config/gateway_config.html"><i class="icon-desktop"></i> <span class="name">L3 gateway configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../meter_table_config/meter_table_config.html"><i class="icon-desktop"></i> <span class="name">meter table configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../group_table_config/group_table_config.html"><i class="icon-desktop"></i> <span class="name">group table configuration</span></a>
+        </li>
+        <li class='accordion-group'>
+            <a href="../multitenant_manage/renant_config.html"><i class="icon-desktop"></i> <span class="name">tenant managent</span></a>
+        </li> 
+            <li class='accordion-group'>
+                <a href="../open_manage/openstack_main.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">openstack</span>
+                </a>
+            </li>-->
+            <li class='accordion-group active'>
+                <a href="../flowtable_manager/flow_table_config.html">
+                    <i class="icon-desktop"></i>
+                    <span class="name">flowtable</span>
+                </a>
+            </li>
+    </nav>
+    <div class="wrap">
+        <header class="page-header">
+            <div class="navbar">
+                <div class="navbar-inner">
+                    <ul class="nav pull-right">
+                        <li class="hidden-phone" id="user_login">
+                            <span></span>
+                            <a href="javascript:void(0);" onclick="logout();">
+                                <i class="icon-signout"></i>
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </header>
+        <div class="content container-fluid" id="container">
+            <div class="row-fluid">
+                <div class="span12">
+                    <h4 class="page-title">Flow Table Management
+                        <small> manager flow table</small>
+                    </h4>
+
+                </div>
+            </div>
+            <div class="row-fluid">
+                <div class="span12">
+                    <section class="c_widget">
+                        <section>
+                            <header class='header-title'>
+                                <h5>
+                                    <i class="icon-file-alt"></i>
+                                    Switch Information
+                                </h5>
+
+                            </header>
+                            <div class="body ">
+                                <table id="info_table" class="table   table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>dpid</th>
+                                            <th>IP address</th>
+                                            <th>port</th>
+                                            <th>manufacturer</th>
+                                            <th>software version</th>
+                                            <th>hardware version</th>
+                                            <th>protocol version</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td id='info-dpid'>test</td>
+                                            <td id='info-ip'>test</td>
+                                            <td id='info-port'>test</td>
+                                            <td id='info-man'>test</td>
+                                            <td id='info-soft'>test</td>
+                                            <td id='info-hard'>test</td>
+                                            <td id='info-proc'>test</td>
+
+
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+
+                        <section>
+                            <header class='header-title'>
+                                <h5>
+                                    Flow Table Information
+                                </h5>
+                                <div class="btn-group">
+                                    <button type="button" class="btn btn-primary btn-small" data-toggle="modal" data-target="#addModal" onclick='onAddFlowTable()'>
+                                        <i class='icon-plus'></i>Add Flow Table </button>
+
+                                    <button type="button" id="remove-flow-btn" onclick="onFlowTableDelBtn()" class="btn btn-danger btn-small" disabled='disabled'>
+                                        <i class='icon-remove'></i>Delete Selected Flow Table</button>
+
+                                </div>
+                            </header>
+                            <div class="body " style='padding:10px'>
+                                <table id="datatable-table" class="table   table-striped dataTable flow-tables">
+                                    <thead>
+                                        <tr>
+                                            <th>
+                                            </th>
+                                            <th>Table </th>
+                                            <th>Priority</th>
+                                            <th>Match Fields</th>
+                                            <th>Actions</th>
+                                            <th>Other Information</th>
+                                            <th>Operate</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+
+                                    </tbody>
+                                </table>
+                            </div>
+                        </section>
+                    </section>
+
+                </div>
+            </div>
+            <div id="addModal" class="modal hide fade custome_modal " data-backdrop="static" data-keyboard="false" role="dialog">
+                <div class="modal-header">
+
+                    <h4 id="myModalLabel2">Add Flow Table</h4>
+                </div>
+
+
+                <div class="modal-body">
+                    <div class="container-fluid custome_modal_body">
+                        <div id="flow-setting" class="control-group">
+                            <div class="accordion-group ">
+                                <div class="accordion-heading">
+                                    <a class="accordion-toggle add-jsonview1" data-toggle="collapse" href="#collapseOne">Flow Table Configuration
+                                    </a>
+                                </div>
+                                <div id="collapseOne" class="accordion-body add-jsonview-body1">
+                                    <div class="accordion-inner">
+                                        <div class="container-fluid vbox ">
+                                            <div class="row-fluid hbox custome_group ">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox">
+                                                        <div class="  hbox">
+                                                            <label class="control-label keys">TableID : </label>
+                                                            <input type="number" class='tableId' oninput="addInfoChange()" onpropertychange="addInfoChange()" min="0" step="1" style="width:80px;margin-right: 10px">
+                                                        </div>
+                                                        <label class="control-label keys">Priority : </label>
+                                                        <input type="number" class='priority' oninput="addInfoChange()" onpropertychange="addInfoChange()"  min="0" step="1" style="width:80px;margin-right: 10px">
+                                                    </div>
+
+                                                   
+                                                </div>
+
+                                            </div>
+                                            <div class="row-fluid hbox custome_group ">
+                                                    <div class="custome_control hbox" style="width:100%">
+                                                                 <div class="hbox"  style="width: 40%">
+                                                                    <label class="control-label keys">IdleTimeout : </label>
+                                                                    <input type="number" class='idleTimeout' oninput="addInfoChange()" onpropertychange="addInfoChange()" min="0" step="1" style="width:80px;margin-right: 10px">
+                                                                    <div class="units">s</div>
+                                                                </div>
+                                                                <div class="hbox"  style="width: 40%">
+                                                                    <label class="control-label keys">HardTimeout : </label>
+                                                                    <input type="number" class='hardTimeout' oninput="addInfoChange()" onpropertychange="addInfoChange()" min="0" step="1" style="width:80px;margin-right: 10px">
+                                                                    <div class="units">s</div>
+                                                                </div>
+                                                                <div class="hbox">
+                                                                        <div class="text-desc">*Default 200s, 0 means never timeout</div>
+                                                                </div>
+                                                    </div>
+                                            </div>
+                                            <div class="row-fluid hbox custome_group">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <label class="control-label keys" for="add-match">Match Feilds : </label>
+                                                    <div class="match hbox detailvalue match-result" id='add-match'>
+
+                                                    </div>
+                                                </div>
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox operation ">
+                                                        <label class="control-label" for="match-selection">Match Feilds Key : </label>
+                                                        <select id="add-match-key" class='match-key' onchange='addMatchKeyChange()' onpropertychange='addMatchKeyChange()' style='width: 120px;'>
+                                                        </select>
+                                                    </div>
+                                                    <div class="hbox operation">
+                                                        <label class="control-label" for="match-value">Match Feilds Value : </label>
+                                                        <input type="text" oninput="addMatchValueChange()" onpropertychange="addMatchValueChange()" class='match-value' style="width:80px"
+                                                            id="add-match-value">
+                                                        <div class="input-info match-info"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row-fluid hbox custome_group">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <label class="control-label keys" for="add-action">Actions : </label>
+                                                    <div class="actions hbox detailvalue action-result" id='add-action'>
+
+                                                    </div>
+                                                </div>
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox operation">
+                                                        <label class="control-label">Actions Key : </label>
+                                                        <select id="add-action-key" onchange="addActionKeyChange()" style='width: 160px;'></select>
+                                                    </div>
+                                                    <div class="hbox operation">
+                                                        <label class="control-label">Actions Value : </label>
+                                                        <input oninput="addActionValueChange()" type="text" style="width:80px" class="action-value">
+                                                        <div class="input-info action-info"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="flow-setting" class="control-group">
+                            <div class="accordion-heading">
+                                <a class="accordion-toggle collapsed add-jsonview2" data-toggle="collapse" href="#collapseOne3">Flow Table Configuration By JSONView
+                                </a>
+                            </div>
+                            <div id="collapseOne3" class="accordion-body add-jsonview-body2 collapse">
+                                <div class="accordion-inner jsonviewcontainer">
+                                    <div id='add-config-json' class="config-json">
+                                    </div>
+                                    <div class="hbox" style="margin:5px">
+                                        <span style="margin-right: 5px">JSON String : </span>
+                                        <input id='add-json-string' type="text" style="margin-right: 5px">
+                                        <button class="btn btn-primary" onclick='addJSONUpdate()' style="margin-right: 5px">Update JSON tring</button>
+                                        <button class="btn btn-primary" onclick='addJSONGen()'>Generate JSON string</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id='add-yes-btn' onclick="addOnSaveBtn()" data-dismiss="modal">Save</button>
+                    <button class="btn btn-secondary" id='add-no-btn' data-dismiss="modal">Close</button>
+                </div>
+            </div>
+            <div id="editModal" class="modal hide fade custome_modal " data-backdrop="static" data-keyboard="false" role="dialog">
+                <div class="modal-header">
+
+                    <h4 id="myModalLabel3">Edit Flow Table</h4>
+                </div>
+
+
+                <div class="modal-body">
+                    <div class="container-fluid custome_modal_body">
+                        <div id="flow-setting" class="control-group">
+                            <div class="accordion-group ">
+                                <div class="accordion-heading">
+                                    <a class="accordion-toggle edit-jsonview1" data-toggle="collapse" data-parent="#accordion4" href="#collapseOne4">Flow Table Configuration
+                                    </a>
+                                </div>
+                                <div id="collapseOne4" class="accordion-body edit-jsonview-body1">
+                                    <div class="accordion-inner">
+                                        <div class="container-fluid vbox ">
+                                            <div class="row-fluid hbox custome_group ">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox">
+                                                        <div class="  hbox">
+                                                            <label class="control-label keys">TableID : </label>
+                                                            <input type="number" class='tableId'  min="0" step="1" oninput="editInfoChange()" onpropertychange="editInfoChange()" style="width:80px;margin-right: 10px">
+                                                        </div>
+                                                        <label class="control-label keys">Priority : </label>
+                                                        <input type="number" class='priority'  min="0" step="1" oninput="editInfoChange()" onpropertychange="editInfoChange()" style="width:80px;margin-right: 10px">
+                                                    </div>
+                                                </div>
+
+                                            </div>
+                                            <div class="row-fluid hbox custome_group ">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox" style="width: 40%">
+                                                        <label class="control-label keys">IdleTimeout : </label>
+                                                        <input type="number" class='idleTimeout'  min="0" step="1" oninput="editInfoChange()" onpropertychange="editInfoChange()" style="width:80px;margin-right: 10px">
+                                                        <div class="units">s</div>
+                                                    </div>
+                                                    <div class="hbox" style="width: 40%">
+                                                        <label class="control-label keys">HardTimeout : </label>
+                                                        <input type="number" class='hardTimeout' min="0" step="1" oninput="editInfoChange()" onpropertychange="editInfoChange()" style="width:80px;margin-right: 10px">
+                                                        <div class="units">s</div>
+                                                    </div>
+                                                    <div class="hbox">
+                                                            <div class="text-desc">*Default 200s, 0 means never timeout</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row-fluid hbox custome_group">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <label class="control-label keys">Match Feilds : </label>
+                                                    <div class="match hbox detailvalue match-result">
+
+                                                    </div>
+                                                </div>
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox operation ">
+                                                        <label class="control-label">Match Feilds Key : </label>
+                                                        <select id="edit-match-key" class='match-key' onchange='editMatchKeyChange()' style='width: 120px;'>
+
+                                                        </select>
+                                                    </div>
+                                                    <div class="hbox operation">
+                                                        <label class="control-label">Match Feilds Value : </label>
+                                                        <input type="text" oninput="editMatchValueChange()" onpropertychange="editMatchValueChange()" class='match-value' style="width:80px">
+                                                        <div class="input-info match-info"></div>        
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="row-fluid hbox custome_group">
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <label class="control-label keys">Actions : </label>
+                                                    <div class="actions hbox detailvalue action-result">
+
+                                                    </div>
+                                                </div>
+                                                <div class="custome_control hbox" style="width:100%">
+                                                    <div class="hbox operation">
+                                                        <label class="control-label">Actions Key : </label>
+                                                        <select id="edit-action-key" onchange="editActionKeyChange()" style='width: 160px;'></select>
+                                                    </div>
+                                                    <div class="hbox operation">
+                                                        <label class="control-label">Actions Value : </label>
+                                                        <input oninput="editActionValueChange()" type="text" style="width:80px" class="action-value">
+                                                        <div class="input-info action-info"></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="flow-setting" class="control-group">
+                            <div class="accordion-heading">
+                                <a class="accordion-toggle collapsed edit-jsonview2" data-toggle="collapse" href="#collapseOne5">Flow Table Configuration By JSONView
+                                </a>
+                            </div>
+                            <div id="collapseOne5" class="accordion-body edit-jsonview-body2 collapse">
+                                <div class="accordion-inner jsonviewcontainer">
+                                    <div id='edit-config-json' class='config-json'>
+                                    </div>
+                                    <div class="hbox" style="margin:5px">
+                                        <span style="margin-right: 5px">JSON String : </span>
+                                        <input id='edit-json-string' type="text" style="margin-right: 5px">
+                                        <button class="btn btn-primary" onclick='editJSONUpdate()' style="margin-right: 5px">Update JSON tring</button>
+                                        <button class="btn btn-primary" onclick='editJSONGen()'>Generate JSON string</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" id="edit-yes-btn" data-dismiss="modal" onclick="onClickEditSaveBtn()">Save</button>
+                    <button class="btn btn-secondary" id="edit-no-btn" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+            <div id="info-modal" class="modal hide fade custome_modal info_modal " role="dialog" data-backdrop="static" data-keyboard="false">
+                <div class="modal-header">
+                    <h4 id="info-title"></h4>
+                </div>
+
+
+                <div id="info-body" class="modal-body">
+                </div>
+                <div class="modal-footer">
+                    <button id='info-yes-btn' class="btn btn-secondary">Confirm</button>
+                    <button id='info-no-btn' class="btn btn-secondary" data-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- jquery and friends -->
+    <script src="./jquery3.js"> </script>
+
+
+    <!-- jquery plugins -->
+
+    <script src="./select2/dist/js/select2.min.js"></script>
+    <link href="./select2/dist/css/select2.min.css" rel="stylesheet" type="text/css">
+
+    <script src="./datatable/jquery.dataTables.min.js"></script>
+    <link href="./datatable/datatable.css" rel="stylesheet" type="text/css">
+
+    <script src="./datatable/dataTables.select.min.js"></script>
+    <link href="./datatable/select.dataTables.min.css" rel="stylesheet" type="text/css">
+
+    <!-- bootstrap default plugins -->
+    <script src="../js/bootstrap/bootstrap-transition.js"></script>
+    <script src="../js/bootstrap/bootstrap-collapse.js"></script>
+    <script src="../js/bootstrap/bootstrap-alert.js"></script>
+    <script src="../js/bootstrap/bootstrap-tooltip.js"></script>
+    <script src="../js/bootstrap/bootstrap-popover.js"></script>
+    <script src="../js/bootstrap/bootstrap-button.js"></script>
+    <script src="../js/bootstrap/bootstrap-dropdown.js"></script>
+    <script src="../js/bootstrap/bootstrap-modal.js"></script>
+    <script src="../js/bootstrap/bootstrap-tab.js">
+    </script>
+
+    <!--lodash -->
+    <script src="./lodash.js"></script>
+
+
+
+    <!--jsonview-->
+    <link href="./jsonview/jsoneditor.min.css" rel="stylesheet" type="text/css">
+    <script src="./jsonview/jsoneditor.min.js"></script>
+    <link href="./flow_table_detail.css" rel="stylesheet" type="text/css">
+    <script src="./flow_table_detail.js"></script>
+
+</body>
+
+</html>
