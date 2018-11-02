@@ -168,14 +168,14 @@ void openstack_qos_rule_ConventDataFromJSON(char *jsonString)
 				while(qos)
 				{
 					temp = json_find_first_label(qos, "description");
-					if(temp)
+					if(temp&&temp->child)
 					{
 						strcpy(description,temp->child->text);
 						json_free_value(&temp);
 					}
 					
 					temp = json_find_first_label(qos, "tenant_id");
-					if(temp)
+					if(temp&&temp->child)
 					{
 						strcpy(tenant_id,temp->child->text);
 						json_free_value(&temp);
@@ -187,14 +187,14 @@ void openstack_qos_rule_ConventDataFromJSON(char *jsonString)
 						if(temp->child && JSON_OBJECT == temp->child->type)
 						{
 							temp_second = json_find_first_label(temp->child, "max_rate");
-							if(temp_second)
+							if(temp_second&&temp_second->child)
 							{
 								strcpy(max_rate_s,temp_second->child->text);
 								json_free_value(&temp_second);
 								max_rate =atol(max_rate_s);
 							}
 							temp_second = json_find_first_label(temp->child, "protocol");
-							if(temp_second)
+							if(temp_second&&temp_second->child)
 							{
 								strcpy(protocol,temp_second->child->text);
 								json_free_value(&temp_second);

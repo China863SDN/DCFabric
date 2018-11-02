@@ -1692,7 +1692,7 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
         else if (strncmp(id->child->text, SEARCH_ALL_TABLE_ID, 2) == 0) //bridge
         {
             result = id->next;
-            if (result)
+            if (result&&(0 == strcmp(result->text, "result")))
             {
                 handle_openvswitch_table(client_fd, seq, result);
                 have_controller = handle_controller_table(client_fd, seq, result);
@@ -1702,21 +1702,21 @@ void proc_ovsdb_msg(INT1 *ovsdb_msg, INT4 client_fd, UINT4 client_ip, INT4 seq)
 		else if (strncmp(id->child->text, SEARCH_HOST_BY_MAC, 2) == 0) 
 		{
 			result = id->next;
-			if (result) {
+			if (result&&(0 == strcmp(result->text, "result"))) {
 				handle_search_host_by_mac(client_fd, seq, result);
 			}
 		}
 		else if (strncmp(id->child->text, SEARCH_INTERFACE_BY_PORT_NO, 2) == 0) 
 		{
 			result = id->next;
-			if (result) {
+			if (result&&(0 == strcmp(result->text, "result"))) {
 				notify_receive_interface_uuid(result);
 			}
 		}
 		else if (strncmp(id->child->text, SEARCH_PORT_BY_INTERFACE, 2) == 0) 
 		{
 			result = id->next;
-			if (result) {
+			if (result&&(0 == strcmp(result->text, "result"))) {
 				notify_receive_port_uuid(result);
 			}
 		}
