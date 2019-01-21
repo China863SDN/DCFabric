@@ -1,0 +1,90 @@
+#ifndef BASEFLOATINGVERIFICATION_H
+#define BASEFLOATINGVERIFICATION_H
+
+
+#include "comm-util.h"
+#include <string>
+#include <vector>
+#include <list>
+
+#include "BaseFloating.h"
+#include "BaseFloatingManager.h"
+#include "BasePort.h"
+#include "BasePortManager.h"
+#include "BaseRouter.h"
+#include "BaseRouterManager.h"
+#include "BaseNetwork.h"
+#include "BaseNetworkManager.h"
+#include "BaseSubnet.h"
+#include "BaseSubnetManager.h"
+
+#define RETURN_OK       1
+#define RETURN_ERR      0
+
+#define RETURN_TRUE      1
+#define RETURN_FALSE 0
+
+using namespace std;
+
+#define FLOATING_VERIFY_SUCCESS              	0x0000
+#define FLOATING_VERIFY_ERROR               	0x0001
+
+#define FLOATING_VERIFY_CREATED_SUCCESS         0x0000
+#define FLOATING_VERIFY_UPDATED_SUCCESS         0x0000
+#define FLOATING_VERIFY_DELETED_SUCCESS         0x0000
+#define FLOATING_VERIFY_CREATED_ERROR         	0x0101
+#define FLOATING_VERIFY_UPDATED_ERROR         	0x0101
+#define FLOATING_VERIFY_DELETED_ERROR         	0x0101
+
+#define FLOATING_VERIFY_ID_SUCCESS              0x0000
+#define FLOATING_VERIFY_ID_ERROR              	0x0111
+#define FLOATING_VERIFY_ID_ERROR_CONFLICT     	0x0112
+#define FLOATING_VERIFY_ID_ERROR_EMPTY        	0x0113
+
+#define FLOATING_VERIFY_NAME_SUCCESS            0x0000
+#define FLOATING_VERIFY_NAME_ERROR            	0x0121
+
+#define FLOATING_VERIFY_TENANT_ID_SUCCESS       0x0000
+#define FLOATING_VERIFY_TENANT_ID_ERROR       	0x0131
+
+#define FLOATING_VERIFY_NETWORK_ID_SUCCESS              0x0000
+#define FLOATING_VERIFY_NETWORK_ID_ERROR                0x0141
+#define FLOATING_VERIFY_NETWORK_ID_ERROR_EMPTY          0x0142
+#define FLOATING_VERIFY_NETWORK_ID_ERROR_NOTEXIST       0x0143
+#define FLOATING_VERIFY_NETWORK_ID_ERROR_NOTEXTERNAL    0x0144
+
+#define FLOATING_VERIFY_ROUTER_ID_SUCCESS       				0x0000
+#define FLOATING_VERIFY_ROUTER_ID_ERROR       					0x0151
+#define FLOATING_VERIFY_ROUTER_ID_ERROR_NOTEXIST       			0x0152
+#define FLOATING_VERIFY_ROUTER_ID_ERROR_TENANTNOTMATCH       	0x0153
+#define FLOATING_VERIFY_ROUTER_ID_ERROR_NETWORKNOTMATCH       	0x0154
+
+#define FLOATING_VERIFY_PORT_ID_SUCCESS         				0x0000
+#define FLOATING_VERIFY_PORT_ID_ERROR         					0x0161
+#define FLOATING_VERIFY_PORT_ID_ERROR_NULL         				0x0162
+#define FLOATING_VERIFY_PORT_ID_ERROR_NOTNULL					0x0163
+#define FLOATING_VERIFY_PORT_ID_ERROR_PORTNOTEXIST         		0x0164
+#define FLOATING_VERIFY_PORT_ID_ERROR_PORTNOTCOMPUTE         	0x0165
+
+#define FLOATING_VERIFY_STATUS_SUCCESS          0x0000
+#define FLOATING_VERIFY_STATUS_ERROR          	0x0171
+
+#define FLOATING_VERIFY_FIXED_IP_SUCCESS        			0x0000
+#define FLOATING_VERIFY_FIXED_IP_ERROR        				0x0181
+#define FLOATING_VERIFY_FIXED_IP_ERROR_NULL        			0x0182
+#define FLOATING_VERIFY_FIXED_IP_ERROR_NOTNULL        		0x0183
+#define FLOATING_VERIFY_FIXED_IP_ERROR_NOTMATCHPORT        	0x0184
+
+
+#define FLOATING_VERIFY_FLOATING_IP_SUCCESS        					0x0000
+#define FLOATING_VERIFY_FLOATING_IP_ERROR        					0x0191
+#define FLOATING_VERIFY_FLOATING_IP_ERROR_CONFLICT  				0X0192
+#define FLOATING_VERIFY_FLOATING_IP_ERROR_NULL        				0x0193
+#define FLOATING_VERIFY_FLOATING_IP_ERROR_NOTINPOOL        			0x0194
+#define FLOATING_VERIFY_FLOATING_IP_ERROR_NOMATCHEDSUBNET        	0x0195
+
+UINT4 Verify_CreatedFloating   (Base_Floating& p_Floating);
+UINT4 Verify_UpdatedFloating   (Base_Floating& p_Floating);
+UINT4 Verify_DeletedFloating   (Base_Floating& p_Floating);
+
+#endif // BASEFLOATINGVERIFICATION_H

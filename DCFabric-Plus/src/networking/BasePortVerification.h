@@ -1,0 +1,91 @@
+#ifndef BASEPORTVERIFICATION_H
+#define BASEPORTVERIFICATION_H
+
+#include "comm-util.h"
+#include <string>
+#include <vector>
+#include <list>
+#include "BasePort.h"
+#include "BasePortManager.h"
+#include "BaseRouter.h"
+#include "BaseRouterManager.h"
+#include "BaseFloating.h"
+#include "BaseFloatingManager.h"
+#include "BaseNetwork.h"
+#include "BaseNetworkManager.h"
+#include "BaseSubnet.h"
+#include "BaseSubnetManager.h"
+
+#define RETURN_OK       1
+#define RETURN_ERR      0
+
+#define RETURN_TRUE     1
+#define RETURN_FALSE    0
+
+#define PORT_VERIFY_SUCCESS        			0x0000
+#define PORT_VERIFY_ERROR         			0x0001
+#define PORT_VERIFY_CTEATED_SUCCESS        			0x0000
+#define PORT_VERIFY_UPDATED_SUCCESS        			0x0000
+
+
+#define PORT_VERIFY_ID_SUCCESS        		0x0000
+#define PORT_VERIFY_ID_ERROR          		0x0311
+#define PORT_VERIFY_ID_ERROR_EMPTY     		0x0312
+#define PORT_VERIFY_ID_ERROR_CONFLICT     	0x0313
+
+#define PORT_VERIFY_NAME_SUCCESS  			0x0000
+#define PORT_VERIFY_NAME_ERROR  			0x0321
+
+#define PORT_VERIFY_TENANT_ID_SUCCESS  				0x0000
+#define PORT_VERIFY_TENANT_ID_ERROR  				0x0331
+#define PORT_VERIFY_TENANT_ID_ERROR_EMPTY  			0x0332
+
+#define PORT_VERIFY_DEVICE_OWNER_SUCCESS  				0x0000
+#define PORT_VERIFY_DEVICE_OWNER_ERROR  				0x0341
+
+#define PORT_VERIFY_DEVICE_ID_SUCCESS  							0x0000
+#define PORT_VERIFY_DEVICE_ID_ERROR  							0x0351
+#define PORT_VERIFY_DEVICE_ID_ERROR_ROUTERNOTMATCHTENANT    	0x0352
+#define PORT_VERIFY_DEVICE_ID_ERROR_ROUTERNOTEXIST  			0x0353
+#define PORT_VERIFY_DEVICE_ID_ERROR_FLOATINGNOTEXIST    		0x0354
+
+#define PORT_VERIFY_NETWORK_ID_SUCCESS  							0x0000
+#define PORT_VERIFY_NETWORK_ID_ERROR  								0x0361
+#define PORT_VERIFY_NETWORK_ID_ERROR_EMPTY  						0x0362
+#define PORT_VERIFY_NETWORK_ID_ERROR_NOTEXIST  						0x0363
+#define PORT_VERIFY_NETWORK_ID_ERROR_NOTEXTERNAL  					0x0364
+#define PORT_VERIFY_NETWORK_ID_ERROR_TENANTNOTMATCH  				0x0365
+#define PORT_VERIFY_NETWORK_ID_ERROR_NOTMATCHROUTERNETWORK      	0x0366
+#define PORT_VERIFY_NETWORK_ID_ERROR_ROUTERNOTEXIST     			0x0367
+#define PORT_VERIFY_NETWORK_ID_ERROR_NOTMATCHFLOATINGNETWORK       	0x0368
+#define PORT_VERIFY_NETWORK_ID_ERROR_FLOATINGNOTEXIST           	0x0369
+
+#define PORT_VERIFY_MAC_SUCCESS  						0x0000
+#define PORT_VERIFY_MAC_ERROR  							0x0371
+#define PORT_VERIFY_MAC_ERROR_RESERVEDMAC  				0x0372
+
+
+#define PORT_VERIFY_SUBNET_ID_SUCCESS  					0x0000
+#define PORT_VERIFY_SUBNET_ID_ERROR  					0x0381
+#define PORT_VERIFY_SUBNET_ID_ERROR_EMPTY  				0x0382
+#define PORT_VERIFY_SUBNET_ID_ERROR_NETWORKNOTMATCH  	0x0383
+
+#define PORT_VERIFY_IP_SUCCESS  					0x0000
+#define PORT_VERIFY_IP_ERROR  						0x0391
+#define PORT_VERIFY_IP_ERROR_SUBNETNOTEXIST  		0x0392
+#define PORT_VERIFY_IP_ERROR_NOTMATCHGATEWAY  		0x0393
+#define PORT_VERIFY_IP_ERROR_CONFLICT  				0x0394
+#define PORT_VERIFY_IP_ERROR_IPNOTINSUBNET      	0x0395
+
+#define PORT_VERIFY_FIXED_IP_ERROR_EMPTY			0x03a1
+#define PORT_VERIFY_FIXED_IP_ERROR_TOOMUCHIPS		0x03a2
+
+
+
+
+        UINT4 Verify_CreatedPort        (Base_Port& p_Port);
+        UINT4 Verify_UpdatedPort        (Base_Port& p_Port);
+        UINT4 Verify_DeletedPort        (Base_Port& p_Port);
+
+
+#endif // BASEPORTVERIFICATION_H
